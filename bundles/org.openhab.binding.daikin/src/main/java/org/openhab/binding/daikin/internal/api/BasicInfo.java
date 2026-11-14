@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,9 +12,7 @@
  */
 package org.openhab.binding.daikin.internal.api;
 
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.slf4j.Logger;
@@ -23,13 +21,11 @@ import org.slf4j.LoggerFactory;
 /**
  * Holds information from the basic_info call.
  *
- * @author Jimy Tanagra - Initial contribution
+ * @author Jimmy Tanagra - Initial contribution
  *
  */
 @NonNullByDefault
 public class BasicInfo {
-    private static final Logger LOGGER = LoggerFactory.getLogger(BasicInfo.class);
-
     public String mac = "";
     public String ret = "";
     public String ssid = "";
@@ -38,20 +34,19 @@ public class BasicInfo {
     }
 
     public static BasicInfo parse(String response) {
-        LOGGER.debug("Parsing string: \"{}\"", response);
+        Logger logger = LoggerFactory.getLogger(BasicInfo.class);
+        logger.trace("Parsing string: \"{}\"", response);
 
         Map<String, String> responseMap = InfoParser.parse(response);
 
         BasicInfo info = new BasicInfo();
-        info.mac = Optional.ofNullable(responseMap.get("mac")).orElse("");
-        info.ret = Optional.ofNullable(responseMap.get("ret")).orElse("");
-        info.ssid = Optional.ofNullable(responseMap.get("ssid")).orElse("");
+        info.mac = responseMap.getOrDefault("mac", "");
+        info.ret = responseMap.getOrDefault("ret", "");
+        info.ssid = responseMap.getOrDefault("ssid", "");
         return info;
     }
 
     public Map<String, String> getParamString() {
-        Map<String, String> params = new HashMap<>();
-        params.put("ssid", ssid);
-        return params;
+        return Map.of("ssid", ssid);
     }
 }

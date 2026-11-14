@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,10 +14,9 @@ package org.openhab.binding.ahawastecollection.internal;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.time.ZonedDateTime;
-import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -25,7 +24,6 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.ahawastecollection.internal.CollectionDate.WasteType;
 import org.openhab.core.cache.ExpiringCache;
-import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.scheduler.CronScheduler;
 import org.openhab.core.scheduler.ScheduledCompletableFuture;
@@ -56,23 +54,24 @@ public class AhaWasteCollectionHandler extends BaseThingHandler {
     private final Lock monitor = new ReentrantLock();
     private final ExpiringCache<Map<WasteType, CollectionDate>> cache;
 
-    private final TimeZoneProvider timeZoneProvider;
     private final Logger logger = LoggerFactory.getLogger(AhaWasteCollectionHandler.class);
 
-    private @Nullable AhaWasteCollectionConfiguration config;
     private @Nullable AhaCollectionSchedule collectionSchedule;
 
     private @Nullable ScheduledCompletableFuture<?> dailyJob;
 
     private final AhaCollectionScheduleFactory scheduleFactory;
 
+    private final ScheduledExecutorService executorService;
+
     public AhaWasteCollectionHandler(final Thing thing, final CronScheduler scheduler,
-            final TimeZoneProvider timeZoneProvider, final AhaCollectionScheduleFactory scheduleFactory) {
+            final AhaCollectionScheduleFactory scheduleFactory,
+            @Nullable final ScheduledExecutorService executorService) {
         super(thing);
         this.cronScheduler = scheduler;
-        this.timeZoneProvider = timeZoneProvider;
         this.scheduleFactory = scheduleFactory;
         this.cache = new ExpiringCache<>(Duration.ofMinutes(5), this::loadCollectionDates);
+        this.executorService = executorService == null ? this.scheduler : executorService;
     }
 
     private Map<WasteType, CollectionDate> loadCollectionDates() {
@@ -81,15 +80,15 @@ public class AhaWasteCollectionHandler extends BaseThingHandler {
             this.updateStatus(ThingStatus.ONLINE);
             return collectionDates;
         } catch (final IOException e) {
-            this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
-            return Collections.emptyMap();
+            this.updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            return Map.of();
         }
     }
 
     @Override
     public void handleCommand(final ChannelUID channelUID, final Command command) {
         if (command instanceof RefreshType) {
-            this.scheduler.execute(this::updateCollectionDates);
+            this.executorService.execute(this::updateCollectionDates);
         } else {
             this.logger.warn("The AHA Abfuhrkalender is a read-only binding and can not handle commands");
         }
@@ -97,17 +96,16 @@ public class AhaWasteCollectionHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        this.config = this.getConfigAs(AhaWasteCollectionConfiguration.class);
+        final AhaWasteCollectionConfiguration config = this.getConfigAs(AhaWasteCollectionConfiguration.class);
 
-        final String commune = this.config.commune;
-        final String street = this.config.street;
-        final String houseNumber = this.config.houseNumber;
-        final String houseNumberAddon = this.config.houseNumberAddon;
-        final String collectionPlace = this.config.collectionPlace;
+        final String commune = config.commune;
+        final String street = config.street;
+        final String houseNumber = config.houseNumber;
+        final String houseNumberAddon = config.houseNumberAddon;
+        final String collectionPlace = config.collectionPlace;
 
         if (commune.isBlank() || street.isBlank() || houseNumber.isBlank() || collectionPlace.isBlank()) {
-            this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Parameters are mandatory and must be configured");
+            this.updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Parameters are mandatory and must be configured");
             return;
         }
 
@@ -116,7 +114,7 @@ public class AhaWasteCollectionHandler extends BaseThingHandler {
 
         this.updateStatus(ThingStatus.UNKNOWN);
 
-        this.scheduler.execute(() -> {
+        this.executorService.execute(() -> {
             final boolean online = this.updateCollectionDates();
             if (online) {
                 this.restartJob();
@@ -125,7 +123,7 @@ public class AhaWasteCollectionHandler extends BaseThingHandler {
     }
 
     /**
-     * Schedules an job that updates the collection dates at midnight.
+     * Schedules a job that updates the collection dates at midnight.
      */
     private void restartJob() {
         this.logger.debug("Restarting jobs for thing {}", this.getThing().getUID());
@@ -186,9 +184,7 @@ public class AhaWasteCollectionHandler extends BaseThingHandler {
 
             final Date nextCollectionDate = collectionDate.getDates().get(0);
 
-            final ZonedDateTime zonedDateTime = ZonedDateTime.ofInstant(nextCollectionDate.toInstant(),
-                    this.timeZoneProvider.getTimeZone());
-            this.updateState(channel.getUID(), new DateTimeType(zonedDateTime));
+            this.updateState(channel.getUID(), new DateTimeType(nextCollectionDate.toInstant()));
         }
     }
 
@@ -196,12 +192,14 @@ public class AhaWasteCollectionHandler extends BaseThingHandler {
         switch (channelId) {
             case AhaWasteCollectionBindingConstants.BIOWASTE:
                 return WasteType.BIO_WASTE;
-            case AhaWasteCollectionBindingConstants.LEIGHTWEIGHT_PACKAGING:
+            case AhaWasteCollectionBindingConstants.LIGHTWEIGHT_PACKAGING:
                 return WasteType.LIGHT_PACKAGES;
             case AhaWasteCollectionBindingConstants.PAPER:
                 return WasteType.PAPER;
             case AhaWasteCollectionBindingConstants.GENERAL_WASTE:
                 return WasteType.GENERAL_WASTE;
+            case AhaWasteCollectionBindingConstants.CHRISTMAS_TREE:
+                return WasteType.CHRISTMAS_TREES;
             default:
                 throw new IllegalArgumentException("Unknown channel type: " + channelId);
         }

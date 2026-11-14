@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -88,11 +88,19 @@ public abstract class SomfyTahomaBaseThingHandler extends BaseThingHandler {
     @Override
     public void initialize() {
         Bridge bridge = getBridge();
-        initializeThing(bridge != null ? bridge.getStatus() : null);
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        initializeThing(bridge.getStatus());
     }
 
     @Override
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
+        if (getBridge() == null) {
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
+            return;
+        }
         initializeThing(bridgeStatusInfo.getStatus());
     }
 
@@ -111,13 +119,13 @@ public abstract class SomfyTahomaBaseThingHandler extends BaseThingHandler {
                     updateThingStatus(states);
                     updateThingChannels(states);
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, UNAVAILABLE);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, UNAVAILABLE);
                 }
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+            updateStatus(ThingStatus.UNKNOWN);
         }
     }
 
@@ -167,7 +175,7 @@ public abstract class SomfyTahomaBaseThingHandler extends BaseThingHandler {
 
     private void setUnavailable() {
         if (ThingStatus.OFFLINE != thing.getStatus()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, UNAVAILABLE);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, UNAVAILABLE);
         }
     }
 
@@ -179,6 +187,16 @@ public abstract class SomfyTahomaBaseThingHandler extends BaseThingHandler {
         SomfyTahomaBridgeHandler handler = getBridgeHandler();
         if (handler != null) {
             handler.sendCommand(url, cmd, param, EXEC_URL + "apply");
+        }
+    }
+
+    protected void sendTempCommand(String cmd, Command command) {
+        if (command instanceof DecimalType || command instanceof QuantityType) {
+            BigDecimal temperature = toTemperature(command);
+            if (temperature != null) {
+                String param = "[" + temperature.toPlainString() + "]";
+                sendCommand(cmd, param);
+            }
         }
     }
 
@@ -465,20 +483,19 @@ public abstract class SomfyTahomaBaseThingHandler extends BaseThingHandler {
     }
 
     public int toInteger(Command command) {
-        return (command instanceof DecimalType) ? ((DecimalType) command).intValue() : 0;
+        return (command instanceof DecimalType dateTimeCommand) ? dateTimeCommand.intValue() : 0;
     }
 
     public @Nullable BigDecimal toTemperature(Command command) {
         BigDecimal temperature = null;
-        if (command instanceof QuantityType<?>) {
-            QuantityType<?> quantity = (QuantityType<?>) command;
-            QuantityType<?> convertedQuantity = quantity.toUnit(getTemperatureUnit());
+        if (command instanceof QuantityType<?> quantityCommand) {
+            QuantityType<?> convertedQuantity = quantityCommand.toUnit(getTemperatureUnit());
             if (convertedQuantity != null) {
-                quantity = convertedQuantity;
+                quantityCommand = convertedQuantity;
             }
-            temperature = quantity.toBigDecimal();
-        } else if (command instanceof DecimalType) {
-            temperature = ((DecimalType) command).toBigDecimal();
+            temperature = quantityCommand.toBigDecimal();
+        } else if (command instanceof DecimalType decimalCommand) {
+            temperature = decimalCommand.toBigDecimal();
         }
         return temperature;
     }

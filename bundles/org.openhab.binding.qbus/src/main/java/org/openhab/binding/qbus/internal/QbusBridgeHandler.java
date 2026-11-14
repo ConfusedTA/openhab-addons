@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -10,7 +10,6 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-
 package org.openhab.binding.qbus.internal;
 
 import java.io.IOException;
@@ -124,7 +123,6 @@ public class QbusBridgeHandler extends BaseBridgeHandler {
                             bridgePending("Waiting for Qbus client to come online");
                             return;
                         }
-
                     }
                 }
             }
@@ -134,12 +132,11 @@ public class QbusBridgeHandler extends BaseBridgeHandler {
     /**
      * Updates offline status off the Bridge when an error occurs.
      *
-     * @param status
      * @param detail
      * @param message
      */
     public void bridgeOffline(ThingStatusDetail detail, String message) {
-        updateStatus(ThingStatus.OFFLINE, detail, message);
+        updateStatus(detail, message);
     }
 
     /**
@@ -148,7 +145,7 @@ public class QbusBridgeHandler extends BaseBridgeHandler {
      * @param message
      */
     public void bridgePending(String message) {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_CONFIGURATION_PENDING, message);
+        updateStatus(ThingStatus.UNKNOWN, message);
     }
 
     /**
@@ -274,8 +271,7 @@ public class QbusBridgeHandler extends BaseBridgeHandler {
      */
     public ThingStatusDetail getStatusDetails() {
         ThingStatusInfo status = thing.getStatusInfo();
-        ThingStatusDetail detail = status.getStatusDetail();
-        return detail;
+        return status.getStatusDetail();
     }
 
     /**

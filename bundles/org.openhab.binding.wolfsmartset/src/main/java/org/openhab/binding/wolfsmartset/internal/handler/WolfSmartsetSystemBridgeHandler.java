@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,9 +16,9 @@ import static org.openhab.binding.wolfsmartset.internal.WolfSmartsetBindingConst
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -46,7 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link WolfSmartsetSystemBridgeHandler} is the handler for an WolfSmartset system.
+ * The {@link WolfSmartsetSystemBridgeHandler} is the handler for a WolfSmartset system.
  *
  * @author Bo Biene - Initial contribution
  */
@@ -77,7 +77,7 @@ public class WolfSmartsetSystemBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(WolfSmartsetSystemDiscoveryService.class);
+        return Set.of(WolfSmartsetSystemDiscoveryService.class);
     }
 
     @Override
@@ -108,7 +108,7 @@ public class WolfSmartsetSystemBridgeHandler extends BaseBridgeHandler {
         if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE) {
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -181,13 +181,11 @@ public class WolfSmartsetSystemBridgeHandler extends BaseBridgeHandler {
     public void updateSystemState(@Nullable GetSystemStateListDTO systemState) {
         if (systemState != null) {
             if (systemState.getIsSystemDeleted()) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "System has been deleted");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "System has been deleted");
             } else if (systemState.getIsSystemShareDeleted()) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "System share has been removed");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "System share has been removed");
             } else if (systemState.getIsSystemShareRejected()) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "System share has been rejected");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "System share has been rejected");
             }
         }
     }
@@ -234,8 +232,7 @@ public class WolfSmartsetSystemBridgeHandler extends BaseBridgeHandler {
 
             updateUnitsConfiguration(systemDescription);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "Unable to retrieve configuration");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Unable to retrieve configuration");
         }
     }
 

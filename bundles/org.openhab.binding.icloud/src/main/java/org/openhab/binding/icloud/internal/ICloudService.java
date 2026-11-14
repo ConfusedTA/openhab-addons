@@ -1,0 +1,539 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.icloud.internal;
+
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.bouncycastle.crypto.CryptoException;
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.icloud.internal.utilities.JsonUtils;
+import org.openhab.binding.icloud.internal.utilities.ListUtil;
+import org.openhab.binding.icloud.internal.utilities.Pair;
+import org.openhab.core.storage.Storage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.gson.JsonSyntaxException;
+
+/**
+ *
+ * Class to access Apple iCloud API.
+ *
+ * The implementation of this class is inspired by https://github.com/picklepete/pyicloud.
+ *
+ * @author Simon Spielmann - Initial contribution
+ */
+@NonNullByDefault
+public class ICloudService {
+
+    private static final String ICLOUD_CLIENT_ID = "d39ba9916b7251055b22c7f910e2ea796ee65e98b2ddecea8f5dde8d9d1a815d";
+
+    private final Logger logger = LoggerFactory.getLogger(ICloudService.class);
+
+    private static final String AUTH_ENDPOINT = "https://idmsa.apple.com/appleauth/auth";
+
+    private static final String HOME_ENDPOINT = "https://www.icloud.com";
+
+    private static final String SETUP_ENDPOINT = "https://setup.icloud.com/setup/ws/1";
+
+    private String appleId;
+
+    private String password;
+
+    private String clientId;
+
+    private Map<String, Object> data = new HashMap<>();
+
+    private ICloudSession session;
+
+    private boolean smsCodeRequested = false;
+
+    private @Nullable Map<String, Object> cachedSmsPhoneNumber = null;
+
+    /**
+     *
+     * The constructor.
+     *
+     * @param appleId Apple id (e-mail address) for authentication
+     * @param password Password used for authentication
+     * @param stateStorage Storage to save authentication state
+     */
+    public ICloudService(String appleId, String password, Storage<String> stateStorage) {
+        this.appleId = appleId;
+        this.password = password;
+        this.clientId = "auth-" + UUID.randomUUID().toString().toLowerCase();
+
+        this.session = new ICloudSession(stateStorage);
+        this.session.setDefaultHeaders(Pair.of("Origin", HOME_ENDPOINT), Pair.of("Referer", HOME_ENDPOINT + "/"));
+    }
+
+    /**
+     * Initiate authentication
+     *
+     * @param forceRefresh Force a new authentication
+     * @return {@code true} if authentication was successful
+     *
+     * @throws IOException if I/O error occurred
+     * @throws InterruptedException if request was interrupted
+     * @throws CryptoException if a cryptographic error occurred
+     * @throws ICloudApiResponseException if the request failed (e.g. not OK HTTP return code)
+     * @throws NoSuchAlgorithmException if the requested cryptographic algorithm is not available
+     */
+    public boolean authenticate(boolean forceRefresh) throws IOException, InterruptedException,
+            ICloudApiResponseException, CryptoException, NoSuchAlgorithmException {
+        boolean loginSuccessful = false;
+        if (this.session.getSessionToken() != null && !forceRefresh) {
+            try {
+                this.data = validateToken();
+                logger.debug("Token is valid.");
+                loginSuccessful = true;
+            } catch (ICloudApiResponseException ex) {
+                logger.debug("Token is not valid. Attemping new login.", ex);
+            }
+        }
+
+        if (!loginSuccessful) {
+            logger.debug("Authenticating as {}...", this.appleId);
+            try {
+                SrpAuthentication auth = new SrpAuthentication(appleId, password, getAuthHeaders());
+                auth.auth(AUTH_ENDPOINT, session);
+            } catch (ICloudApiAuthenticationException ex) {
+                if (ex.getStatusCode() == 500) {
+                    logger.debug("Authentication failed.", ex);
+                    return false;
+                } else if (session.hasToken() && authenticateWithToken() && !requires2fa()) {
+                    // We already hold a trust token from a previous 2-FA approval (persisted across
+                    // restarts), and accountLogin confirms no further 2-FA challenge is pending.
+                    // Skip requesting a new SMS/iMessage code in this case.
+                    logger.debug("Trust token accepted by accountLogin, skipping SMS 2-FA request.");
+                    return true;
+                } else {
+                    getMfaAuthOptions();
+                    // Automatically request SMS code if trusted phone number is available
+                    if (canRequestSmsCode()) {
+                        requestSmsCode();
+                    }
+                }
+            }
+        }
+        return authenticateWithToken();
+    }
+
+    private void getMfaAuthOptions()
+            throws JsonSyntaxException, IOException, InterruptedException, ICloudApiResponseException {
+        List<Pair<String, String>> headers = ListUtil.replaceEntries(getAuthHeaders(),
+                List.of(Pair.of("Accept", "application/json")));
+        addSessionHeaders(headers);
+        String responseBody;
+        try {
+            responseBody = session.get(AUTH_ENDPOINT, headers);
+        } catch (ICloudApiAuthenticationException ex) {
+            // Apple responds with HTTP 409 (2FA_REQUIRED) here as part of the normal 2-FA
+            // challenge flow; the body already contains the phoneNumberVerification data we
+            // need. Without this, the exception propagates and canRequestSmsCode()/
+            // requestSmsCode() below is never reached, so 2-FA accounts can never authenticate.
+            if (ex.getStatusCode() == 409) {
+                responseBody = ex.body;
+            } else {
+                throw ex;
+            }
+        }
+        @Nullable
+        Map<String, Object> localSessionData = JsonUtils.toMap(responseBody);
+        if (localSessionData != null) {
+            data = localSessionData;
+        }
+    }
+
+    /**
+     * Check if SMS 2FA code can be requested.
+     * This checks if a trusted phone number with SMS push mode is available in the auth data.
+     *
+     * @return {@code true} if SMS code can be requested
+     */
+    private boolean canRequestSmsCode() {
+        if (!data.containsKey("phoneNumberVerification")) {
+            return false;
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> phoneVerification = (@Nullable Map<String, Object>) data.get("phoneNumberVerification");
+        if (phoneVerification == null) {
+            return false;
+        }
+
+        // Check single trustedPhoneNumber with SMS mode
+        if (phoneVerification.containsKey("trustedPhoneNumber")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> phoneNumber = (@Nullable Map<String, Object>) phoneVerification
+                    .get("trustedPhoneNumber");
+            if (phoneNumber != null && "sms".equals(phoneNumber.get("pushMode"))) {
+                return true;
+            }
+        }
+
+        // Check trustedPhoneNumbers array for any phone with SMS mode
+        if (phoneVerification.containsKey("trustedPhoneNumbers")) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> phoneNumbers = (@Nullable List<Map<String, Object>>) phoneVerification
+                    .get("trustedPhoneNumbers");
+            if (phoneNumbers != null) {
+                for (Map<String, Object> phone : phoneNumbers) {
+                    if ("sms".equals(phone.get("pushMode"))) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Request SMS code to be sent to user's phone.
+     *
+     * @throws IOException if I/O error occurred
+     * @throws InterruptedException if this request was interrupted
+     * @throws ICloudApiResponseException if the request failed (e.g. not OK HTTP return code)
+     */
+    private void requestSmsCode() throws IOException, InterruptedException, ICloudApiResponseException {
+        logger.debug("Requesting SMS code to be sent to phone");
+
+        // Get the trusted phone number from auth data
+        Map<String, Object> phoneNumber = getTrustedPhoneNumber();
+        if (phoneNumber == null) {
+            logger.warn("No trusted phone number available for SMS 2FA");
+            return;
+        }
+
+        // Build phone number payload with only required fields (id and optionally nonFTEU)
+        // Convert id from Double to Integer as Apple expects integer type
+        Map<String, Object> phonePayload = new HashMap<>();
+        Object idValue = phoneNumber.get("id");
+        if (idValue instanceof Double) {
+            phonePayload.put("id", ((Double) idValue).intValue());
+        } else if (idValue != null) {
+            phonePayload.put("id", idValue);
+        }
+
+        if (phoneNumber.containsKey("nonFTEU")) {
+            Object nonFTEUValue = phoneNumber.get("nonFTEU");
+            if (nonFTEUValue != null) {
+                phonePayload.put("nonFTEU", nonFTEUValue);
+            }
+        }
+
+        Map<String, Object> requestBody = Map.of("phoneNumber", phonePayload, "mode", "sms");
+
+        List<Pair<String, String>> headers = ListUtil.replaceEntries(getAuthHeaders(),
+                List.of(Pair.of("Accept", "application/json")));
+        addSessionHeaders(headers);
+
+        try {
+            session.put(AUTH_ENDPOINT + "/verify/phone", JsonUtils.toJson(requestBody), headers);
+        } catch (ICloudApiAuthenticationException ex) {
+            // Apple responds with HTTP 409 here too even though the SMS/iMessage code is actually
+            // sent (verified empirically). Treat 409 as expected here, same as in getMfaAuthOptions().
+            if (ex.getStatusCode() != 409) {
+                throw ex;
+            }
+        }
+
+        // Cache the phone payload for later validation
+        cachedSmsPhoneNumber = phonePayload;
+        smsCodeRequested = true;
+        logger.debug("SMS code request sent successfully");
+    }
+
+    /**
+     * Get the first available trusted phone number with SMS mode from auth data.
+     *
+     * @return Phone number map with id and numberWithDialCode, or null if not available
+     */
+    private @Nullable Map<String, Object> getTrustedPhoneNumber() {
+        if (!data.containsKey("phoneNumberVerification")) {
+            return null;
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> phoneVerification = (@Nullable Map<String, Object>) data.get("phoneNumberVerification");
+        if (phoneVerification == null) {
+            return null;
+        }
+
+        // Try single trustedPhoneNumber with SMS mode first
+        if (phoneVerification.containsKey("trustedPhoneNumber")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> phoneNumber = (@Nullable Map<String, Object>) phoneVerification
+                    .get("trustedPhoneNumber");
+            if (phoneNumber != null && "sms".equals(phoneNumber.get("pushMode"))) {
+                return phoneNumber;
+            }
+        }
+
+        // Try trustedPhoneNumbers array, find first with SMS mode
+        if (phoneVerification.containsKey("trustedPhoneNumbers")) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> phoneNumbers = (@Nullable List<Map<String, Object>>) phoneVerification
+                    .get("trustedPhoneNumbers");
+            if (phoneNumbers != null) {
+                for (Map<String, Object> phone : phoneNumbers) {
+                    if ("sms".equals(phone.get("pushMode"))) {
+                        return phone;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Try authentication with stored session token. Returns {@code true} if authentication was successful.
+     *
+     * @return {@code true} if authentication was successful
+     *
+     * @throws IOException if I/O error occurred
+     * @throws InterruptedException if this request was interrupted
+     *
+     */
+    public boolean authenticateWithToken() throws IOException, InterruptedException {
+        Map<String, Object> requestBody = new HashMap<>();
+
+        String accountCountry = session.getAccountCountry();
+        if (accountCountry != null) {
+            requestBody.put("accountCountryCode", accountCountry);
+        }
+
+        String sessionToken = session.getSessionToken();
+        if (sessionToken != null) {
+            requestBody.put("dsWebAuthToken", sessionToken);
+        }
+
+        requestBody.put("extended_login", true);
+
+        if (session.hasToken()) {
+            String token = session.getTrustToken();
+            if (token != null) {
+                requestBody.put("trustToken", token);
+            }
+        } else {
+            requestBody.put("trustToken", "");
+        }
+
+        try {
+            @Nullable
+            Map<String, Object> localSessionData = JsonUtils
+                    .toMap(session.post(SETUP_ENDPOINT + "/accountLogin", JsonUtils.toJson(requestBody), null));
+            if (localSessionData != null) {
+                data = localSessionData;
+            }
+        } catch (ICloudApiResponseException ex) {
+            logger.debug("Invalid authentication.");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     *
+     * @return List of headers required for authentication requests.
+     */
+    private List<Pair<String, String>> getAuthHeaders() {
+        return new ArrayList<>(List.of(Pair.of("Accept", "application/json, text/javascript"),
+                Pair.of("Content-Type", "application/json"), Pair.of("X-Apple-OAuth-Client-Id", ICLOUD_CLIENT_ID),
+                Pair.of("X-Apple-OAuth-Client-Type", "firstPartyAuth"),
+                Pair.of("X-Apple-OAuth-Redirect-URI", HOME_ENDPOINT),
+                Pair.of("X-Apple-OAuth-Require-Grant-Code", "true"),
+                Pair.of("X-Apple-OAuth-Response-Mode", "web_message"), Pair.of("X-Apple-OAuth-Response-Type", "code"),
+                Pair.of("X-Apple-OAuth-State", this.clientId), Pair.of("X-Apple-Widget-Key", ICLOUD_CLIENT_ID)));
+    }
+
+    private Map<String, Object> validateToken() throws IOException, InterruptedException, ICloudApiResponseException {
+        logger.debug("Checking session token validity");
+        String result = session.post(SETUP_ENDPOINT + "/validate", null, null);
+        logger.debug("Session token is still valid");
+
+        @Nullable
+        Map<String, Object> localSessionData = JsonUtils.toMap(result);
+        if (localSessionData == null) {
+            throw new IOException("Unable to create data object from json response");
+        }
+        return localSessionData;
+    }
+
+    /**
+     * Checks if 2-FA authentication is required.
+     *
+     * @return {@code true} if 2-FA authentication ({@link #validate2faCode(String)}) is required.
+     */
+    public boolean requires2fa() {
+        if (this.data.containsKey("dsInfo")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dsInfo = (@Nullable Map<String, Object>) this.data.get("dsInfo");
+            if (dsInfo != null && ((Double) dsInfo.getOrDefault("hsaVersion", "0")) == 2.0) {
+                return (this.data.containsKey("hsaChallengeRequired")
+                        && ((Boolean) this.data.getOrDefault("hsaChallengeRequired", Boolean.FALSE)
+                                || !isTrustedSession()));
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks if session is trusted.
+     *
+     * @return {@code true} if session is trusted. Call {@link #trustSession()} if not.
+     */
+    public boolean isTrustedSession() {
+        return (Boolean) this.data.getOrDefault("hsaTrustedBrowser", Boolean.FALSE);
+    }
+
+    /**
+     * Provides 2-FA code to establish trusted session.
+     *
+     * @param code Code given by user for 2-FA authentication.
+     * @return {@code true} if code was accepted
+     * @throws IOException if I/O error occurred
+     * @throws InterruptedException if this request was interrupted
+     * @throws ICloudApiResponseException if the request failed (e.g. not OK HTTP return code)
+     */
+    public boolean validate2faCode(String code) throws IOException, InterruptedException, ICloudApiResponseException {
+        String endpoint;
+        Map<String, Object> requestBody;
+
+        if (smsCodeRequested) {
+            // SMS verification requires phone number in request - use cached phone from SMS request
+            final Map<String, Object> phonePayload = cachedSmsPhoneNumber;
+            if (phonePayload == null) {
+                logger.warn("No cached phone number available for SMS code validation");
+                smsCodeRequested = false; // Reset flag to allow new SMS code request
+                return false;
+            }
+
+            requestBody = Map.of("phoneNumber", phonePayload, "securityCode", Map.of("code", code), "mode", "sms");
+            endpoint = AUTH_ENDPOINT + "/verify/phone/securitycode";
+            logger.debug("Validating SMS 2FA code");
+        } else {
+            // Trusted device verification
+            requestBody = Map.of("securityCode", Map.of("code", code));
+            endpoint = AUTH_ENDPOINT + "/verify/trusteddevice/securitycode";
+            logger.debug("Validating trusted device 2FA code");
+        }
+
+        List<Pair<String, String>> headers = ListUtil.replaceEntries(getAuthHeaders(),
+                List.of(Pair.of("Accept", "application/json")));
+
+        addSessionHeaders(headers);
+
+        try {
+            this.session.post(endpoint, JsonUtils.toJson(requestBody), headers);
+        } catch (ICloudApiResponseException ex) {
+            logger.trace("Exception on code verification with HTTP status {}. Verification might still be successful.",
+                    ex.getStatusCode(), ex);
+            // iCloud API returns different 4xx error codes even if validation is successful
+            // currently 400 seems to show that verification "really" failed.
+            if (ex.getStatusCode() == 400 || ex.getStatusCode() >= 500) {
+                this.logger.debug("Verification failed with HTTP status {}.", ex.getStatusCode());
+                smsCodeRequested = false; // Reset flag on failure
+                cachedSmsPhoneNumber = null; // Clear cached phone
+                return false;
+            }
+        }
+
+        logger.debug("Code verification successful.");
+        smsCodeRequested = false; // Reset flag after successful verification
+        cachedSmsPhoneNumber = null; // Clear cached phone
+
+        trustSession();
+        return true;
+    }
+
+    private void addSessionHeaders(List<Pair<String, String>> headers) {
+        String scnt = session.getScnt();
+        if (scnt != null && !scnt.isEmpty()) {
+            headers.add(Pair.of("scnt", scnt));
+        }
+
+        String sessionId = session.getSessionId();
+        if (sessionId != null && !sessionId.isEmpty()) {
+            headers.add(Pair.of("X-Apple-ID-Session-Id", sessionId));
+        }
+    }
+
+    private @Nullable String getWebserviceUrl(String wsKey) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> webservices = (@Nullable Map<String, Object>) data.get("webservices");
+            if (webservices == null) {
+                return null;
+            }
+            if (webservices.get(wsKey) instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, ?> wsMap = (@Nullable Map<String, ?>) webservices.get(wsKey);
+                if (wsMap == null) {
+                    logger.error("Webservices result map has not expected format.");
+                    return null;
+                }
+                return (String) wsMap.get("url");
+            } else {
+                logger.error("Webservices result map has not expected format.");
+                return null;
+            }
+        } catch (ClassCastException e) {
+            logger.error("ClassCastException, map has not expected format.", e);
+            return null;
+        }
+    }
+
+    /**
+     * Establish trust for current session.
+     *
+     * @return {@code true} if successful.
+     *
+     * @throws IOException if I/O error occurred
+     * @throws InterruptedException if this request was interrupted
+     * @throws ICloudApiResponseException if the request failed (e.g. not OK HTTP return code)
+     *
+     */
+    public boolean trustSession() throws IOException, InterruptedException, ICloudApiResponseException {
+        List<Pair<String, String>> headers = getAuthHeaders();
+
+        addSessionHeaders(headers);
+        this.session.get(AUTH_ENDPOINT + "/2sv/trust", headers);
+        return authenticateWithToken();
+    }
+
+    /**
+     * Get access to find my iPhone service.
+     *
+     * @return Instance of {@link FindMyIPhoneServiceManager} for this session.
+     * @throws IOException if I/O error occurred
+     * @throws InterruptedException if this request was interrupted
+     */
+    public FindMyIPhoneServiceManager getDevices() throws IOException, InterruptedException {
+        String webserviceUrl = getWebserviceUrl("findme");
+        if (webserviceUrl != null) {
+            return new FindMyIPhoneServiceManager(this.session, webserviceUrl);
+        } else {
+            throw new IllegalStateException("Webservice URLs not set. Need to authenticate first.");
+        }
+    }
+}

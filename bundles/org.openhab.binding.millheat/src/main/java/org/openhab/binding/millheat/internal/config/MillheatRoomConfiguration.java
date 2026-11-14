@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,16 +12,18 @@
  */
 package org.openhab.binding.millheat.internal.config;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+
 /**
  * The {@link MillheatRoomConfiguration} class contains room thing configuration parameters.
  *
  * @author Arne Seime - Initial contribution
+ * @author Petter L. H. Eide - Identifiers are cloud API UUIDs
  */
+@NonNullByDefault
 public class MillheatRoomConfiguration {
-    /*
-     * Room ID
-     */
-    public Long roomId;
+    public @Nullable String roomId;
 
     @Override
     public String toString() {

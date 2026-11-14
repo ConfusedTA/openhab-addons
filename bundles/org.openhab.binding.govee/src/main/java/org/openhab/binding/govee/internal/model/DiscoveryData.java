@@ -1,0 +1,38 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.govee.internal.model;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+
+/**
+ * Govee Message - Device information
+ *
+ * @param ip IP address of the device
+ * @param device Govee device identifier
+ * @param sku article number
+ * @param bleVersionHard Bluetooth HW version
+ * @param bleVersionSoft Bluetooth SW version
+ * @param wifiVersionHard Wifi HW version
+ * @param wifiVersionSoft Wife SW version
+ *
+ * @author Stefan Höhn - Initial contribution
+ */
+@NonNullByDefault
+public record DiscoveryData(@Nullable String ip, @Nullable String device, @Nullable String sku,
+        @Nullable String bleVersionHard, @Nullable String bleVersionSoft, @Nullable String wifiVersionHard,
+        @Nullable String wifiVersionSoft) {
+    public DiscoveryData() {
+        this("", "", "", "", "", "", "");
+    }
+}

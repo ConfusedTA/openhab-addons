@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,8 +15,6 @@ package org.openhab.binding.onebusaway.internal.handler;
 import static org.openhab.binding.onebusaway.internal.OneBusAwayBindingConstants.*;
 
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +27,7 @@ import org.openhab.binding.onebusaway.internal.config.ChannelConfig;
 import org.openhab.binding.onebusaway.internal.config.RouteConfiguration;
 import org.openhab.binding.onebusaway.internal.handler.ObaStopArrivalResponse.ArrivalAndDeparture;
 import org.openhab.core.library.types.DateTimeType;
+import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -86,18 +85,24 @@ public class RouteHandler extends BaseThingHandler implements RouteDataListener 
     public void initialize() {
         logger.debug("Initializing OneBusAway route stop...");
 
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+
         config = loadAndCheckConfiguration();
         if (config == null) {
             logger.debug("Initialization of OneBusAway route stop failed!");
             return;
         }
-        StopHandler stopHandler = getStopHandler();
+        StopHandler stopHandler = (StopHandler) bridge.getHandler();
         if (stopHandler != null) {
             // We will be marked as ONLINE when we get data in our callback, which should be immediately because the
             // StopHandler, our bridge, won't be marked as online until it has data itself.
             stopHandler.registerRouteDataListener(this);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Bridge unavailable");
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "Bridge unavailable");
         }
     }
 
@@ -133,13 +138,14 @@ public class RouteHandler extends BaseThingHandler implements RouteDataListener 
     }
 
     private StopHandler getStopHandler() {
-        return (StopHandler) getBridge().getHandler();
+        Bridge bridge = getBridge();
+        return bridge == null ? null : (StopHandler) bridge.getHandler();
     }
 
     private RouteConfiguration loadAndCheckConfiguration() {
         RouteConfiguration config = getConfigAs(RouteConfiguration.class);
         if (config.getRouteId() == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "routeId is not set");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "routeId is not set");
             return null;
         }
         return config;
@@ -168,8 +174,7 @@ public class RouteHandler extends BaseThingHandler implements RouteDataListener 
     private void publishChannel(ChannelUID channelUID, Calendar now, long lastUpdateTime,
             List<ArrivalAndDeparture> arrivalAndDepartures) {
         if (channelUID.getId().equals(CHANNEL_ID_UPDATE)) {
-            updateState(channelUID, new DateTimeType(
-                    ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastUpdateTime), ZoneId.systemDefault())));
+            updateState(channelUID, new DateTimeType(Instant.ofEpochMilli(lastUpdateTime)));
             return;
         }
 
@@ -201,8 +206,7 @@ public class RouteHandler extends BaseThingHandler implements RouteDataListener 
                 logger.debug("Not notifying {} because it is in the past.", channelUID.getId());
                 continue;
             }
-            updateState(channelUID,
-                    new DateTimeType(ZonedDateTime.ofInstant(time.toInstant(), ZoneId.systemDefault())));
+            updateState(channelUID, new DateTimeType(time.toInstant()));
 
             // Update properties only when we update arrival information. This is not perfect.
             if (channelUID.getId().equals(CHANNEL_ID_ARRIVAL)) {
@@ -226,7 +230,7 @@ public class RouteHandler extends BaseThingHandler implements RouteDataListener 
         scheduleTriggerEvents(channelUID, now, arrivalAndDepartures,
                 (ArrivalAndDeparture data) -> data.predicted ? data.predictedArrivalTime : data.scheduledArrivalTime,
                 EVENT_ARRIVAL);
-        scheduleTriggerEvents(channelUID, now, arrivalAndDepartures, new Function<ArrivalAndDeparture, Long>() {
+        scheduleTriggerEvents(channelUID, now, arrivalAndDepartures, new Function<>() {
             @Override
             public Long apply(ArrivalAndDeparture data) {
                 return data.predicted ? data.predictedDepartureTime : data.scheduledDepartureTime;

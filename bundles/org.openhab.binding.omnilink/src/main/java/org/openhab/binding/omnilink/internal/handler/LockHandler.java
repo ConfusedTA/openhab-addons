@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -24,7 +24,6 @@ import org.openhab.binding.omnilink.internal.exceptions.BridgeOfflineException;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -64,7 +63,7 @@ public class LockHandler extends AbstractOmnilinkStatusHandler<ExtendedAccessCon
         if (bridgeHandler != null) {
             updateLockProperties(bridgeHandler);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                     "Received null bridge while initializing Lock!");
         }
     }
@@ -83,22 +82,21 @@ public class LockHandler extends AbstractOmnilinkStatusHandler<ExtendedAccessCon
         logger.debug("handleCommand called for channel: {}, command: {}", channelUID, command);
 
         if (command instanceof RefreshType) {
-            retrieveStatus().ifPresentOrElse(this::updateChannels, () -> updateStatus(ThingStatus.OFFLINE,
-                    ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
+            retrieveStatus().ifPresentOrElse(this::updateChannels,
+                    () -> updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
             return;
         }
 
-        switch (channelUID.getId()) {
-            case CHANNEL_LOCK_SWITCH:
-                if (command instanceof OnOffType) {
-                    sendOmnilinkCommand(OnOffType.OFF.equals(command) ? CommandMessage.CMD_UNLOCK_DOOR
-                            : CommandMessage.CMD_LOCK_DOOR, 0, thingID);
-                } else {
-                    logger.debug("Invalid command {}, must be OnOffType", command);
-                }
-                break;
-            default:
-                logger.warn("Unknown channel for Lock thing: {}", channelUID);
+        if (CHANNEL_LOCK_SWITCH.equals(channelUID.getId())) {
+            if (command instanceof OnOffType) {
+                sendOmnilinkCommand(
+                        OnOffType.OFF.equals(command) ? CommandMessage.CMD_UNLOCK_DOOR : CommandMessage.CMD_LOCK_DOOR,
+                        0, thingID);
+            } else {
+                logger.debug("Invalid command {}, must be OnOffType", command);
+            }
+        } else {
+            logger.warn("Unknown channel for Lock thing: {}", channelUID);
         }
     }
 

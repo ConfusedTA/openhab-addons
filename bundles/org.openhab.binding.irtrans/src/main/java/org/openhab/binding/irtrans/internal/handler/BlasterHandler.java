@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,10 +14,10 @@ package org.openhab.binding.irtrans.internal.handler;
 
 import static org.openhab.binding.irtrans.internal.IRtransBindingConstants.CHANNEL_IO;
 
-import org.apache.commons.lang3.StringUtils;
 import org.openhab.binding.irtrans.internal.IRtransBindingConstants.Led;
 import org.openhab.binding.irtrans.internal.IrCommand;
 import org.openhab.core.library.types.StringType;
+import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -49,18 +49,35 @@ public class BlasterHandler extends BaseThingHandler implements TransceiverStatu
 
     @Override
     public void initialize() {
-        ((EthernetBridgeHandler) getBridge().getHandler()).registerTransceiverStatusListener(this);
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        if (bridge.getHandler() instanceof EthernetBridgeHandler handler) {
+            handler.registerTransceiverStatusListener(this);
+        }
     }
 
     @Override
     public void handleRemoval() {
-        ((EthernetBridgeHandler) getBridge().getHandler()).unregisterTransceiverStatusListener(this);
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while removing Thing: {}", thing.getUID());
+        } else if (bridge.getHandler() instanceof EthernetBridgeHandler handler) {
+            handler.unregisterTransceiverStatusListener(this);
+        }
         updateStatus(ThingStatus.REMOVED);
     }
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        EthernetBridgeHandler ethernetBridge = (EthernetBridgeHandler) getBridge().getHandler();
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
+            return;
+        }
+        EthernetBridgeHandler ethernetBridge = (EthernetBridgeHandler) bridge.getHandler();
 
         if (ethernetBridge == null) {
             logger.warn("IRtrans Ethernet bridge handler not found. Cannot handle command without bridge.");
@@ -70,12 +87,15 @@ public class BlasterHandler extends BaseThingHandler implements TransceiverStatu
         if (!(command instanceof RefreshType)) {
             if (channelUID.getId().equals(CHANNEL_IO)) {
                 if (command instanceof StringType) {
-                    String remoteName = StringUtils.substringBefore(command.toString(), ",");
-                    String irCommandName = StringUtils.substringAfter(command.toString(), ",");
+                    String[] remoteCommand = command.toString().split(",", 2);
+                    if (remoteCommand.length < 2) {
+                        logger.warn("Ignoring invalid command '{}'", command);
+                        return;
+                    }
 
                     IrCommand ircommand = new IrCommand();
-                    ircommand.setRemote(remoteName);
-                    ircommand.setCommand(irCommandName);
+                    ircommand.setRemote(remoteCommand[0]);
+                    ircommand.setCommand(remoteCommand[1]);
 
                     IrCommand thingCompatibleCommand = new IrCommand();
                     thingCompatibleCommand.setRemote((String) getConfig().get(REMOTE));
@@ -83,7 +103,7 @@ public class BlasterHandler extends BaseThingHandler implements TransceiverStatu
 
                     if (ircommand.matches(thingCompatibleCommand)) {
                         if (!ethernetBridge.sendIRcommand(ircommand, Led.get((String) getConfig().get(LED)))) {
-                            logger.warn("An error occured whilst sending the infrared command '{}' for Channel '{}'",
+                            logger.warn("An error occurred whilst sending the infrared command '{}' for Channel '{}'",
                                     ircommand, channelUID);
                         }
                     }

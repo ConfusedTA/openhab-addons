@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -68,11 +68,11 @@ public class ApiHandler extends BaseBridgeHandler {
     private ApiConfiguration loadAndCheckConfiguration() {
         ApiConfiguration config = getConfigAs(ApiConfiguration.class);
         if (config.getApiKey() == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "apiKey is not set");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "apiKey is not set");
             return null;
         }
         if (config.getApiServer() == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "apiServer is not set");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "apiServer is not set");
             return null;
         }
         return config;

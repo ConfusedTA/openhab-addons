@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,7 +21,7 @@ import java.util.OptionalInt;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.modbus.e3dc.internal.E3DCWallboxConfiguration;
+import org.openhab.binding.modbus.e3dc.internal.config.E3DCWallboxConfiguration;
 import org.openhab.binding.modbus.e3dc.internal.dto.DataConverter;
 import org.openhab.binding.modbus.e3dc.internal.dto.WallboxArray;
 import org.openhab.binding.modbus.e3dc.internal.dto.WallboxBlock;
@@ -236,7 +236,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
             if (dataRead == ReadWriteSuccess.SUCCESS) {
                 updateStatus(ThingStatus.ONLINE);
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, READ_ERROR);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, READ_ERROR);
             }
         } else {
             if (dataRead == dataWrite) {
@@ -244,14 +244,14 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
                 if (dataRead == ReadWriteSuccess.SUCCESS) {
                     updateStatus(ThingStatus.ONLINE);
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, READ_WRITE_ERROR);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, READ_WRITE_ERROR);
                 }
             } else {
                 // either read or write failed - go offline with detailed status
                 if (dataRead == ReadWriteSuccess.SUCCESS) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, WRITE_ERROR);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, WRITE_ERROR);
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, READ_ERROR);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, READ_ERROR);
                 }
             }
         }

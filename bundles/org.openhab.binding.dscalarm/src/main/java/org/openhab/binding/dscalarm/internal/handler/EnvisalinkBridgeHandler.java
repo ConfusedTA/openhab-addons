@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -24,7 +24,6 @@ import java.net.UnknownHostException;
 
 import org.openhab.binding.dscalarm.internal.config.EnvisalinkBridgeConfiguration;
 import org.openhab.core.thing.Bridge;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,11 +62,9 @@ public class EnvisalinkBridgeHandler extends DSCAlarmBaseBridgeHandler {
         EnvisalinkBridgeConfiguration configuration = getConfigAs(EnvisalinkBridgeConfiguration.class);
 
         if (configuration.ipAddress == null || configuration.ipAddress.trim().isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Set an IP address in the thing configuration.");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Set an IP address in the thing configuration.");
         } else if (configuration.port == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Set a TCP port in the thing configuration.");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Set a TCP port in the thing configuration.");
         } else {
             ipAddress = configuration.ipAddress.trim();
             tcpPort = configuration.port.intValue();
@@ -104,16 +101,16 @@ public class EnvisalinkBridgeHandler extends DSCAlarmBaseBridgeHandler {
 
             setConnected(true);
         } catch (UnknownHostException unknownHostException) {
-            logger.error("openConnection(): Unknown Host Exception: {}", unknownHostException.getMessage());
+            logger.warn("openConnection(): Unknown Host Exception: {}", unknownHostException.getMessage());
             setConnected(false);
         } catch (SocketException socketException) {
-            logger.error("openConnection(): Socket Exception: {}", socketException.getMessage());
+            logger.warn("openConnection(): Socket Exception: {}", socketException.getMessage());
             setConnected(false);
         } catch (IOException ioException) {
-            logger.error("openConnection(): IO Exception: {}", ioException.getMessage());
+            logger.warn("openConnection(): IO Exception: {}", ioException.getMessage());
             setConnected(false);
         } catch (Exception exception) {
-            logger.error("openConnection(): Unable to open a connection: {} ", exception.getMessage(), exception);
+            logger.warn("openConnection(): Unable to open a connection: {} ", exception.getMessage(), exception);
             setConnected(false);
         }
     }
@@ -125,10 +122,10 @@ public class EnvisalinkBridgeHandler extends DSCAlarmBaseBridgeHandler {
             tcpOutput.write(writeString);
             tcpOutput.flush();
         } catch (IOException ioException) {
-            logger.error("write(): {}", ioException.getMessage());
+            logger.warn("write(): {}", ioException.getMessage());
             setConnected(false);
         } catch (Exception exception) {
-            logger.error("write(): Unable to write to socket: {} ", exception.getMessage(), exception);
+            logger.warn("write(): Unable to write to socket: {} ", exception.getMessage(), exception);
             setConnected(false);
         }
     }
@@ -141,10 +138,10 @@ public class EnvisalinkBridgeHandler extends DSCAlarmBaseBridgeHandler {
             message = tcpInput.readLine();
             logger.debug("read(): Message Received: {}", message);
         } catch (IOException ioException) {
-            logger.error("read(): IO Exception: {}", ioException.getMessage());
+            logger.warn("read(): IO Exception: {}", ioException.getMessage());
             setConnected(false);
         } catch (Exception exception) {
-            logger.error("read(): Exception: {} ", exception.getMessage(), exception);
+            logger.warn("read(): Exception: {} ", exception.getMessage(), exception);
             setConnected(false);
         }
 
@@ -164,9 +161,9 @@ public class EnvisalinkBridgeHandler extends DSCAlarmBaseBridgeHandler {
             setConnected(false);
             logger.debug("closeConnection(): Closed TCP Connection!");
         } catch (IOException ioException) {
-            logger.error("closeConnection(): Unable to close connection - {}", ioException.getMessage());
+            logger.warn("closeConnection(): Unable to close connection - {}", ioException.getMessage());
         } catch (Exception exception) {
-            logger.error("closeConnection(): Error closing connection - {}", exception.getMessage());
+            logger.warn("closeConnection(): Error closing connection - {}", exception.getMessage());
         }
     }
 
@@ -198,14 +195,14 @@ public class EnvisalinkBridgeHandler extends DSCAlarmBaseBridgeHandler {
                         try {
                             handleIncomingMessage(messageLine);
                         } catch (Exception e) {
-                            logger.error("TCPListener(): Message not handled by bridge: {}", e.getMessage());
+                            logger.warn("TCPListener(): Message not handled by bridge: {}", e.getMessage());
                         }
                     } else {
                         setConnected(false);
                     }
                 }
             } catch (Exception e) {
-                logger.error("TCPListener(): Unable to read message: {} ", e.getMessage(), e);
+                logger.warn("TCPListener(): Unable to read message: {} ", e.getMessage(), e);
                 closeConnection();
             }
         }

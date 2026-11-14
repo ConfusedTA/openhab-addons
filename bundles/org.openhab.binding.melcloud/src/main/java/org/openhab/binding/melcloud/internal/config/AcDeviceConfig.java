@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,20 +12,28 @@
  */
 package org.openhab.binding.melcloud.internal.config;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.melcloud.internal.logging.SensitiveDataMasker;
+
 /**
- * Config class for a A.C. device.
+ * Config class for an A.C. device.
  *
  * @author Pauli Anttila - Initial Contribution
  *
  */
+@NonNullByDefault
 public class AcDeviceConfig {
 
-    public Integer deviceID;
-    public Integer buildingID;
-    public Integer pollingInterval;
+    public Integer deviceID = 0;
+    public @Nullable Integer buildingID;
+    public Integer pollingInterval = 360;
 
     @Override
     public String toString() {
-        return "[deviceID=" + deviceID + ", buildingID=" + buildingID + ", pollingInterval=" + pollingInterval + "]";
+        Integer building = buildingID;
+        return "[deviceID=" + SensitiveDataMasker.maskId(deviceID.toString()) + ", buildingID="
+                + (building == null ? "null" : SensitiveDataMasker.maskId(building.toString())) + ", pollingInterval="
+                + pollingInterval + "]";
     }
 }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.network.internal;
 
+import java.util.Set;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 
@@ -20,13 +22,21 @@ import org.eclipse.jdt.annotation.Nullable;
  * do not rename them if you don't intend to break the configuration interface.
  *
  * @author David Graeff - Initial contribution
+ * @author Alexander Friese - Add HTTP presence detection
  */
 @NonNullByDefault
 public class NetworkHandlerConfiguration {
     public String hostname = "";
     public String macAddress = "";
     public @Nullable Integer port;
+    public String url = "";
+    public boolean treatRedirectAsError = false;
+    public boolean treatClientErrorAsError = true;
     public Integer retry = 1;
     public Integer refreshInterval = 60000;
     public Integer timeout = 5000;
+    public boolean useIOSWakeUp = true;
+    public boolean useArpPing = true;
+    public boolean useIcmpPing = true;
+    public Set<String> networkInterfaceNames = Set.of();
 }

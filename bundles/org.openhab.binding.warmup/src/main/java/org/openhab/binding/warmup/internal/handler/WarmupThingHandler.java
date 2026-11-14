@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.warmup.internal.handler;
 
+import javax.measure.quantity.Temperature;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.library.types.QuantityType;
@@ -22,12 +24,13 @@ import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
-import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link WarmupThingHandler} is a super class for Things related to the Bridge consolidating logic.
@@ -36,6 +39,7 @@ import org.openhab.core.types.UnDefType;
  */
 @NonNullByDefault
 public class WarmupThingHandler extends BaseThingHandler {
+    private final Logger logger = LoggerFactory.getLogger(WarmupThingHandler.class);
 
     public WarmupThingHandler(Thing thing) {
         super(thing);
@@ -70,10 +74,23 @@ public class WarmupThingHandler extends BaseThingHandler {
         final Bridge bridge = getBridge();
 
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
             return null;
         } else {
             return (MyWarmupAccountHandler) bridge.getHandler();
+        }
+    }
+
+    /**
+     *
+     * @param temperature value returned from the API as a String * 10. i.e. "215" = 21.5 degrees C
+     * @return the temperature as a {@link QuantityType}
+     */
+    protected State parseTemperature(@Nullable String temperature) {
+        try {
+            return temperature != null ? parseTemperature(Integer.parseInt(temperature)) : UnDefType.UNDEF;
+        } catch (NumberFormatException e) {
+            return UnDefType.UNDEF;
         }
     }
 
@@ -84,6 +101,28 @@ public class WarmupThingHandler extends BaseThingHandler {
      */
     protected State parseTemperature(@Nullable Integer temperature) {
         return temperature != null ? new QuantityType<>(temperature / 10.0, SIUnits.CELSIUS) : UnDefType.UNDEF;
+    }
+
+    /**
+     *
+     * @param temperature {@link QuantityType} a temperature
+     * @return the temperature as an int in degrees C * 10. i.e. 21.5 degrees C = 215
+     */
+    protected int formatTemperature(QuantityType<Temperature> temperature) {
+        return (int) (temperature.toUnit(SIUnits.CELSIUS).doubleValue() * 10);
+    }
+
+    /**
+     *
+     * @param enery value returned from the API as a string "10.5" = 10.5 kWh
+     * @return the energy as a {@link QuantityType}
+     */
+    protected State parseEnergy(@Nullable String energy) {
+        try {
+            return energy != null ? new QuantityType<>(Float.parseFloat(energy), Units.KILOWATT_HOUR) : UnDefType.UNDEF;
+        } catch (NumberFormatException e) {
+            return UnDefType.UNDEF;
+        }
     }
 
     /**

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,10 +15,10 @@ package org.openhab.binding.dmx.internal.handler;
 import static org.openhab.binding.dmx.internal.DmxBindingConstants.*;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.dmx.internal.DmxBindingConstants.ListenerType;
 import org.openhab.binding.dmx.internal.DmxBridgeHandler;
 import org.openhab.binding.dmx.internal.DmxThingHandler;
@@ -48,9 +48,9 @@ import org.slf4j.LoggerFactory;
  *
  * @author Jan N. Klug - Initial contribution
  */
-
+@NonNullByDefault
 public class ChaserThingHandler extends DmxThingHandler {
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Collections.singleton(THING_TYPE_CHASER);
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_CHASER);
 
     private final Logger logger = LoggerFactory.getLogger(ChaserThingHandler.class);
 
@@ -68,8 +68,8 @@ public class ChaserThingHandler extends DmxThingHandler {
     public void handleCommand(ChannelUID channelUID, Command command) {
         switch (channelUID.getId()) {
             case CHANNEL_SWITCH:
-                if (command instanceof OnOffType) {
-                    if (((OnOffType) command).equals(OnOffType.ON)) {
+                if (command instanceof OnOffType onOffCommand) {
+                    if (onOffCommand.equals(OnOffType.ON)) {
                         Integer channelCounter = 0;
                         for (DmxChannel channel : channels) {
                             if (resumeAfter) {
@@ -104,8 +104,8 @@ public class ChaserThingHandler extends DmxThingHandler {
                 }
                 break;
             case CHANNEL_CONTROL:
-                if (command instanceof StringType) {
-                    List<ValueSet> newValues = ValueSet.parseChaseConfig(((StringType) command).toString());
+                if (command instanceof StringType stringCommand) {
+                    List<ValueSet> newValues = ValueSet.parseChaseConfig(stringCommand.toString());
                     if (!newValues.isEmpty()) {
                         values = newValues;
                         logger.debug("updated chase config in {}", this.thing.getUID());
@@ -125,26 +125,16 @@ public class ChaserThingHandler extends DmxThingHandler {
 
     @Override
     public void initialize() {
-        Bridge bridge = getBridge();
-        DmxBridgeHandler bridgeHandler;
-        if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "no bridge assigned");
-            dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
+        if (!(this.getBridge() instanceof Bridge bridge
+                && bridge.getHandler() instanceof DmxBridgeHandler bridgeHandler)) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
-        } else {
-            bridgeHandler = (DmxBridgeHandler) bridge.getHandler();
-            if (bridgeHandler == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "no bridge handler available");
-                dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
-                return;
-            }
         }
 
         ChaserThingHandlerConfiguration configuration = getConfig().as(ChaserThingHandlerConfiguration.class);
 
         if (configuration.dmxid.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "DMX channel configuration missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "DMX channel configuration missing");
             dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
             return;
         }
@@ -157,7 +147,7 @@ public class ChaserThingHandler extends DmxThingHandler {
                 channels.add(bridgeHandler.getDmxChannel(channel, this.thing));
             }
         } catch (IllegalArgumentException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
             return;
         }
@@ -168,15 +158,14 @@ public class ChaserThingHandler extends DmxThingHandler {
                     updateStatus(ThingStatus.ONLINE);
                     dmxHandlerStatus = ThingStatusDetail.NONE;
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+                    updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
                 }
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "chaser configuration malformed");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "chaser configuration malformed");
                 dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Chase configuration missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Chase configuration missing");
             dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
         }
 
@@ -206,8 +195,8 @@ public class ChaserThingHandler extends DmxThingHandler {
     @Override
     public void updateSwitchState(ChannelUID channelUID, State state) {
         logger.trace("received {} for {}", state, channelUID);
-        if (channelUID.getId().equals(CHANNEL_SWITCH) && (state instanceof OnOffType)) {
-            this.isRunning = (OnOffType) state;
+        if (channelUID.getId().equals(CHANNEL_SWITCH) && (state instanceof OnOffType onOffState)) {
+            this.isRunning = onOffState;
             updateState(channelUID, state);
         } else {
             logger.debug("unknown state received: {} in channel {} thing {}", state, channelUID, this.thing.getUID());

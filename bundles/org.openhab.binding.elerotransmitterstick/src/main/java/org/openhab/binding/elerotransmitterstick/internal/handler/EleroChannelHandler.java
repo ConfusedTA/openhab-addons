@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,7 +14,7 @@ package org.openhab.binding.elerotransmitterstick.internal.handler;
 
 import static org.openhab.binding.elerotransmitterstick.internal.EleroTransmitterStickBindingConstants.*;
 
-import java.util.Collections;
+import java.util.List;
 
 import org.openhab.binding.elerotransmitterstick.internal.config.EleroChannelConfig;
 import org.openhab.binding.elerotransmitterstick.internal.stick.CommandType;
@@ -52,13 +52,22 @@ public class EleroChannelHandler extends BaseThingHandler implements StatusListe
 
     @Override
     public void initialize() {
-        bridge = (EleroTransmitterStickHandler) getBridge().getHandler();
+        var parentBridge = getBridge();
+        if (parentBridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        if (!(parentBridge.getHandler() instanceof EleroTransmitterStickHandler handler)) {
+            logger.debug("Bridge handler unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        bridge = handler;
 
         channelId = getConfig().as(EleroChannelConfig.class).channelId;
         bridge.addStatusListener(channelId, this);
 
         if (bridge.getThing().getStatus() != ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         } else {
             updateStatus(ThingStatus.UNKNOWN);
         }
@@ -76,7 +85,7 @@ public class EleroChannelHandler extends BaseThingHandler implements StatusListe
         if (bridgeStatusInfo.getStatus() == ThingStatus.OFFLINE) {
             logger.debug("Bridge for Elero channel handler for thing {} ({}) changed status to {}",
                     getThing().getLabel(), getThing().getUID(), bridgeStatusInfo.getStatus().toString());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         } else {
             updateStatus(ThingStatus.UNKNOWN);
         }
@@ -88,20 +97,20 @@ public class EleroChannelHandler extends BaseThingHandler implements StatusListe
 
         if (channelUID.getIdWithoutGroup().equals(CONTROL_CHANNEL)) {
             if (command == UpDownType.UP) {
-                bridge.getStick().sendCommand(CommandType.UP, Collections.singletonList(channelId));
+                bridge.getStick().sendCommand(CommandType.UP, List.of(channelId));
             } else if (command == UpDownType.DOWN) {
-                bridge.getStick().sendCommand(CommandType.DOWN, Collections.singletonList(channelId));
+                bridge.getStick().sendCommand(CommandType.DOWN, List.of(channelId));
             } else if (command == StopMoveType.STOP) {
-                bridge.getStick().sendCommand(CommandType.STOP, Collections.singletonList(channelId));
-            } else if (command instanceof PercentType) {
-                CommandType cmd = CommandType.getForPercent(((PercentType) command).intValue());
+                bridge.getStick().sendCommand(CommandType.STOP, List.of(channelId));
+            } else if (command instanceof PercentType pt) {
+                CommandType cmd = CommandType.getForPercent(pt.intValue());
                 if (cmd != null) {
-                    bridge.getStick().sendCommand(cmd, Collections.singletonList(channelId));
+                    bridge.getStick().sendCommand(cmd, List.of(channelId));
                 } else {
                     logger.debug("Unhandled command {}.", command);
                 }
             } else if (command == RefreshType.REFRESH) {
-                bridge.getStick().requestUpdate(Collections.singletonList(channelId));
+                bridge.getStick().requestUpdate(List.of(channelId));
             }
         }
     }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,9 +13,11 @@
 package org.openhab.binding.homematic.internal.converter.type;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 import javax.measure.Quantity;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.homematic.internal.converter.ConverterException;
 import org.openhab.binding.homematic.internal.model.HmDatapoint;
 import org.openhab.core.library.types.QuantityType;
@@ -25,18 +27,19 @@ import org.openhab.core.library.unit.Units;
 import org.openhab.core.types.Type;
 
 /**
- * Converts between a Homematic datapoint value and a {@link DecimalType}.
+ * Converts between a Homematic datapoint value and a {@link org.openhab.core.library.types.DecimalType}.
  *
  * @author Michael Reitler - Initial contribution
  */
+@NonNullByDefault
 public class QuantityTypeConverter extends AbstractTypeConverter<QuantityType<? extends Quantity<?>>> {
 
     // this literal is required because some gateway types are mixing up encodings in their XML-RPC responses
-    private final String UNCORRECT_ENCODED_CELSIUS = "Â°C";
+    private static final String UNCORRECT_ENCODED_CELSIUS = "Â°C";
 
     // "100%" is a commonly used "unit" in datapoints. Generated channel-type is of DecimalType,
     // but clients may define a QuantityType if preferred
-    private final String HUNDRED_PERCENT = "100%";
+    private static final String HUNDRED_PERCENT = "100%";
 
     @Override
     protected boolean toBindingValidation(HmDatapoint dp, Class<? extends Type> typeClass) {
@@ -53,21 +56,25 @@ public class QuantityTypeConverter extends AbstractTypeConverter<QuantityType<? 
 
     private QuantityType<? extends Quantity<?>> toUnitFromDatapoint(QuantityType<? extends Quantity<?>> type,
             HmDatapoint dp) {
-        if (dp == null || dp.getUnit() == null || dp.getUnit().isEmpty()) {
+        if (!(dp.getUnit() instanceof String unit) || unit.isEmpty()) {
             // datapoint is dimensionless, nothing to convert
             return type;
         }
-
+        QuantityType<? extends Quantity<?>> unitType;
         // convert the given QuantityType to a QuantityType with the unit of the target datapoint
-        switch (dp.getUnit()) {
+        switch (unit) {
             case "Lux":
-                return type.toUnit(Units.LUX);
+                unitType = type.toUnit(Units.LUX);
+                break;
             case "degree":
-                return type.toUnit(Units.DEGREE_ANGLE);
+                unitType = type.toUnit(Units.DEGREE_ANGLE);
+                break;
             case HUNDRED_PERCENT:
-                return type.toUnit(Units.ONE);
+                unitType = type.toUnit(Units.ONE);
+                break;
             case UNCORRECT_ENCODED_CELSIUS:
-                return type.toUnit(SIUnits.CELSIUS);
+                unitType = type.toUnit(SIUnits.CELSIUS);
+                break;
             case "dBm":
             case "minutes":
             case "day":
@@ -78,40 +85,48 @@ public class QuantityTypeConverter extends AbstractTypeConverter<QuantityType<? 
             default:
                 // According to datapoint documentation, the following values are remaining
                 // °C, V, %, s, min, mHz, Hz, hPa, km/h, mm, W, m3
-                return type.toUnit(dp.getUnit());
+                unitType = type.toUnit(unit);
+                break;
         }
+
+        return Objects.requireNonNull(unitType, "Unsupported unit '" + unit + "' in datapoint '" + dp.getName() + "'");
     }
 
     @Override
     protected boolean fromBindingValidation(HmDatapoint dp) {
-        return dp.isNumberType() && dp.getValue() instanceof Number;
+        return dp.getNumericValue() != null;
     }
 
     @Override
     protected QuantityType<? extends Quantity<?>> fromBinding(HmDatapoint dp) throws ConverterException {
-        Number number = null;
+        final Number dpValue = Objects.requireNonNull(dp.getNumericValue()); // ensured by fromBindingValidation
+        final Number number;
         if (dp.isIntegerType()) {
-            number = new BigDecimal(((Number) dp.getValue()).intValue());
+            number = new BigDecimal(dpValue.intValue());
         } else {
-            number = round(((Number) dp.getValue()).doubleValue());
+            number = round(dpValue.doubleValue());
         }
 
         // create a QuantityType from the datapoint's value based on the datapoint's unit
-        String unit = dp.getUnit() != null ? dp.getUnit() : "";
+        String unit = Objects.requireNonNullElse(dp.getUnit(), "");
         switch (unit) {
             case UNCORRECT_ENCODED_CELSIUS:
             case "°C":
                 return new QuantityType<>(number, SIUnits.CELSIUS);
             case "V":
                 return new QuantityType<>(number, Units.VOLT);
+            case "% rH":
+            case "% rF":
             case "%":
                 return new QuantityType<>(number, Units.PERCENT);
             case "mHz":
                 return new QuantityType<>(number, MetricPrefix.MILLI(Units.HERTZ));
             case "Hz":
                 return new QuantityType<>(number, Units.HERTZ);
+            case "Pa":
+                return new QuantityType<>(number, SIUnits.PASCAL);
             case "hPa":
-                return new QuantityType<>(number, SIUnits.PASCAL.multiply(2));
+                return new QuantityType<>(number, MetricPrefix.HECTO(SIUnits.PASCAL));
             case "Lux":
                 return new QuantityType<>(number, Units.LUX);
             case "degree":

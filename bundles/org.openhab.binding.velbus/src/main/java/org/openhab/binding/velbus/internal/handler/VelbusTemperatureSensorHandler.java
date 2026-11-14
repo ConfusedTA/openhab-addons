@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -28,7 +28,6 @@ import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.SIUnits;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -74,12 +73,14 @@ public abstract class VelbusTemperatureSensorHandler extends VelbusSensorWithAla
         if (refreshJob != null) {
             refreshJob.cancel(true);
         }
+        this.refreshJob = null;
+        super.dispose();
     }
 
     private void startAutomaticRefresh(int refreshInterval) {
         VelbusBridgeHandler velbusBridgeHandler = getVelbusBridgeHandler();
         if (velbusBridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             return;
         }
 
@@ -94,7 +95,7 @@ public abstract class VelbusTemperatureSensorHandler extends VelbusSensorWithAla
 
         VelbusBridgeHandler velbusBridgeHandler = getVelbusBridgeHandler();
         if (velbusBridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             return;
         }
 
@@ -114,10 +115,10 @@ public abstract class VelbusTemperatureSensorHandler extends VelbusSensorWithAla
     }
 
     @Override
-    public void onPacketReceived(byte[] packet) {
-        super.onPacketReceived(packet);
-
-        logger.trace("onPacketReceived() was called");
+    public boolean onPacketReceived(byte[] packet) {
+        if (!super.onPacketReceived(packet)) {
+            return false;
+        }
 
         if (packet[0] == VelbusPacket.STX && packet.length >= 5) {
             byte command = packet[4];
@@ -133,5 +134,7 @@ public abstract class VelbusTemperatureSensorHandler extends VelbusSensorWithAla
                 updateState(temperatureChannel, state);
             }
         }
+
+        return true;
     }
 }

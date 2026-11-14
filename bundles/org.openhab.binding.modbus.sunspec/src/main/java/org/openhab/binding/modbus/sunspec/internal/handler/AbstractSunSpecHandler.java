@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -94,7 +94,6 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
      * Instances of this handler should get a reference to the modbus manager
      *
      * @param thing the thing to handle
-     * @param managerRef the modbus manager
      */
     public AbstractSunSpecHandler(Thing thing) {
         super(thing);
@@ -129,7 +128,6 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
      * Start the periodic polling
      */
     private void startUp() {
-
         connectEndpoint();
 
         if (comms == null || config == null) {
@@ -154,7 +152,7 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
             updateStatus(ThingStatus.UNKNOWN);
             registerPollTask(mainBlock);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "SunSpec item should either have the address and length configuration set or should been created by auto discovery");
             return;
         }
@@ -258,9 +256,8 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
             return null;
         }
 
-        if (handler instanceof ModbusEndpointThingHandler) {
-            ModbusEndpointThingHandler slaveEndpoint = (ModbusEndpointThingHandler) handler;
-            return slaveEndpoint;
+        if (handler instanceof ModbusEndpointThingHandler thingHandler) {
+            return thingHandler;
         } else {
             logger.debug("Unexpected bridge handler: {}", handler);
             return null;
@@ -279,8 +276,7 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
         if (slaveEndpointThingHandler == null) {
             @SuppressWarnings("null")
             String label = Optional.ofNullable(getBridge()).map(b -> b.getLabel()).orElse("<null>");
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
-                    String.format("Bridge '%s' is offline", label));
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, String.format("Bridge '%s' is offline", label));
             logger.debug("No bridge handler available -- aborting init for {}", label);
             return;
         }
@@ -295,7 +291,7 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
         if (comms == null) {
             @SuppressWarnings("null")
             String label = Optional.ofNullable(getBridge()).map(b -> b.getLabel()).orElse("<null>");
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE,
                     String.format("Bridge '%s' not completely initialized", label));
             logger.debug("Bridge not initialized fully (no endpoint) -- aborting init for {}", this);
             return;
@@ -316,7 +312,7 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
      */
     private synchronized void registerPollTask(ModelBlock mainBlock) {
         if (pollTask != null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR);
             throw new IllegalStateException("pollTask should be unregistered before registering a new one!");
         }
         @Nullable
@@ -389,8 +385,7 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
         }
         String msg = failure.getCause().getMessage();
         String cls = failure.getCause().getClass().getName();
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                String.format("Error with read: %s: %s", cls, msg));
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, String.format("Error with read: %s: %s", cls, msg));
     }
 
     /**
@@ -434,7 +429,7 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
      * @return the scaled value as a DecimalType
      */
     protected State getScaled(Optional<? extends Number> value, Optional<Short> scaleFactor, Unit<?> unit) {
-        if (!value.isPresent() || !scaleFactor.isPresent()) {
+        if (value.isEmpty() || scaleFactor.isEmpty()) {
             return UnDefType.UNDEF;
         }
         return getScaled(value.get().longValue(), scaleFactor.get(), unit);

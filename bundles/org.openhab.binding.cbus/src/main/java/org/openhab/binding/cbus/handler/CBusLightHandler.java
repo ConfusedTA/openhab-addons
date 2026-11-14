@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -20,7 +20,6 @@ import org.openhab.core.library.types.PercentType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -56,13 +55,13 @@ public class CBusLightHandler extends CBusGroupHandler {
                 int level = group.getLevel();
                 logger.debug("handle RefreshType Command for Chanell {} Group {} level {}", channelUID, groupId, level);
                 if (channelUID.getId().equals(CBusBindingConstants.CHANNEL_STATE)) {
-                    updateState(channelUID, (level > 0) ? OnOffType.ON : OnOffType.OFF);
+                    updateState(channelUID, OnOffType.from(level > 0));
                 } else if (channelUID.getId().equals(CBusBindingConstants.CHANNEL_LEVEL)) {
                     updateState(channelUID, new PercentType((int) (level * 100 / 255.0)));
                 }
             } catch (CGateException e) {
                 logger.debug("Failed to getLevel for group {}", groupId, e);
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
             }
         } else {
             if (channelUID.getId().equals(CBusBindingConstants.CHANNEL_STATE)) {
@@ -76,7 +75,7 @@ public class CBusLightHandler extends CBusGroupHandler {
                         }
                     } catch (CGateException e) {
                         logger.debug("Failed to send command {} to {}", command, group, e);
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
                     }
                 }
             } else if (channelUID.getId().equals(CBusBindingConstants.CHANNEL_LEVEL)) {
@@ -88,9 +87,8 @@ public class CBusLightHandler extends CBusGroupHandler {
                         } else if (command == OnOffType.OFF) {
                             group.off();
                         }
-                    } else if (command instanceof PercentType) {
-                        PercentType value = (PercentType) command;
-                        group.ramp((int) Math.round(value.doubleValue() / 100 * 255), 0);
+                    } else if (command instanceof PercentType percentCommand) {
+                        group.ramp((int) Math.round(percentCommand.doubleValue() / 100 * 255), 0);
                     } else if (command instanceof IncreaseDecreaseType) {
                         int level = group.getLevel();
                         if (command == IncreaseDecreaseType.DECREASE) {
@@ -103,12 +101,13 @@ public class CBusLightHandler extends CBusGroupHandler {
                     }
                 } catch (CGateException e) {
                     logger.debug("Failed to send command {} to {}", command, group, e);
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
                 }
             }
         }
     }
 
+    @Override
     public void updateGroup(int updateApplicationId, int updateGroupId, String value) {
         if (updateGroupId == groupId && updateApplicationId == applicationId) {
             Thing thing = getThing();
@@ -127,7 +126,7 @@ public class CBusLightHandler extends CBusGroupHandler {
                 } else {
                     try {
                         int v = Integer.parseInt(value);
-                        updateState(channelUID, v > 0 ? OnOffType.ON : OnOffType.OFF);
+                        updateState(channelUID, OnOffType.from(v > 0));
                         updateState(channelLevelUID, new PercentType((int) (v * 100 / 255.0)));
                     } catch (NumberFormatException e) {
                         logger.warn("Invalid value presented to channel {}. Received {}, expected On/Off", channelUID,

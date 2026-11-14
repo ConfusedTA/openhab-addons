@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -33,4 +33,5 @@ public class SEMSPortalConfiguration {
     public String username = "";
     public String password = "";
     public int interval = SEMSPortalBindingConstants.DEFAULT_UPDATE_INTERVAL_MINUTES;
+    public String clientType = SEMSPortalBindingConstants.DEFAULT_CLIENT_TYPE;
 }

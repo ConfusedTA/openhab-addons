@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,10 +12,9 @@
  */
 package org.openhab.binding.atlona.internal.pro3;
 
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.atlona.internal.handler.AtlonaCapabilities;
 
 /**
@@ -25,6 +24,7 @@ import org.openhab.binding.atlona.internal.handler.AtlonaCapabilities;
  * @author Tim Roberts - Initial contribution
  * @author Michael Lobstein - Add support for AT-PRO3HD66M
  */
+@NonNullByDefault
 public class AtlonaPro3Capabilities extends AtlonaCapabilities {
 
     /**
@@ -55,19 +55,13 @@ public class AtlonaPro3Capabilities extends AtlonaCapabilities {
      * @param hdmiPorts a non-null, non-empty set of hdmi ports
      */
     public AtlonaPro3Capabilities(int nbrPowerPorts, int nbrAudioPorts, Set<Integer> hdmiPorts, boolean isUHDModel) {
-        super();
-
-        if (hdmiPorts == null) {
-            throw new IllegalArgumentException("hdmiPorts cannot be null");
-        }
-
         if (hdmiPorts.isEmpty()) {
             throw new IllegalArgumentException("hdmiPorts cannot be empty");
         }
 
         this.nbrPowerPorts = nbrPowerPorts;
         this.nbrAudioPorts = nbrAudioPorts;
-        this.hdmiPorts = Collections.unmodifiableSet(new HashSet<>(hdmiPorts));
+        this.hdmiPorts = Set.copyOf(hdmiPorts);
         this.isUHDModel = isUHDModel;
     }
 

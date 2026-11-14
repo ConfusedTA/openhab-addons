@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -76,21 +77,19 @@ public class OpenWeatherMapAPIHandler extends BaseBridgeHandler {
 
         boolean configValid = true;
         if (config.apikey.isBlank()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.conf-error-missing-apikey");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-missing-apikey");
             configValid = false;
         }
         int refreshInterval = config.refreshInterval;
         if (refreshInterval < 1) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "@text/offline.conf-error-not-supported-refreshInterval");
             configValid = false;
         }
         String language = config.language;
         if (language != null && !(language = language.trim()).isEmpty()) {
             if (!OpenWeatherMapAPIConfiguration.SUPPORTED_LANGUAGES.contains(language.toLowerCase())) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "@text/offline.conf-error-not-supported-language");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-not-supported-language");
                 configValid = false;
             }
         } else {
@@ -153,7 +152,7 @@ public class OpenWeatherMapAPIHandler extends BaseBridgeHandler {
 
     private void determineBridgeStatus() {
         ThingStatus status = ThingStatus.ONLINE;
-        List<Thing> childs = getThing().getThings();
+        List<Thing> childs = getThing().getThings().stream().filter(Thing::isEnabled).collect(Collectors.toList());
         if (!childs.isEmpty()) {
             status = ThingStatus.OFFLINE;
             for (Thing thing : childs) {
@@ -168,7 +167,7 @@ public class OpenWeatherMapAPIHandler extends BaseBridgeHandler {
 
     private void updateThings() {
         ThingStatus status = ThingStatus.ONLINE;
-        List<Thing> childs = getThing().getThings();
+        List<Thing> childs = getThing().getThings().stream().filter(Thing::isEnabled).collect(Collectors.toList());
         if (!childs.isEmpty()) {
             status = ThingStatus.OFFLINE;
             for (Thing thing : childs) {

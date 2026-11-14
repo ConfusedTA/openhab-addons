@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,6 +21,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -130,16 +132,15 @@ public class LGWebOSHandler extends BaseThingHandler
         logger.trace("Handler initialized with config {}", c);
         String host = c.getHost();
         if (host.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.config-error-unknown-host");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.config-error-unknown-host");
             return;
         }
 
-        LGWebOSTVSocket s = new LGWebOSTVSocket(webSocketClient, this, host, c.getPort(), scheduler);
+        LGWebOSTVSocket s = new LGWebOSTVSocket(webSocketClient, this, host, c.getUseTLS(), scheduler);
         s.setListener(this);
         socket = s;
 
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "@text/offline.tv-off");
+        updateStatus(ThingStatus.OFFLINE, "@text/offline.tv-off");
 
         startReconnectJob();
     }
@@ -190,19 +191,18 @@ public class LGWebOSHandler extends BaseThingHandler
 
             // it is irrelevant which service is queried. Only need to send some packets over the wire
 
-            keepAliveJob = scheduler
-                    .scheduleWithFixedDelay(() -> getSocket().getRunningApp(new ResponseListener<AppInfo>() {
+            keepAliveJob = scheduler.scheduleWithFixedDelay(() -> getSocket().getRunningApp(new ResponseListener<>() {
 
-                        @Override
-                        public void onSuccess(AppInfo responseObject) {
-                            // ignore - actual response is not relevant here
-                        }
+                @Override
+                public void onSuccess(AppInfo responseObject) {
+                    // ignore - actual response is not relevant here
+                }
 
-                        @Override
-                        public void onError(String message) {
-                            // ignore
-                        }
-                    }), keepAliveInterval, keepAliveInterval, TimeUnit.MILLISECONDS);
+                @Override
+                public void onError(String message) {
+                    // ignore
+                }
+            }), keepAliveInterval, keepAliveInterval, TimeUnit.MILLISECONDS);
 
         }
     }
@@ -252,6 +252,11 @@ public class LGWebOSHandler extends BaseThingHandler
     }
 
     @Override
+    public String getBroadcastAddress() {
+        return getLGWebOSConfig().getBroadcastAddress();
+    }
+
+    @Override
     public void storeKey(@Nullable String key) {
         if (!getKey().equals(key)) {
             logger.debug("Store new access Key in the thing configuration");
@@ -280,7 +285,7 @@ public class LGWebOSHandler extends BaseThingHandler
                 postUpdate(CHANNEL_POWER, OnOffType.OFF);
                 break;
             case DISCONNECTED:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "@text/offline.tv-off");
+                updateStatus(ThingStatus.OFFLINE, "@text/offline.tv-off");
                 channelHandlers.forEach((k, v) -> {
                     v.onDeviceRemoved(k, this);
                     v.removeAnySubscription(this);
@@ -293,12 +298,12 @@ public class LGWebOSHandler extends BaseThingHandler
                 stopReconnectJob();
                 break;
             case REGISTERING:
-                updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, "@text/online.registering");
+                updateStatus(ThingStatus.ONLINE, "@text/online.registering");
                 findMacAddress();
                 break;
             case REGISTERED:
                 startKeepAliveJob();
-                updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, "@text/online.connected");
+                updateStatus(ThingStatus.ONLINE);
 
                 channelHandlers.forEach((k, v) -> {
                     // refresh subscriptions except on channel, which can only be subscribe in livetv app. see
@@ -325,7 +330,7 @@ public class LGWebOSHandler extends BaseThingHandler
             case CONNECTING:
             case REGISTERING:
             case REGISTERED:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         String.format("@text/offline.comm-error-connexion-failed [ \"%s\" ]", error));
                 break;
         }
@@ -357,7 +362,8 @@ public class LGWebOSHandler extends BaseThingHandler
         if (job == null || job.isCancelled()) {
             logger.debug("Schedule channel subscription job");
             channelSubscriptionJob = scheduler.schedule(
-                    () -> channelHandlers.get(CHANNEL_CHANNEL).refreshSubscription(CHANNEL_CHANNEL, this),
+                    () -> Objects.requireNonNull(channelHandlers.get(CHANNEL_CHANNEL))
+                            .refreshSubscription(CHANNEL_CHANNEL, this),
                     CHANNEL_SUBSCRIPTION_DELAY_SECONDS, TimeUnit.SECONDS);
         }
     }
@@ -373,7 +379,7 @@ public class LGWebOSHandler extends BaseThingHandler
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(LGWebOSActions.class);
+        return Set.of(LGWebOSActions.class);
     }
 
     /**
@@ -405,6 +411,7 @@ public class LGWebOSHandler extends BaseThingHandler
     }
 
     public List<String> reportChannels() {
-        return ((TVControlChannel) channelHandlers.get(CHANNEL_CHANNEL)).reportChannels(getThing().getUID());
+        return ((TVControlChannel) Objects.requireNonNull(channelHandlers.get(CHANNEL_CHANNEL)))
+                .reportChannels(getThing().getUID());
     }
 }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.squeezebox.internal.model.Favorite;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,7 @@ import org.slf4j.LoggerFactory;
  * @author Mark Hilbush - Initial contribution
  * @author Mark Hilbush - Added event to update favorites list
  */
+@NonNullByDefault
 public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEventListener {
     private final Logger logger = LoggerFactory.getLogger(SqueezeBoxNotificationListener.class);
 
@@ -41,12 +44,20 @@ public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEve
 
     // Used to monitor for updates to the playlist
     private final AtomicBoolean playlistUpdated = new AtomicBoolean(false);
+    private final AtomicInteger baselineTrackCount = new AtomicInteger(-1);
+    private final boolean requireChangeFromFirstEvent;
+    private volatile int newTrackCount;
 
     // Used to monitor when the player volume changes to a specific target value
     private final AtomicInteger volume = new AtomicInteger(-1);
 
     SqueezeBoxNotificationListener(String playerMAC) {
+        this(playerMAC, false);
+    }
+
+    SqueezeBoxNotificationListener(String playerMAC, boolean requireChangeFromFirstEvent) {
         this.playerMAC = playerMAC;
+        this.requireChangeFromFirstEvent = requireChangeFromFirstEvent;
     }
 
     // Stopped
@@ -77,6 +88,14 @@ public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEve
         return this.playlistUpdated.get();
     }
 
+    public boolean isBaselineEstablished() {
+        return this.baselineTrackCount.get() != -1;
+    }
+
+    public int getNewTrackCount() {
+        return this.newTrackCount;
+    }
+
     // Volume updated
     public void resetVolumeUpdated() {
         this.volume.set(-1);
@@ -105,12 +124,12 @@ public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEve
         }
         logger.trace("Mode is {} for player {}", mode, mac);
 
-        if (mode.equals("play")) {
+        if ("play".equals(mode)) {
             this.started.set(true);
-        } else if (this.started.get() && mode.equals("stop")) {
+        } else if (this.started.get() && "stop".equals(mode)) {
             this.stopped.set(true);
         }
-        if (mode.equals("pause")) {
+        if ("pause".equals(mode)) {
             this.paused.set(true);
         }
     }
@@ -158,7 +177,11 @@ public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEve
     }
 
     /*
-     * Monitor for when the playlist is updated
+     * Monitor for when the playlist is updated.
+     * In baseline mode, the first event establishes the expected track count
+     * without acknowledging; a subsequent event whose count differs from that
+     * baseline acknowledges the update. This way a stale in-flight event with
+     * an unchanged count can never be mistaken for the playlist change.
      */
     @Override
     public void numberPlaylistTracksEvent(String mac, int track) {
@@ -166,7 +189,15 @@ public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEve
             return;
         }
         logger.trace("Number of playlist tracks is {} for player {}", track, mac);
-        playlistUpdated.set(true);
+        if (requireChangeFromFirstEvent && !isBaselineEstablished()) {
+            baselineTrackCount.compareAndSet(-1, track);
+            logger.trace("Baseline playlist track count is {} for player {}", track, mac);
+            return;
+        }
+        if (track != baselineTrackCount.get()) {
+            newTrackCount = track;
+            playlistUpdated.set(true);
+        }
     }
 
     @Override
@@ -202,6 +233,26 @@ public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEve
     }
 
     @Override
+    public void albumArtistChangeEvent(String mac, String albumArtist) {
+    }
+
+    @Override
+    public void trackArtistChangeEvent(String mac, String trackArtist) {
+    }
+
+    @Override
+    public void bandChangeEvent(String mac, String band) {
+    }
+
+    @Override
+    public void composerChangeEvent(String mac, String composer) {
+    }
+
+    @Override
+    public void conductorChangeEvent(String mac, String conductor) {
+    }
+
+    @Override
     public void remoteTitleChangeEvent(String mac, String title) {
     }
 
@@ -218,7 +269,7 @@ public final class SqueezeBoxNotificationListener implements SqueezeBoxPlayerEve
     }
 
     @Override
-    public void buttonsChangeEvent(String mac, String likeCommand, String unlikeCommand) {
+    public void buttonsChangeEvent(String mac, @Nullable String likeCommand, @Nullable String unlikeCommand) {
     }
 
     @Override

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,10 +22,10 @@ import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
-import org.openhab.binding.solaredge.internal.callback.AbstractCommandCallback;
+import org.openhab.binding.solaredge.internal.connector.StatusUpdateListener;
 import org.openhab.binding.solaredge.internal.handler.SolarEdgeHandler;
-import org.openhab.binding.solaredge.internal.model.LiveDataResponse;
-import org.openhab.binding.solaredge.internal.model.LiveDataResponseTransformer;
+import org.openhab.binding.solaredge.internal.model.LiveDataResponsePublicApi;
+import org.openhab.binding.solaredge.internal.model.LiveDataResponseTransformerPublicApi;
 
 /**
  * command that retrieves status values for live data channels via public API
@@ -33,16 +33,16 @@ import org.openhab.binding.solaredge.internal.model.LiveDataResponseTransformer;
  * @author Alexander Friese - initial contribution
  */
 @NonNullByDefault
-public class LiveDataUpdatePublicApi extends AbstractCommandCallback implements SolarEdgeCommand {
+public class LiveDataUpdatePublicApi extends AbstractCommand implements SolarEdgeCommand {
 
     private final SolarEdgeHandler handler;
-    private final LiveDataResponseTransformer transformer;
+    private final LiveDataResponseTransformerPublicApi transformer;
     private int retries = 0;
 
-    public LiveDataUpdatePublicApi(SolarEdgeHandler handler) {
-        super(handler.getConfiguration());
+    public LiveDataUpdatePublicApi(SolarEdgeHandler handler, StatusUpdateListener listener) {
+        super(handler.getConfiguration(), listener);
         this.handler = handler;
-        this.transformer = new LiveDataResponseTransformer(handler);
+        this.transformer = new LiveDataResponseTransformerPublicApi(handler);
     }
 
     @Override
@@ -59,22 +59,25 @@ public class LiveDataUpdatePublicApi extends AbstractCommandCallback implements 
     }
 
     @Override
-    public void onComplete(@Nullable Result result) {
-        logger.debug("onComplete()");
+    protected void handleResponse(@Nullable Result result) {
+        logger.debug("[LiveDataUpdatePublicApi] onComplete()");
+        logger.trace("URL: {}", getURL());
+
         if (!HttpStatus.Code.OK.equals(getCommunicationStatus().getHttpCode())) {
-            updateListenerStatus();
             if (retries++ < MAX_RETRIES) {
                 handler.getWebInterface().enqueueCommand(this);
+                return;
             }
         } else {
             String json = getContentAsString(StandardCharsets.UTF_8);
             if (json != null) {
                 logger.debug("JSON String: {}", json);
-                LiveDataResponse jsonObject = fromJson(json, LiveDataResponse.class);
+                LiveDataResponsePublicApi jsonObject = fromJson(json, LiveDataResponsePublicApi.class);
                 if (jsonObject != null) {
                     handler.updateChannelStatus(transformer.transform(jsonObject));
                 }
             }
         }
+        updateListenerStatus();
     }
 }

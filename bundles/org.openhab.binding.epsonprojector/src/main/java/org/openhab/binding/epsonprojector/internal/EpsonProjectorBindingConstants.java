@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -41,9 +41,11 @@ public class EpsonProjectorBindingConstants {
     public static final String CHANNEL_TYPE_POWER = "power";
     public static final String CHANNEL_TYPE_POWERSTATE = "powerstate";
     public static final String CHANNEL_TYPE_LAMPTIME = "lamptime";
+    public static final String CHANNEL_TYPE_SOURCE = "source";
+    public static final String CHANNEL_TYPE_FREEZE = "freeze";
+    public static final String CHANNEL_TYPE_MUTE = "mute";
 
     // Config properties
     public static final String THING_PROPERTY_HOST = "host";
     public static final String THING_PROPERTY_PORT = "port";
-    public static final String THING_PROPERTY_MAC = "macAddress";
 }

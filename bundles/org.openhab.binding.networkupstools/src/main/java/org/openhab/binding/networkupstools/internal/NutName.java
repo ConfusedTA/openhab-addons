@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -34,7 +34,7 @@ import org.openhab.core.types.UnDefType;
  * Supported NUT variables. Any NUT enum members have a complimentary channel definition in the XML thing definition.
  *
  * @author Hilbrand Bouwkamp - Initial contribution
- * @see https://github.com/networkupstools/nut/blob/master/docs/nut-names.txt
+ * @see <a href="https://github.com/networkupstools/nut/blob/master/docs/nut-names.txt">nut-names.txt</a>
  */
 @NonNullByDefault
 enum NutName {
@@ -64,7 +64,8 @@ enum NutName {
     // Battery
     BATTERY_CHARGE("batteryCharge", "battery.charge", Units.PERCENT),
     BATTERY_RUNTIME("batteryRuntime", "battery.runtime", Units.SECOND),
-    BATTERY_VOLTAGE("batteryVoltage", "battery.voltage", Units.VOLT);
+    BATTERY_VOLTAGE("batteryVoltage", "battery.voltage", Units.VOLT),
+    BATTERY_TEMPERATURE("batteryTemperature", "battery.temperature", SIUnits.CELSIUS);
 
     static final Map<String, NutName> NUT_NAME_MAP = Stream.of(NutName.values())
             .collect(Collectors.toMap(NutName::getChannelId, Function.identity()));

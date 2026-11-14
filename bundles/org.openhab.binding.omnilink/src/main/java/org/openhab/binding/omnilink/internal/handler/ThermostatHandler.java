@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -36,7 +36,6 @@ import org.openhab.core.library.unit.SIUnits;
 import org.openhab.core.library.unit.Units;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -75,7 +74,7 @@ public class ThermostatHandler extends AbstractOmnilinkStatusHandler<ExtendedThe
         private final int bit;
         private final int modeValue;
 
-        private ThermostatStatus(int bit, int modeValue) {
+        ThermostatStatus(int bit, int modeValue) {
             this.bit = bit;
             this.modeValue = modeValue;
         }
@@ -92,7 +91,7 @@ public class ThermostatHandler extends AbstractOmnilinkStatusHandler<ExtendedThe
         if (bridgeHandler != null) {
             updateThermostatProperties(bridgeHandler);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                     "Received null bridge while initializing Thermostat!");
         }
     }
@@ -122,11 +121,11 @@ public class ThermostatHandler extends AbstractOmnilinkStatusHandler<ExtendedThe
     public void handleCommand(ChannelUID channelUID, Command command) {
         logger.debug("handleCommand called for channel: {}, command: {}", channelUID, command);
         final OmnilinkBridgeHandler bridgeHandler = getOmnilinkBridgeHandler();
-        Optional<TemperatureFormat> temperatureFormat = Optional.empty();
+        Optional<TemperatureFormat> temperatureFormat;
 
         if (command instanceof RefreshType) {
-            retrieveStatus().ifPresentOrElse(this::updateChannels, () -> updateStatus(ThingStatus.OFFLINE,
-                    ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
+            retrieveStatus().ifPresentOrElse(this::updateChannels,
+                    () -> updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
             return;
         }
 
@@ -136,8 +135,8 @@ public class ThermostatHandler extends AbstractOmnilinkStatusHandler<ExtendedThe
         }
         if (bridgeHandler != null) {
             temperatureFormat = bridgeHandler.getTemperatureFormat();
-            if (!temperatureFormat.isPresent()) {
-                logger.warn("Receieved null temperature format!");
+            if (temperatureFormat.isEmpty()) {
+                logger.warn("Received null temperature format!");
                 return;
             }
         } else {
@@ -226,7 +225,7 @@ public class ThermostatHandler extends AbstractOmnilinkStatusHandler<ExtendedThe
                         temperatureFormat.get().omniToFormat(status.getHeatSetpoint()),
                         temperatureFormat.get().getFormatNumber() == 1 ? ImperialUnits.FAHRENHEIT : SIUnits.CELSIUS));
             } else {
-                logger.warn("Receieved null temperature format, could not update Thermostat channels!");
+                logger.warn("Received null temperature format, could not update Thermostat channels!");
             }
         } else {
             logger.warn("Could not connect to Bridge, failed to get temperature format!");

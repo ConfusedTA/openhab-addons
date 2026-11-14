@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -33,6 +33,7 @@ import org.openhab.binding.lutron.internal.protocol.LIPCommand;
 import org.openhab.binding.lutron.internal.protocol.LutronCommandNew;
 import org.openhab.binding.lutron.internal.protocol.lip.LutronCommandType;
 import org.openhab.binding.lutron.internal.protocol.lip.LutronOperation;
+import org.openhab.binding.lutron.internal.protocol.lip.Monitoring;
 import org.openhab.binding.lutron.internal.protocol.lip.TargetType;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
@@ -56,11 +57,6 @@ public class IPBridgeHandler extends LutronBridgeHandler {
             .compile("~(OUTPUT|DEVICE|SYSTEM|TIMECLOCK|MODE|SYSVAR|GROUP),([0-9\\.:/]+),([0-9,\\.:/]*)\\Z");
 
     private static final String DB_UPDATE_DATE_FORMAT = "MM/dd/yyyy HH:mm:ss";
-
-    private static final Integer MONITOR_PROMPT = 12;
-    private static final Integer MONITOR_SYSVAR = 10;
-    private static final Integer MONITOR_ENABLE = 1;
-    private static final Integer MONITOR_DISABLE = 2;
 
     private static final Integer SYSTEM_DBEXPORTDATETIME = 10;
 
@@ -136,28 +132,28 @@ public class IPBridgeHandler extends LutronBridgeHandler {
 
     @Override
     public void initialize() {
-        this.config = getThing().getConfiguration().as(IPBridgeConfig.class);
+        this.config = getConfigAs(IPBridgeConfig.class);
 
         if (validConfiguration(this.config)) {
             reconnectInterval = (config.reconnect > 0) ? config.reconnect : DEFAULT_RECONNECT_MINUTES;
             heartbeatInterval = (config.heartbeat > 0) ? config.heartbeat : DEFAULT_HEARTBEAT_MINUTES;
             sendDelay = (config.delay < 0) ? 0 : config.delay;
 
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Connecting");
+            updateStatus(ThingStatus.OFFLINE, "Connecting");
             scheduler.submit(this::connect); // start the async connect task
         }
     }
 
     private boolean validConfiguration(IPBridgeConfig config) {
         if (config == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "bridge configuration missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "bridge configuration missing");
 
             return false;
         }
 
         String ipAddress = config.ipAddress;
         if (ipAddress == null || ipAddress.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "bridge address not specified");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "bridge address not specified");
 
             return false;
         }
@@ -179,18 +175,18 @@ public class IPBridgeHandler extends LutronBridgeHandler {
 
         try {
             if (!login(config)) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "invalid username/password");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "invalid username/password");
 
                 return;
             }
         } catch (LutronSafemodeException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "main repeater is in safe mode");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "main repeater is in safe mode");
             disconnect();
             scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
 
             return;
         } catch (IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             disconnect();
             scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
 
@@ -198,7 +194,7 @@ public class IPBridgeHandler extends LutronBridgeHandler {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
 
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "login interrupted");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "login interrupted");
             disconnect();
 
             return;
@@ -208,8 +204,9 @@ public class IPBridgeHandler extends LutronBridgeHandler {
 
         // Disable prompts
         sendCommand(new LIPCommand(TargetType.BRIDGE, LutronOperation.EXECUTE, LutronCommandType.MONITORING, null,
-                MONITOR_PROMPT, MONITOR_DISABLE));
+                Monitoring.PROMPT, Monitoring.ACTION_DISABLE));
 
+        initMonitoring();
         if (requireSysvarMonitoring.get()) {
             setSysvarMonitoring(true);
         }
@@ -219,7 +216,7 @@ public class IPBridgeHandler extends LutronBridgeHandler {
         sendCommand(new LIPCommand(TargetType.BRIDGE, LutronOperation.QUERY, LutronCommandType.SYSTEM, null,
                 SYSTEM_DBEXPORTDATETIME));
 
-        messageSender = new Thread(this::sendCommandsThread, "Lutron sender");
+        messageSender = new Thread(this::sendCommandsThread, "OH-binding-" + getThing().getUID() + "-IPBridgeSender");
         messageSender.start();
 
         logger.debug("Starting keepAlive job with interval {}", heartbeatInterval);
@@ -238,7 +235,7 @@ public class IPBridgeHandler extends LutronBridgeHandler {
                     session.writeLine(command.toString());
                 } catch (IOException e) {
                     logger.warn("Communication error, will try to reconnect. Error: {}", e.getMessage());
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
 
                     sendQueue.add(command); // Requeue command
 
@@ -287,7 +284,7 @@ public class IPBridgeHandler extends LutronBridgeHandler {
     private synchronized void reconnect() {
         logger.debug("Keepalive timeout, attempting to reconnect to the bridge");
 
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
+        updateStatus(ThingStatusDetail.DUTY_CYCLE);
         disconnect();
         connect();
     }
@@ -347,7 +344,7 @@ public class IPBridgeHandler extends LutronBridgeHandler {
         String scrubbedLine;
 
         for (String line : this.session.readLines()) {
-            if (line.trim().equals("")) {
+            if ("".equals(line.trim())) {
                 // Sometimes we get an empty line (possibly only when prompts are disabled). Ignore them.
                 continue;
             }
@@ -457,10 +454,17 @@ public class IPBridgeHandler extends LutronBridgeHandler {
         }
     }
 
+    private void initMonitoring() {
+        for (Integer monitorType : Monitoring.REQUIRED_SET) {
+            sendCommand(new LIPCommand(TargetType.BRIDGE, LutronOperation.EXECUTE, LutronCommandType.MONITORING, null,
+                    monitorType, Monitoring.ACTION_ENABLE));
+        }
+    }
+
     private void setSysvarMonitoring(boolean enable) {
-        Integer setting = (enable) ? MONITOR_ENABLE : MONITOR_DISABLE;
+        Integer setting = (enable) ? Monitoring.ACTION_ENABLE : Monitoring.ACTION_DISABLE;
         sendCommand(new LIPCommand(TargetType.BRIDGE, LutronOperation.EXECUTE, LutronCommandType.MONITORING, null,
-                MONITOR_SYSVAR, setting));
+                Monitoring.SYSVAR, setting));
     }
 
     @Override
@@ -475,7 +479,8 @@ public class IPBridgeHandler extends LutronBridgeHandler {
 
     @Override
     public void thingUpdated(Thing thing) {
-        IPBridgeConfig newConfig = thing.getConfiguration().as(IPBridgeConfig.class);
+        setThing(thing);
+        IPBridgeConfig newConfig = getConfigAs(IPBridgeConfig.class);
         boolean validConfig = validConfiguration(newConfig);
         boolean needsReconnect = validConfig && !this.config.sameConnectionParameters(newConfig);
 
@@ -483,7 +488,6 @@ public class IPBridgeHandler extends LutronBridgeHandler {
             dispose();
         }
 
-        this.thing = thing;
         this.config = newConfig;
 
         if (needsReconnect) {

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -61,15 +61,7 @@ public class KVVBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public void initialize() {
-        updateStatus(ThingStatus.UNKNOWN);
-
         this.config = getConfigAs(KVVBridgeConfig.class);
-        if (this.config.apiKey.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Failed to get bridge configuration");
-            return;
-        }
-
         updateStatus(ThingStatus.ONLINE);
     }
 
@@ -84,21 +76,19 @@ public class KVVBridgeHandler extends BaseBridgeHandler {
      * @return the latest {@link DepartureResult}.
      */
     public synchronized @Nullable DepartureResult queryKVV(final KVVStopConfig stopConfig) {
-
         // is there an up-to-date value in the cache?
         final DepartureResult cr = this.cache.get(stopConfig.stopId);
         if (cr != null) {
             return cr;
         }
 
-        final String url = KVVBindingConstants.API_URL + "/departures/bystop/" + stopConfig.stopId + "?key="
-                + config.apiKey + "&maxInfos=" + config.maxTrains;
+        final String url = String.format(KVVBindingConstants.API_FORMAT, stopConfig.stopId, config.maxTrains);
 
         String data;
         try {
             data = HttpUtil.executeUrl("GET", url, KVVBindingConstants.TIMEOUT_IN_SECONDS * 1000);
         } catch (IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Failed to connect to KVV API");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Failed to connect to KVV API");
             logger.debug("Failed to get departures from '{}'", url, e);
             this.wasOffline = true;
             return null;
@@ -108,7 +98,7 @@ public class KVVBridgeHandler extends BaseBridgeHandler {
         try {
             result = new Gson().fromJson(data, DepartureResult.class);
         } catch (JsonSyntaxException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Failed to connect to KVV API");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Failed to connect to KVV API");
             logger.debug("Failed to parse departure data", e);
             logger.debug("Server returned '{}'", data);
             this.wasOffline = true;
@@ -140,7 +130,7 @@ public class KVVBridgeHandler extends BaseBridgeHandler {
          */
         public Cache() {
             this.updateInterval = KVVBindingConstants.CACHE_DEFAULT_UPDATEINTERVAL;
-            this.cache = new HashMap<String, CacheLine>();
+            this.cache = new HashMap<>();
         }
 
         /*

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,20 +14,23 @@ package org.openhab.binding.homematic.internal.communicator.server;
 
 import java.io.IOException;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+
 /**
  * Simple RPC server interface.
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 public interface RpcServer {
 
     /**
      * Starts the rpc server.
      */
-    public void start() throws IOException;
+    void start() throws IOException;
 
     /**
      * Stops the rpc server.
      */
-    public void shutdown();
+    void shutdown();
 }

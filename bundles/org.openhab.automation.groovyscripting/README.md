@@ -1,6 +1,6 @@
 # Groovy Scripting
 
-This add-on provides support for [Groovy](https://groovy-lang.org/) 3.0.9 that can be used as a scripting language within automation rules and which eliminates the need to manually install Groovy.
+This add-on provides support for [Groovy](https://groovy-lang.org/) 6.0.0 that can be used as a scripting language within automation rules.
 
 ## Creating Groovy Scripts
 
@@ -15,11 +15,18 @@ If you create an empty file called `test.groovy`, you will see a log line with i
 
 To enable debug logging, use the [console logging]({{base}}/administration/logging.html) commands to enable debug logging for the automation functionality:
 
-```text
+```shell
 log:set DEBUG org.openhab.core.automation
 ```
 
 For more information on the available APIs in scripts see the [JSR223 Scripting]({{base}}/configuration/jsr223.html) documentation.
+
+## Code reuse
+
+One can place *.groovy files with Groovy classes under `automation/groovy` configuration directory.
+Those classes can be imported in JSR-223 scripts or the UI rules action with the usual Groovy `import` statement.
+
+To apply shared code changes, one has to restart the `openHAB Core :: Bundles :: Automation` bundle on the Console or an openHAB instance altogether.
 
 ## Script Examples
 
@@ -31,7 +38,7 @@ The openHAB server uses the [SLF4J](https://www.slf4j.org/) library for logging.
 ```groovy
 import org.slf4j.LoggerFactory
 
-LoggerFactory.getLogger("org.openhab.core.automation.examples").info("Hello world!")
+LoggerFactory.getLogger("org.openhab.core.automation.examples").info("Hello, World!")
 ```
 
 Depending on the openHAB logging configuration, you may need to prefix logger names with `org.openhab.core.automation` for them to show up in the log file (or you modify the logging configuration).
@@ -39,5 +46,19 @@ Depending on the openHAB logging configuration, you may need to prefix logger na
 The script uses the [LoggerFactory](https://www.slf4j.org/apidocs/org/slf4j/Logger.html) to obtain a named logger and then logs a message like:
 
 ```text
-    ... [INFO ] [.openhab.core.automation.examples:-2   ] - Hello world!
+    ... [INFO ] [.openhab.core.automation.examples:-2   ] - Hello, World!
 ```
+
+## `scriptExtension.importPreset` limitation
+
+For explicit presets `scriptExtension.importPreset` imports instance variables, but not classes.
+After
+
+```groovy
+scriptExtension.importPreset("RuleSupport")
+import org.openhab.core.config.core.Configuration
+var r = TriggerBuilder.create().withId("trig2").withTypeUID("core.ItemStateChangeTrigger").build()
+var c = new Configuration()
+```
+
+the variable `automationManager` is available, `TriggerBuilder` can be used, the constructor of classes from the preset must be fully qualified.

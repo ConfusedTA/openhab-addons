@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -60,7 +60,7 @@ public class ShadeHandler extends LutronHandler {
     public void initialize() {
         Number id = (Number) getThing().getConfiguration().get("integrationId");
         if (id == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId");
             return;
         }
         integrationId = id.intValue();
@@ -79,13 +79,13 @@ public class ShadeHandler extends LutronHandler {
         logger.debug("Initializing device state for Shade {}", getIntegrationId());
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
         } else if (bridge.getStatus() == ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Awaiting initial response");
+            updateStatus(ThingStatus.UNKNOWN, "Awaiting initial response");
             queryOutput(TargetType.SHADE, OutputCommand.ACTION_ZONELEVEL);
             // handleUpdate() will set thing status to online when response arrives
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -100,8 +100,8 @@ public class ShadeHandler extends LutronHandler {
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         if (channelUID.getId().equals(CHANNEL_SHADELEVEL)) {
-            if (command instanceof PercentType) {
-                int level = ((PercentType) command).intValue();
+            if (command instanceof PercentType shadePercent) {
+                int level = shadePercent.intValue();
                 output(TargetType.SHADE, OutputCommand.ACTION_ZONELEVEL, level, null, null);
                 if (leap) {
                     // LEAP may not send back a position update

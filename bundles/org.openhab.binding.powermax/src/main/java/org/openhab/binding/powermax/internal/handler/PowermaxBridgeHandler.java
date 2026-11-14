@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,10 +15,10 @@ package org.openhab.binding.powermax.internal.handler;
 import static org.openhab.binding.powermax.internal.PowermaxBindingConstants.*;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.EventObject;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -49,6 +49,7 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
+import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -112,7 +113,7 @@ public class PowermaxBridgeHandler extends BaseBridgeHandler implements Powermax
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(PowermaxDiscoveryService.class);
+        return Set.of(PowermaxDiscoveryService.class);
     }
 
     public @Nullable PowermaxState getCurrentState() {
@@ -142,27 +143,24 @@ public class PowermaxBridgeHandler extends BaseBridgeHandler implements Powermax
         }
 
         if (errorMsg == null) {
-            ScheduledFuture<?> job = globalJob;
-            if (job == null || job.isCancelled()) {
-                // Delay the startup in case the handler is restarted immediately
-                globalJob = scheduler.scheduleWithFixedDelay(() -> {
-                    try {
-                        logger.trace("Powermax job...");
-                        updateMotionSensorState();
-                        updateRingingState();
-                        if (isConnected()) {
-                            checkKeepAlive();
-                            retryDownloadSetup();
-                        } else {
-                            tryReconnect();
-                        }
-                    } catch (Exception e) {
-                        logger.warn("Exception in scheduled job: {}", e.getMessage(), e);
+            // Delay the startup in case the handler is restarted immediately
+            globalJob = scheduler.scheduleWithFixedDelay(() -> {
+                try {
+                    logger.trace("Powermax job...");
+                    updateMotionSensorState();
+                    updateRingingState();
+                    if (isConnected()) {
+                        checkKeepAlive();
+                        retryDownloadSetup();
+                    } else {
+                        tryReconnect();
                     }
-                }, 10, JOB_REPEAT, TimeUnit.SECONDS);
-            }
+                } catch (Exception e) {
+                    logger.warn("Exception in scheduled job: {}", e.getMessage(), e);
+                }
+            }, 10, JOB_REPEAT, TimeUnit.SECONDS);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, errorMsg);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, errorMsg);
         }
     }
 
@@ -224,7 +222,7 @@ public class PowermaxBridgeHandler extends BaseBridgeHandler implements Powermax
     public void dispose() {
         logger.debug("Handler disposed for thing {}", getThing().getUID());
         ScheduledFuture<?> job = globalJob;
-        if (job != null && !job.isCancelled()) {
+        if (job != null) {
             job.cancel(true);
             globalJob = null;
         }
@@ -323,7 +321,7 @@ public class PowermaxBridgeHandler extends BaseBridgeHandler implements Powermax
             }
         } catch (Exception e) {
             logger.debug("openConnection(): {}", e.getMessage(), e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             setAllChannelsOffline();
         }
     }
@@ -554,7 +552,7 @@ public class PowermaxBridgeHandler extends BaseBridgeHandler implements Powermax
 
     @Override
     public void onCommunicationFailure(String message) {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, message);
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, message);
         setAllChannelsOffline();
     }
 
@@ -623,24 +621,25 @@ public class PowermaxBridgeHandler extends BaseBridgeHandler implements Powermax
         }
 
         for (Thing thing : getThing().getThings()) {
-            if (thing.getHandler() != null) {
-                PowermaxThingHandler handler = (PowermaxThingHandler) thing.getHandler();
-                if (handler != null) {
-                    if (thing.getThingTypeUID().equals(THING_TYPE_ZONE)) {
-                        // All of the zone state objects will have the same list of values.
-                        // The use of getZone(1) here is just to get any PowermaxZoneState
-                        // and use it to get the list of zone channels.
+            if (!thing.isEnabled()) {
+                continue;
+            }
+            ThingHandler thingHandler = thing.getHandler();
+            if (thingHandler instanceof PowermaxThingHandler powermaxThingHandler) {
+                if (thing.getThingTypeUID().equals(THING_TYPE_ZONE)) {
+                    // All of the zone state objects will have the same list of values.
+                    // The use of getZone(1) here is just to get any PowermaxZoneState
+                    // and use it to get the list of zone channels.
 
-                        for (Value<?> value : state.getZone(1).getValues()) {
-                            String channelId = value.getChannel();
-                            if ((channel == null) || channel.equals(channelId)) {
-                                handler.updateChannelFromAlarmState(channelId, state);
-                            }
+                    for (Value<?> value : state.getZone(1).getValues()) {
+                        String channelId = value.getChannel();
+                        if ((channel == null) || channel.equals(channelId)) {
+                            powermaxThingHandler.updateChannelFromAlarmState(channelId, state);
                         }
-                    } else if (thing.getThingTypeUID().equals(THING_TYPE_X10)) {
-                        if ((channel == null) || channel.equals(X10_STATUS)) {
-                            handler.updateChannelFromAlarmState(X10_STATUS, state);
-                        }
+                    }
+                } else if (thing.getThingTypeUID().equals(THING_TYPE_X10)) {
+                    if ((channel == null) || channel.equals(X10_STATUS)) {
+                        powermaxThingHandler.updateChannelFromAlarmState(X10_STATUS, state);
                     }
                 }
             }

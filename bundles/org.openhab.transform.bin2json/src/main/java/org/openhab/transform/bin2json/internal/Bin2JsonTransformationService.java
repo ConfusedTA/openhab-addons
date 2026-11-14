@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,6 +14,8 @@ package org.openhab.transform.bin2json.internal;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.io.bin2json.Bin2Json;
+import org.openhab.core.io.bin2json.ConversionException;
 import org.openhab.core.transform.TransformationException;
 import org.openhab.core.transform.TransformationService;
 import org.osgi.service.component.annotations.Component;

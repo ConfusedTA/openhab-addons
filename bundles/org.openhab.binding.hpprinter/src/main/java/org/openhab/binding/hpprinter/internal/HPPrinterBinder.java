@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -803,9 +803,9 @@ public class HPPrinterBinder {
         if (result.getStatus() == RequestStatus.SUCCESS) {
             goneOnline();
         } else if (result.getStatus() == RequestStatus.TIMEOUT) {
-            handler.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, result.getErrorMessage());
+            handler.updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, result.getErrorMessage());
         } else {
-            handler.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, result.getErrorMessage());
+            handler.updateStatus(ThingStatus.OFFLINE, result.getErrorMessage());
         }
     }
 }

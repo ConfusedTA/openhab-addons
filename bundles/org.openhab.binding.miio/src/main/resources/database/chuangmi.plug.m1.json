@@ -3,14 +3,15 @@
 		"id": [
 			"chuangmi.plug.m1",
 			"chuangmi.plug.m3",
-			"chuangmi.plug.hmi205"
+			"chuangmi.plug.hmi205",
+			"chuangmi.plug.hmi206"
 		],
+		"experimental": false,
 		"channels": [
 			{
 				"property": "power",
 				"friendlyName": "Power",
 				"channel": "power",
-				"channelType": "power",
 				"type": "Switch",
 				"refresh": true,
 				"actions": [
@@ -19,9 +20,10 @@
 						"parameterType": "ONOFF"
 					}
 				],
-				"category": "switch",
+				"category": "poweroutlet",
 				"tags": [
-					"Switch"
+					"Switch",
+					"Power"
 				]
 			},
 			{
@@ -44,9 +46,8 @@
 			},
 			{
 				"property": "wifi_led",
-				"friendlyName": "Indicator light",
+				"friendlyName": "Indicator Light",
 				"channel": "led",
-				"channelType": "led",
 				"type": "Switch",
 				"refresh": true,
 				"actions": [
@@ -54,6 +55,11 @@
 						"command": "set_wifi_led",
 						"parameterType": "ONOFF"
 					}
+				],
+				"category": "light",
+				"tags": [
+					"Switch",
+					"Light"
 				]
 			}
 		]

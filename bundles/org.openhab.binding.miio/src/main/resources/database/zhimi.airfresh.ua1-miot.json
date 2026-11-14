@@ -1,0 +1,319 @@
+{
+	"deviceMapping": {
+		"id": [
+			"zhimi.airfresh.ua1"
+		],
+		"propertyMethod": "get_properties",
+		"maxProperties": 1,
+		"channels": [
+			{
+				"property": "",
+				"friendlyName": "Actions",
+				"channel": "actions",
+				"type": "String",
+				"stateDescription": {
+					"options": [
+						{
+							"value": "filter-reset-filter-life",
+							"label": "Reset Filter Life"
+						}
+					]
+				},
+				"refresh": false,
+				"actions": [
+					{
+						"command": "action",
+						"parameterType": "EMPTY",
+						"parameters": [
+							0
+						],
+						"siid": 4,
+						"aiid": 1,
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "filter-reset-filter-life"
+								}
+							]
+						}
+					}
+				],
+				"category": "settings",
+				"readmeComment": "Value mapping `[\"filter-reset-filter-life\"\u003d\"Reset Filter Life\"]`"
+			},
+			{
+				"property": "on",
+				"siid": 2,
+				"piid": 1,
+				"friendlyName": "Power",
+				"channel": "on",
+				"type": "Switch",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL"
+					}
+				],
+				"category": "switch",
+				"tags": [
+					"Switch"
+				]
+			},
+			{
+				"property": "fault",
+				"siid": 2,
+				"piid": 2,
+				"friendlyName": "Fault",
+				"channel": "fault",
+				"type": "Number",
+				"stateDescription": {
+					"readOnly": true,
+					"options": [
+						{
+							"value": "0",
+							"label": "No Faults"
+						}
+					]
+				},
+				"refresh": true,
+				"actions": [],
+				"category": "error",
+				"tags": [
+					"Status"
+				],
+				"readmeComment": "Value mapping `[\"0\"\u003d\"No Faults\"]`"
+			},
+			{
+				"property": "fan-level",
+				"siid": 2,
+				"piid": 5,
+				"friendlyName": "Fan Level",
+				"channel": "fan_level",
+				"type": "Number",
+				"stateDescription": {
+					"options": [
+						{
+							"value": "1",
+							"label": "Level 1"
+						},
+						{
+							"value": "2",
+							"label": "Level 2"
+						},
+						{
+							"value": "3",
+							"label": "Level 3"
+						}
+					]
+				},
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER"
+					}
+				],
+				"category": "fan",
+				"tags": [
+					"Control",
+					"Level"
+				],
+				"readmeComment": "Value mapping `[\"1\"\u003d\"Level 1\",\"2\"\u003d\"Level 2\",\"3\"\u003d\"Level 3\"]`"
+			},
+			{
+				"property": "heater",
+				"siid": 2,
+				"piid": 6,
+				"friendlyName": "Heater",
+				"channel": "heater",
+				"type": "Switch",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL"
+					}
+				],
+				"category": "switch",
+				"tags": [
+					"Switch"
+				]
+			},
+			{
+				"property": "filter-used-time",
+				"siid": 4,
+				"piid": 1,
+				"friendlyName": "Filter Used Time",
+				"channel": "filter_used_time",
+				"type": "Number:Time",
+				"unit": "minutes",
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 9999999,
+					"step": 1,
+					"pattern": "%.0f %unit%",
+					"readOnly": true
+				},
+				"refresh": true,
+				"actions": [],
+				"category": "time",
+				"tags": [
+					"Measurement",
+					"Duration"
+				]
+			},
+			{
+				"property": "filter-life-level",
+				"siid": 4,
+				"piid": 2,
+				"friendlyName": "Filter Life Level",
+				"channel": "filter_life_level",
+				"type": "Number:Dimensionless",
+				"unit": "percentage",
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 100,
+					"step": 1,
+					"pattern": "%.0f %unit%",
+					"readOnly": true
+				},
+				"refresh": true,
+				"actions": [],
+				"category": "status",
+				"tags": [
+					"Measurement",
+					"Level"
+				]
+			},
+			{
+				"property": "physical-controls-locked",
+				"siid": 5,
+				"piid": 1,
+				"friendlyName": "Child Lock",
+				"channel": "physical_controls_locked",
+				"type": "Switch",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL"
+					}
+				],
+				"category": "lock",
+				"tags": [
+					"Switch",
+					"Enabled"
+				]
+			},
+			{
+				"property": "alarm",
+				"siid": 6,
+				"piid": 1,
+				"friendlyName": "Notification Sound",
+				"channel": "alarm",
+				"type": "Switch",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL"
+					}
+				],
+				"category": "soundvolume",
+				"tags": [
+					"Switch",
+					"Enabled"
+				]
+			},
+			{
+				"property": "brightness",
+				"siid": 7,
+				"piid": 3,
+				"friendlyName": "Indicator Light Brightness",
+				"channel": "brightness",
+				"type": "Dimmer",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER"
+					}
+				],
+				"category": "screen",
+				"tags": [
+					"Control",
+					"Brightness"
+				]
+			},
+			{
+				"property": "motor-a-speed-rpm",
+				"siid": 8,
+				"piid": 1,
+				"friendlyName": "Motor A Speed",
+				"channel": "motor_a_speed_rpm",
+				"type": "Number",
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 65535,
+					"step": 1,
+					"pattern": "%.0f rpm",
+					"readOnly": true
+				},
+				"refresh": true,
+				"actions": [],
+				"category": "fan",
+				"tags": [
+					"Measurement",
+					"Speed"
+				]
+			},
+			{
+				"property": "motor-b-speed-rpm",
+				"siid": 8,
+				"piid": 2,
+				"friendlyName": "Motor B Speed",
+				"channel": "motor_b_speed_rpm",
+				"type": "Number",
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 65535,
+					"step": 1,
+					"pattern": "%.0f rpm",
+					"readOnly": true
+				},
+				"refresh": true,
+				"actions": [],
+				"category": "fan",
+				"tags": [
+					"Measurement",
+					"Speed"
+				]
+			},
+			{
+				"property": "temperature",
+				"siid": 8,
+				"piid": 5,
+				"friendlyName": "Temperature",
+				"channel": "temperature",
+				"type": "Number:Temperature",
+				"unit": "CELSIUS",
+				"stateDescription": {
+					"minimum": -40,
+					"maximum": 125,
+					"pattern": "%.1f %unit%",
+					"readOnly": true
+				},
+				"refresh": true,
+				"actions": [],
+				"category": "temperature",
+				"tags": [
+					"Measurement",
+					"Temperature"
+				]
+			}
+		],
+		"experimental": false
+	}
+}

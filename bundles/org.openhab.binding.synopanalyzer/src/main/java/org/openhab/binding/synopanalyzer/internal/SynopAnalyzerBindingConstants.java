@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,8 +25,7 @@ import org.openhab.core.library.unit.Units;
 import org.openhab.core.thing.ThingTypeUID;
 
 /**
- * The {@link SynopAnalyzerBinding} class defines common constants, which are
- * used across the whole binding.
+ * The {@link SynopAnalyzerBindingConstants} class defines common constants used across the whole binding.
  *
  * @author Gaël L'hopital - Initial contribution
  */
@@ -49,6 +48,7 @@ public class SynopAnalyzerBindingConstants {
     public static final String WIND_STRENGTH = "wind-speed";
     public static final String WIND_SPEED_BEAUFORT = "wind-speed-beaufort";
     public static final String TIME_UTC = "time-utc";
+    public static final String WIND_BARB = "wind-barb";
 
     // Default units
     public static final Unit<Temperature> TEMPERATURE_UNIT = SIUnits.CELSIUS;

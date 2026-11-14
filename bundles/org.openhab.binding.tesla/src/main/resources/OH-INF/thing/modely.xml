@@ -12,9 +12,14 @@
 
 		<label>Tesla Model Y</label>
 		<description>A Tesla Model Y Vehicle</description>
-
+		<semantic-equipment-tag>Vehicle</semantic-equipment-tag>
 		<channels>
-			<channel id="allowwakeup" typeId="allowwakeup"/>
+			<channel id="destinationname" typeId="destinationname"/>
+			<channel id="destinationlocation" typeId="destinationlocation"/>
+			<channel id="distancetoarrival" typeId="distancetoarrival"/>
+			<channel id="minutestoarrival" typeId="minutestoarrival"/>
+			<channel id="minutestofullcharge" typeId="minutestofullcharge"/>
+			<channel id="trafficminutesdelay" typeId="trafficminutesdelay"/>
 			<channel id="autoconditioning" typeId="autoconditioning"/>
 			<channel id="autoparkstate" typeId="autoparkstate"/>
 			<channel id="autoparkstate2" typeId="autoparkstate"/>
@@ -27,6 +32,7 @@
 			<channel id="centerrearseatheater" typeId="centerrearseatheater"/>
 			<channel id="charge" typeId="charge"/>
 			<channel id="chargecable" typeId="chargecable"/>
+			<channel id="chargingamps" typeId="chargingamps"/>
 			<channel id="chargecurrent" typeId="chargecurrent"/>
 			<channel id="chargeenablerequest" typeId="chargeenablerequest"/>
 			<channel id="chargeenergyadded" typeId="chargeenergyadded"/>
@@ -51,7 +57,9 @@
 			<channel id="climate" typeId="climate"/>
 			<channel id="doorlock" typeId="doorlock"/>
 			<channel id="driverfrontdoor" typeId="driverfrontdoor"/>
+			<channel id="driverfrontwindow" typeId="driverfrontwindow"/>
 			<channel id="driverreardoor" typeId="driverreardoor"/>
+			<channel id="driverrearwindow" typeId="driverrearwindow"/>
 			<channel id="drivertemp" typeId="drivertemp"/>
 			<channel id="estimatedbatteryrange" typeId="estimatedbatteryrange"/>
 			<channel id="estimatedrange" typeId="estimatedrange"/>
@@ -87,7 +95,9 @@
 			<channel id="outsidetemp" typeId="outsidetemp"/>
 			<channel id="parsedcalendar" typeId="parsedcalendar"/>
 			<channel id="passengerfrontdoor" typeId="passengerfrontdoor"/>
+			<channel id="passengerfrontwindow" typeId="passengerfrontwindow"/>
 			<channel id="passengerreardoor" typeId="passengerreardoor"/>
+			<channel id="passengerrearwindow" typeId="passengerrearwindow"/>
 			<channel id="passengertemp" typeId="passengertemp"/>
 			<channel id="power" typeId="power"/>
 			<channel id="preconditioning" typeId="preconditioning"/>
@@ -102,21 +112,40 @@
 			<channel id="rightseatheater" typeId="rightseatheater"/>
 			<channel id="scheduledchargingpending" typeId="scheduledchargingpending"/>
 			<channel id="scheduledchargingstart" typeId="scheduledchargingstart"/>
+			<channel id="sentrymode" typeId="sentrymode"/>
+			<channel id="sentrymodeavailable" typeId="sentrymodeavailable"/>
+			<channel id="share" typeId="share"/>
 			<channel id="shiftstate" typeId="shiftstate"/>
 			<channel id="sidemirrorheaters" typeId="sidemirrorheaters"/>
 			<channel id="smartpreconditioning" typeId="smartpreconditioning"/>
+			<channel id="steeringwheelheater" typeId="steeringwheelheater"/>
 			<channel id="soc" typeId="soc"/>
+			<channel id="softwareupdateavailable" typeId="softwareupdateavailable"/>
+			<channel id="softwareupdatestatus" typeId="softwareupdatestatus"/>
+			<channel id="softwareupdateversion" typeId="softwareupdateversion"/>
 			<channel id="speed" typeId="speed"/>
 			<channel id="state" typeId="state"/>
 			<channel id="combinedtemp" typeId="combinedtemp"/>
 			<channel id="timetofullcharge" typeId="timetofullcharge"/>
+			<channel id="tirepressurefrontleft" typeId="tirepressurefrontleft"/>
+			<channel id="tirepressurefrontright" typeId="tirepressurefrontright"/>
+			<channel id="tirepressurerearleft" typeId="tirepressurerearleft"/>
+			<channel id="tirepressurerearright" typeId="tirepressurerearright"/>
+			<channel id="tirepressurewarning" typeId="tirepressurewarning"/>
 			<channel id="tripcharging" typeId="tripcharging"/>
 			<channel id="usablebatterylevel" typeId="usablebatterylevel"/>
 			<channel id="userchargeenablerequest" typeId="userchargeenablerequest"/>
+			<channel id="userpresent" typeId="userpresent"/>
 			<channel id="valetmode" typeId="valetmode"/>
 			<channel id="valetpin" typeId="valetpin"/>
 			<channel id="wakeup" typeId="wakeup"/>
 		</channels>
+
+		<properties>
+			<property name="thingTypeVersion">4</property>
+		</properties>
+
+		<representation-property>vin</representation-property>
 
 		<config-description>
 			<parameter name="vin" type="text" required="true">
@@ -131,7 +160,39 @@
 			<parameter name="allowWakeup" type="boolean" required="false">
 				<default>false</default>
 				<label>Allow Wake-Up</label>
+				<advanced>true</advanced>
 				<description>Allows waking up the vehicle. Caution: This can result in huge vampire drain!</description>
+			</parameter>
+			<parameter name="allowWakeupForCommands" type="boolean" required="false">
+				<default>false</default>
+				<label>Allow Wake-Up For Commands</label>
+				<description>Allows waking up the vehicle, when commands are sent to it. Execution of commands will be delayed in
+					this case and you could cause the vehicle to stay awake very long.</description>
+			</parameter>
+			<parameter name="enableEvents" type="boolean" required="false">
+				<default>false</default>
+				<label>Enable Events</label>
+				<advanced>true</advanced>
+				<description>Enable the event stream for the vehicle</description>
+			</parameter>
+			<parameter name="inactivity" type="integer" min="5" required="false">
+				<label>Inactivity Interval</label>
+				<advanced>true</advanced>
+				<description>The inactivity period in minutes, after which the binding stops for 20 minutes to let the car sleep.</description>
+				<default>5</default>
+			</parameter>
+			<parameter name="useDriveState" type="boolean" required="false">
+				<default>false</default>
+				<label>Use Drive State for Inactivity</label>
+				<advanced>true</advanced>
+				<description>Use the drive state instead of location to determine vehicle inactivity.</description>
+			</parameter>
+			<parameter name="useAdvancedStatesForPolling" type="boolean" required="false">
+				<default>false</default>
+				<label>Use Console Modes and Occupancy for Inactivity</label>
+				<advanced>true</advanced>
+				<description>Use these states to help continue the fast polling of the API. Do not back off polling if in these
+					states.</description>
 			</parameter>
 		</config-description>
 

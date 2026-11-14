@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -84,7 +84,11 @@ public abstract class DSCAlarmBaseThingHandler extends BaseThingHandler {
         getConfiguration(dscAlarmThingType);
 
         Bridge bridge = getBridge();
-        initializeThingHandler(bridge != null ? bridge.getStatus() : null);
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        initializeThingHandler(bridge.getStatus());
         this.setThingHandlerInitialized(true);
     }
 
@@ -106,7 +110,7 @@ public abstract class DSCAlarmBaseThingHandler extends BaseThingHandler {
                 logger.debug("initializeThingHandler(): Initialize Thing Handler - {}", thing.getUID());
 
                 for (Channel channel : channels) {
-                    if (channel.getAcceptedItemType().equals("DateTime")) {
+                    if ("DateTime".equals(channel.getAcceptedItemType())) {
                         updateChannel(channel.getUID(), 0, "0000010100");
                     } else {
                         updateChannel(channel.getUID(), 0, "");
@@ -121,12 +125,12 @@ public abstract class DSCAlarmBaseThingHandler extends BaseThingHandler {
 
                 logger.debug("initializeThingHandler(): Thing Handler Initialized - {}", thing.getUID());
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
                 logger.debug("initializeThingHandler(): Thing '{}' is set to OFFLINE because bridge is OFFLINE",
                         thing.getUID());
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+            updateStatus(ThingStatus.UNKNOWN);
             logger.debug("initializeThingHandler(): Thing '{}' is set to OFFLINE because bridge is uninitialized",
                     thing.getUID());
         }
@@ -150,8 +154,8 @@ public abstract class DSCAlarmBaseThingHandler extends BaseThingHandler {
 
             ThingHandler handler = bridge.getHandler();
 
-            if (handler instanceof DSCAlarmBaseBridgeHandler) {
-                this.dscAlarmBridgeHandler = (DSCAlarmBaseBridgeHandler) handler;
+            if (handler instanceof DSCAlarmBaseBridgeHandler dscAlarmBridgeHandler) {
+                this.dscAlarmBridgeHandler = dscAlarmBridgeHandler;
             } else {
                 logger.debug("getDSCAlarmBridgeHandler(): Unable to get bridge handler!");
             }
@@ -343,7 +347,7 @@ public abstract class DSCAlarmBaseThingHandler extends BaseThingHandler {
     /**
      * Set Thing Handler refresh status.
      *
-     * @param deviceInitialized
+     * @param refreshed
      */
     public void setThingHandlerInitialized(boolean refreshed) {
         this.thingHandlerInitialized = refreshed;

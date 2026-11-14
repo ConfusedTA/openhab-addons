@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,12 +16,9 @@ import static org.openhab.binding.km200.internal.KM200BindingConstants.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,6 +63,7 @@ import org.slf4j.LoggerFactory;
  * sent to one of the channels.
  *
  * @author Markus Eckhardt - Initial contribution
+ * @author Leo Siepel - File-defined Thing configuration
  */
 @NonNullByDefault
 public class KM200ThingHandler extends BaseThingHandler {
@@ -106,23 +104,6 @@ public class KM200ThingHandler extends BaseThingHandler {
                 logger.warn("Unsupported Command: {} Class: {}", command.toFullString(), command.getClass());
             }
         }
-    }
-
-    /**
-     * Choose a tag for a channel
-     */
-    Set<String> checkTags(String unitOfMeasure, @Nullable Boolean readOnly) {
-        Set<String> tags = new HashSet<>();
-        if (unitOfMeasure.indexOf("°C") == 0 || unitOfMeasure.indexOf("K") == 0) {
-            if (null != readOnly) {
-                if (readOnly) {
-                    tags.add("CurrentTemperature");
-                } else {
-                    tags.add("TargetTemperature");
-                }
-            }
-        }
-        return tags;
     }
 
     /**
@@ -167,38 +148,23 @@ public class KM200ThingHandler extends BaseThingHandler {
     Channel createChannel(ChannelTypeUID channelTypeUID, ChannelUID channelUID, String root, String type,
             @Nullable String currentPathName, String description, String label, boolean addProperties,
             boolean switchProgram, StateDescriptionFragment state, String unitOfMeasure) {
-        URI configDescriptionUriChannel = null;
         Channel newChannel = null;
         ChannelType channelType = null;
         Map<String, String> chProperties = new HashMap<>();
-        String itemType = "";
         String category = null;
         if (CoreItemFactory.NUMBER.equals(type)) {
-            itemType = "NumberType";
             category = "Number";
         } else if (CoreItemFactory.STRING.equals(type)) {
-            itemType = "StringType";
             category = "Text";
         } else {
             logger.info("Channeltype {} not supported", type);
             return null;
         }
-        try {
-            configDescriptionUriChannel = new URI(CONFIG_DESCRIPTION_URI_CHANNEL);
-            channelType = ChannelTypeBuilder.state(channelTypeUID, label, itemType) //
-                    .withDescription(description) //
-                    .withCategory(checkCategory(unitOfMeasure, category, state.isReadOnly())) //
-                    .withTags(checkTags(unitOfMeasure, state.isReadOnly())) //
-                    .withStateDescriptionFragment(state) //
-                    .withConfigDescriptionURI(configDescriptionUriChannel).build();
-        } catch (URISyntaxException ex) {
-            logger.warn("Can't create ConfigDescription URI '{}', ConfigDescription for channels not avilable!",
-                    CONFIG_DESCRIPTION_URI_CHANNEL);
-            channelType = ChannelTypeBuilder.state(channelTypeUID, label, itemType) //
-                    .withDescription(description) //
-                    .withCategory(checkCategory(unitOfMeasure, category, state.isReadOnly())) //
-                    .withTags(checkTags(unitOfMeasure, state.isReadOnly())).build();
-        }
+        channelType = ChannelTypeBuilder.state(channelTypeUID, label, type) //
+                .withDescription(description) //
+                .withCategory(checkCategory(unitOfMeasure, category, state.isReadOnly())) //
+                .withStateDescriptionFragment(state).build();
+
         channelTypeProvider.addChannelType(channelType);
 
         chProperties.put("root", KM200Utils.translatesPathToName(root));
@@ -219,33 +185,43 @@ public class KM200ThingHandler extends BaseThingHandler {
     public void initialize() {
         Bridge bridge = this.getBridge();
         if (bridge == null) {
-            logger.debug("Bridge not existing");
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
         logger.debug("initialize, Bridge: {}", bridge);
         KM200GatewayHandler gateway = (KM200GatewayHandler) bridge.getHandler();
         if (gateway == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             logger.debug("Gateway not existing: {}", bridge);
             return;
         }
-        String service = KM200Utils.translatesNameToPath(thing.getProperties().get("root"));
-        if (service == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "root property missing");
+        Object rootService = getConfig().get(CONFIG_ROOT_SERVICE);
+        String service = rootService != null ? rootService.toString()
+                : KM200Utils.translatesNameToPath(thing.getProperties().get("root"));
+        if (service == null || !service.startsWith("/") || service.length() < 2) {
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Root service missing or not an absolute service path");
             return;
         }
         synchronized (gateway.getDevice()) {
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.CONFIGURATION_PENDING);
             if (!gateway.getDevice().getInited()) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+                updateStatus(ThingStatus.UNKNOWN);
                 logger.debug("Bridge: not initialized: {}", bridge);
                 return;
             }
+            if (rootService != null && !gateway.getDevice().containsService(service)) {
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Unknown rootService: " + service);
+                return;
+            }
+            updateStatus(ThingStatus.UNKNOWN);
             List<Channel> subChannels = new ArrayList<>();
             if (gateway.getDevice().containsService(service)) {
                 KM200ServiceObject serObj = gateway.getDevice().getServiceObject(service);
                 if (null != serObj) {
+                    if (rootService != null && serObj.serviceTreeMap.isEmpty()) {
+                        updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
+                                "Root service has no child services: " + service);
+                        return;
+                    }
                     addChannels(serObj, thing, subChannels, "");
                 }
             } else if (service.contains(SWITCH_PROGRAM_PATH_NAME)) {
@@ -385,7 +361,7 @@ public class KM200ThingHandler extends BaseThingHandler {
             logger.trace("Create things: {} id: {} channel: {}", thing.getUID(), subKey, thing.getUID().getId());
             switch (subKeyType) {
                 case DATA_TYPE_STRING_VALUE:
-                    /* Creating an new channel type with capabilities from service */
+                    /* Creating a new channel type with capabilities from service */
                     List<StateOption> options = null;
                     if (serObj.serviceTreeMap.get(subKey).getValueParameter() != null) {
                         options = new ArrayList<>();
@@ -432,7 +408,7 @@ public class KM200ThingHandler extends BaseThingHandler {
                     }
                     /* Check the capabilities of this service */
                     if (serObj.serviceTreeMap.get(subKey).getValueParameter() != null) {
-                        /* Creating an new channel type with capabilities from service */
+                        /* Creating a new channel type with capabilities from service */
                         // The type is definitely correct here
                         @SuppressWarnings("unchecked")
                         List<Object> subValParas = (List<Object>) serObj.serviceTreeMap.get(subKey).getValueParameter();

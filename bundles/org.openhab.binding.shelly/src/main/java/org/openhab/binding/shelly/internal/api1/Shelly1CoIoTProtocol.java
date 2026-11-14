@@ -1,0 +1,429 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.shelly.internal.api1;
+
+import static org.openhab.binding.shelly.internal.ShellyBindingConstants.*;
+import static org.openhab.binding.shelly.internal.api1.Shelly1ApiJsonDTO.*;
+import static org.openhab.binding.shelly.internal.handler.ShellyLightModel.RGBX.*;
+import static org.openhab.binding.shelly.internal.util.ShellyUtils.*;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.shelly.internal.api.ShellyApiInterface;
+import org.openhab.binding.shelly.internal.api.ShellyDeviceProfile;
+import org.openhab.binding.shelly.internal.api1.Shelly1CoapJSonDTO.CoIotDescrBlk;
+import org.openhab.binding.shelly.internal.api1.Shelly1CoapJSonDTO.CoIotDescrSen;
+import org.openhab.binding.shelly.internal.api1.Shelly1CoapJSonDTO.CoIotSensor;
+import org.openhab.binding.shelly.internal.handler.LightModelAccessor;
+import org.openhab.binding.shelly.internal.handler.ShellyLightModel;
+import org.openhab.binding.shelly.internal.handler.ShellyThingInterface;
+import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.OpenClosedType;
+import org.openhab.core.library.types.StringType;
+import org.openhab.core.library.unit.Units;
+import org.openhab.core.types.State;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
+
+/**
+ * The {@link Shelly1CoIoTProtocol} implements common functions for the CoIoT implementations
+ *
+ * @author Markus Michels - Initial contribution
+ */
+@NonNullByDefault
+public class Shelly1CoIoTProtocol {
+    private final Logger logger = LoggerFactory.getLogger(Shelly1CoIoTProtocol.class);
+    protected final String thingName;
+    protected final ShellyThingInterface thingHandler;
+    protected final ShellyDeviceProfile profile;
+    protected final ShellyApiInterface api;
+    protected final Map<String, CoIotDescrBlk> blkMap;
+    protected final Map<String, CoIotDescrSen> sensorMap;
+    private final Gson gson = new GsonBuilder().create();
+
+    // Due to the fact that the device reports only the current/last status, but no real events, we need to distinguish
+    // between a real update or just a repeated status on periodic updates
+    protected int[] lastEventCount = { -1, -1, -1, -1, -1, -1, -1, -1 }; // 4Pro has 4 relays, so 8 should be fine
+    protected String[] inputEvent = { "", "", "", "", "", "", "", "" };
+    protected String lastWakeup = "";
+
+    public Shelly1CoIoTProtocol(String thingName, ShellyThingInterface thingHandler, Map<String, CoIotDescrBlk> blkMap,
+            Map<String, CoIotDescrSen> sensorMap) {
+        this.thingName = thingName;
+        this.thingHandler = thingHandler;
+        this.blkMap = blkMap;
+        this.sensorMap = sensorMap;
+        this.profile = thingHandler.getProfile();
+        this.api = thingHandler.getApi();
+    }
+
+    protected boolean handleStatusUpdate(List<CoIotSensor> sensorUpdates, CoIotDescrSen sen, CoIotSensor s,
+            Map<String, State> updates, LightModelAccessor.@Nullable LightModels lightModels) {
+        // Process status information and convert into channel updates
+        int rIndex = getIdFromBlk(sen);
+        String rGroup = getProfile().numRelays <= 1 ? CHANNEL_GROUP_RELAY_CONTROL
+                : CHANNEL_GROUP_RELAY_CONTROL + rIndex;
+
+        switch (sen.type.toLowerCase(Locale.ROOT)) {
+            case "b": // BatteryLevel +
+                updateChannel(updates, CHANNEL_GROUP_BATTERY, CHANNEL_SENSOR_BAT_LEVEL,
+                        toQuantityType(s.value, 0, Units.PERCENT));
+                break;
+            case "h" /* Humidity */:
+                updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_HUM,
+                        toQuantityType(s.value, DIGITS_PERCENT, Units.PERCENT));
+                break;
+            case "m" /* Motion */:
+                updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_MOTION, OnOffType.from(s.value == 1));
+                break;
+            case "l": // Luminosity +
+                updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_LUX,
+                        toQuantityType(s.value, DIGITS_LUX, Units.LUX));
+                break;
+            case "s": // CatchAll
+                switch (sen.desc.toLowerCase(Locale.ROOT)) {
+                    case "state": // Relay status +
+                    case "output":
+                        updatePower(profile, updates, rIndex, sen, s, sensorUpdates, lightModels);
+                        break;
+                    case "input":
+                        handleInput(sen, s, rGroup, updates);
+                        break;
+                    case SHELLY_COLOR_BRIGHTNESS:
+                        // already handled by state/output
+                        break;
+                    case "overtemp": // ++
+                        if (s.value == 1) {
+                            thingHandler.postEvent(ALARM_TYPE_OVERTEMP, true);
+                        }
+                        break;
+                    case "position":
+                        // work around: Roller reports 101% instead max 100
+                        double pos = Math.max(SHELLY_MIN_ROLLER_POS, Math.min(s.value, SHELLY_MAX_ROLLER_POS));
+                        updateChannel(updates, CHANNEL_GROUP_ROL_CONTROL, CHANNEL_ROL_CONTROL_CONTROL,
+                                toQuantityType(SHELLY_MAX_ROLLER_POS - pos, Units.PERCENT));
+                        updateChannel(updates, CHANNEL_GROUP_ROL_CONTROL, CHANNEL_ROL_CONTROL_POS,
+                                toQuantityType(pos, Units.PERCENT));
+                        break;
+                    case "flood":
+                        updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_FLOOD,
+                                OnOffType.from(s.value == 1));
+                        break;
+                    case SHELLY_EVENT_VIBRATION: // DW with FW1.6.5+
+                        updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_VIBRATION,
+                                OnOffType.from(s.value == 1));
+                        if (s.value == 1) {
+                            thingHandler.triggerChannel(CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_ALARM_STATE,
+                                    EVENT_TYPE_VIBRATION);
+                        }
+                        break;
+                    case "luminositylevel": // +
+                        updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_ILLUM, getStringType(s.valueStr));
+                        break;
+                    case "charger": // Sense
+                        updateChannel(updates, CHANNEL_GROUP_DEV_STATUS, CHANNEL_DEVST_CHARGER,
+                                OnOffType.from(s.value == 1));
+                        break;
+                    // RGBW2/Bulb
+                    case SHELLY_COLOR_RED:
+                    case SHELLY_COLOR_GREEN:
+                    case SHELLY_COLOR_BLUE:
+                    case SHELLY_COLOR_WHITE:
+                    case SHELLY_COLOR_GAIN:
+                    case "effect":
+                        if (!profile.inColor) {
+                            break;
+                        }
+                        ShellyLightModel model = getLightModelForSensor(sen, lightModels);
+                        if (model != null) {
+                            switch (sen.desc.toLowerCase(Locale.ROOT)) {
+                                case SHELLY_COLOR_RED:
+                                    model.setColor(R, (int) s.value);
+                                    break;
+                                case SHELLY_COLOR_GREEN:
+                                    model.setColor(G, (int) s.value);
+                                    break;
+                                case SHELLY_COLOR_BLUE:
+                                    model.setColor(B, (int) s.value);
+                                    break;
+                                case SHELLY_COLOR_WHITE:
+                                    model.setColor(CW, (int) s.value);
+                                    break;
+                                case SHELLY_COLOR_GAIN:
+                                    model.setGain((int) s.value);
+                                    break;
+                                case "effect":
+                                    model.setEffect((int) s.value);
+                                    break;
+                            }
+                        } else {
+                            logger.debug("{}: Unable to update color channel {} for sensor {}", thingName, sen.desc,
+                                    sen.id);
+                        }
+                        break;
+                    case "sensorerror":
+                        String sensorError = s.valueStr != null ? getString(s.valueStr) : "" + s.value;
+                        updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_ERROR, getStringType(sensorError));
+                        break;
+                    default:
+                        // Unknown
+                        return false;
+                }
+                break;
+
+            default:
+                // Unknown type
+                return false;
+        }
+
+        return true;
+    }
+
+    public static boolean updateChannel(Map<String, State> updates, String group, String channel, State value) {
+        updates.put(mkChannelId(group, channel), value);
+        return true;
+    }
+
+    protected void handleInput(CoIotDescrSen sen, CoIotSensor s, String rGroup, Map<String, State> updates) {
+        int idx = getSensorNumber(sen.desc, sen.id) - 1;
+        String iGroup = profile.getInputGroup(idx);
+        String iChannel = CHANNEL_INPUT + profile.getInputSuffix(idx);
+        updateChannel(updates, iGroup, iChannel, OnOffType.from(s.value != 0));
+    }
+
+    protected void handleInputEvent(CoIotDescrSen sen, String type, int count, int serial, Map<String, State> updates) {
+        int idx = getSensorNumber(sen.desc, sen.id) - 1;
+        String group = profile.getInputGroup(idx);
+        if (count == -1) {
+            // event type
+            updateChannel(updates, group, CHANNEL_STATUS_EVENTTYPE + profile.getInputSuffix(idx), new StringType(type));
+            inputEvent[idx] = type;
+        } else {
+            // event count
+            updateChannel(updates, group, CHANNEL_STATUS_EVENTCOUNT + profile.getInputSuffix(idx), getDecimal(count));
+            logger.trace(
+                    "{}: Check button[{}] for event trigger (inButtonMode={}, isButton={}, hasBattery={}, serial={}, count={}, lastEventCount[{}]={}",
+                    thingName, idx, profile.inButtonMode(idx), profile.isButton, profile.hasBattery, serial, count, idx,
+                    lastEventCount[idx]);
+            if (profile.inButtonMode(idx) && ((profile.hasBattery && count == 1) || lastEventCount[idx] == -1
+                    || count != lastEventCount[idx])) {
+                if (!profile.isButton || (profile.isButton && (serial != 0x200))) { // skip duplicate on wake-up
+                    logger.debug("{}: Trigger event {}", thingName, inputEvent[idx]);
+                    thingHandler.triggerButton(group, idx, inputEvent[idx]);
+                }
+            }
+            lastEventCount[idx] = count;
+        }
+    }
+
+    /**
+     *
+     * Handles the combined update of the brightness channel: the power state and brightness sensor values are
+     * combined into a single Percent update (0% when off) rather than publishing the power state separately, so a
+     * Dimmer-linked item never sees an intermediate OnOffType state.
+     *
+     * @param profile Device profile, required to select the channel group and name
+     * @param updates List of updates. updatePower will add brightness$Value if changed
+     * @param id Sensor id from the update
+     * @param sen Sensor description from the update
+     * @param s New sensor value
+     * @param allUpdates List of updates. This is required, because we need power and brightness from the same batch
+     * @param lightModelHandler Optional light model handler, required for RGBW2/Bulb to update the model state
+     */
+    protected void updatePower(ShellyDeviceProfile profile, Map<String, State> updates, int id, CoIotDescrSen sen,
+            CoIotSensor s, List<CoIotSensor> allUpdates, LightModelAccessor.@Nullable LightModels lightModels) {
+        if (profile.isLight || profile.isDimmer) {
+            // RGBW-white uses 4 different Power, Brightness, VSwitch values
+            String checkL = profile.isRGBW2 && !profile.inColor ? String.valueOf(id) : "";
+
+            // We need to update brightness and on/off state at the same time to avoid "flipping brightness slider" in
+            // the UI
+            double brightness = -1.0;
+            double power = -1.0;
+            for (CoIotSensor update : allUpdates) {
+                CoIotDescrSen d = sensorMap.getOrDefault(update.id, new CoIotDescrSen());
+                if (!checkL.isEmpty() && !checkL.equals(d.links)) {
+                    // continue until we find the correct one
+                    continue;
+                }
+                if (SHELLY_COLOR_BRIGHTNESS.equalsIgnoreCase(d.desc)) {
+                    brightness = update.value;
+                } else if ("output".equalsIgnoreCase(d.desc) || "state".equalsIgnoreCase(d.desc)) {
+                    power = update.value;
+                }
+            }
+            if (profile.isDimmer) {
+                if (power != -1) {
+                    updateChannel(updates, CHANNEL_GROUP_RELAY_CONTROL, CHANNEL_BRIGHTNESS + "$Switch",
+                            OnOffType.from(power == 1));
+                }
+                if (brightness != -1) {
+                    updateChannel(updates, CHANNEL_GROUP_RELAY_CONTROL, CHANNEL_BRIGHTNESS + "$Value",
+                            toQuantityType(power == 1 ? brightness : 0, DIGITS_NONE, Units.PERCENT));
+                }
+            } else if (profile.isLight) {
+                if (lightModels != null && lightModels.getByApiLightIndex(id - 1) instanceof ShellyLightModel model) {
+                    if (brightness != -1) {
+                        if (ShellyLightModel.Mode.COLOR == model.getMode()) {
+                            model.setGain((int) brightness);
+                        } else {
+                            model.setBrightness((int) brightness);
+                        }
+                    }
+                    if (power != -1) {
+                        model.setOnOff(power == 1.0); // do power after gain / brightness
+                    }
+                } else {
+                    logger.debug("{}: updatePower() for index={} but no light model found!", thingName, id - 1);
+                }
+            }
+        } else if (profile.hasRelays) {
+            String group = profile.numRelays <= 1 ? CHANNEL_GROUP_RELAY_CONTROL : CHANNEL_GROUP_RELAY_CONTROL + id;
+            updateChannel(updates, group, CHANNEL_OUTPUT, OnOffType.from(s.value == 1));
+        } else if (profile.isSensor) {
+            // Sensor state
+            if (profile.isDW) { // Door Window has item type Contact
+                updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_STATE,
+                        s.value != 0 ? OpenClosedType.OPEN : OpenClosedType.CLOSED);
+            } else {
+                updateChannel(updates, CHANNEL_GROUP_SENSOR, CHANNEL_SENSOR_STATE, OnOffType.from(s.value == 1));
+            }
+        }
+    }
+
+    /**
+     * Find index of Input id, which is required to map to channel name
+     *
+     * @param sensorDesc D field from sensor update
+     * @param sensorId The id from the sensor update
+     * @return Index of found entry (+1 will be the suffix for the channel name) or null if sensorId is not found
+     */
+    protected int getSensorNumber(String sensorDesc, String sensorId) {
+        int idx = 0;
+        for (Map.Entry<String, CoIotDescrSen> se : sensorMap.entrySet()) {
+            CoIotDescrSen sen = se.getValue();
+            if (sen.desc.equalsIgnoreCase(sensorDesc)) {
+                idx++; // iterate from input1..2..n
+            }
+            if (sen.id.equalsIgnoreCase(sensorId) && blkMap.containsKey(sen.links)) {
+                int id = getIdFromBlk(sen);
+                if (id != -1) {
+                    return id;
+                }
+            }
+            if (sen.id.equalsIgnoreCase(sensorId)) {
+                return idx;
+            }
+        }
+        logger.debug("{}: sensorId {} not found in sensorMap!", thingName, sensorId);
+        return -1;
+    }
+
+    protected int getIdFromBlk(CoIotDescrSen sen) {
+        int idx = -1;
+        CoIotDescrBlk blk = blkMap.get(sen.links);
+        if (blk != null) {
+            String desc = blk.desc.toLowerCase(Locale.ROOT);
+            if (desc.startsWith(SHELLY_CLASS_RELAY) || desc.startsWith(SHELLY_CLASS_ROLLER)
+                    || desc.startsWith(SHELLY_CLASS_LIGHT) || desc.startsWith(SHELLY_CLASS_EMETER)) {
+                if (desc.contains("_")) { // CoAP v2
+                    idx = Integer.parseInt(substringAfter(desc, "_"));
+                } else { // CoAP v1
+                    if (desc.substring(0, 5).equalsIgnoreCase(SHELLY_CLASS_RELAY)) {
+                        idx = Integer.parseInt(substringAfter(desc, SHELLY_CLASS_RELAY));
+                    }
+                    if (desc.substring(0, 6).equalsIgnoreCase(SHELLY_CLASS_ROLLER)) {
+                        idx = Integer.parseInt(substringAfter(desc, SHELLY_CLASS_ROLLER));
+                    }
+                    if (desc.substring(0, SHELLY_CLASS_LIGHT.length()).equalsIgnoreCase(SHELLY_CLASS_LIGHT)) {
+                        idx = Integer.parseInt(substringAfter(desc, SHELLY_CLASS_LIGHT));
+                    }
+                    if (desc.substring(0, SHELLY_CLASS_EMETER.length()).equalsIgnoreCase(SHELLY_CLASS_EMETER)) {
+                        idx = Integer.parseInt(substringAfter(desc, SHELLY_CLASS_EMETER));
+                    }
+                }
+                idx = idx + 1; // make it 1-based (sen.L is 0-based)
+            }
+        }
+        return idx;
+    }
+
+    /**
+     *
+     * Get matching sensorId for updates on "External Temperature" - there might be more than 1 sensor.
+     *
+     * @param sensorId sensorId to map into a channel index
+     * @return Index of the corresponding channel (e.g. 0 build temperature1, 1->temperagture2...)
+     */
+    protected int getExtTempId(String sensorId) {
+        int idx = 0;
+        for (Map.Entry<String, CoIotDescrSen> se : sensorMap.entrySet()) {
+            CoIotDescrSen sen = se.getValue();
+            if ("external_temperature".equalsIgnoreCase(sen.desc) || "external temperature c".equalsIgnoreCase(sen.desc)
+                    || ("extTemp".equalsIgnoreCase(sen.desc) && !sen.unit.equalsIgnoreCase(SHELLY_TEMP_FAHRENHEIT))) {
+                idx++; // iterate from temperature1..2..n
+            }
+            if (sen.id.equalsIgnoreCase(sensorId)) {
+                return idx;
+            }
+        }
+        logger.debug("{}: sensorId {} not found in sensorMap!", thingName, sensorId);
+        return -1;
+    }
+
+    protected ShellyDeviceProfile getProfile() {
+        return profile;
+    }
+
+    public void completeMissingSensorDefinition(Map<String, CoIotDescrSen> sensorMap) {
+    }
+
+    protected void addSensor(Map<String, CoIotDescrSen> sensorMap, String key, String json) {
+        try {
+            if (!sensorMap.containsKey(key)) {
+                CoIotDescrSen sen = gson.fromJson(json, CoIotDescrSen.class);
+                if (sen != null) {
+                    sensorMap.put(key, sen);
+                }
+            }
+        } catch (JsonSyntaxException e) {
+            // should never happen
+            logger.trace("Unable to parse sensor definition: {}", json, e);
+        }
+    }
+
+    public String getLastWakeup() {
+        return lastWakeup;
+    }
+
+    @Nullable
+    protected ShellyLightModel getLightModelForSensor(CoIotDescrSen sen,
+            LightModelAccessor.@Nullable LightModels lightModels) {
+        if (lightModels == null) {
+            return null;
+        }
+        int channelGroupSuffix = getIdFromBlk(sen) - 1; // convert to 0-based index for light model
+        if (channelGroupSuffix < 0) {
+            return null;
+        }
+        return lightModels.getByChannelGroupSuffix(channelGroupSuffix);
+    }
+}

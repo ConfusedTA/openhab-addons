@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,11 +14,13 @@ package org.openhab.binding.ipobserver.internal;
 
 import static org.openhab.binding.ipobserver.internal.IpObserverBindingConstants.*;
 
+import java.math.BigDecimal;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutionException;
@@ -27,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import javax.measure.Unit;
+import javax.measure.quantity.Temperature;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -70,10 +73,12 @@ import org.slf4j.LoggerFactory;
 @NonNullByDefault
 public class IpObserverHandler extends BaseThingHandler {
     private final HttpClient httpClient;
+    private final IpObserverUpdateReceiver ipObserverUpdateReceiver;
     private final Logger logger = LoggerFactory.getLogger(IpObserverHandler.class);
-    private Map<String, ChannelHandler> channelHandlers = new HashMap<String, ChannelHandler>();
+    private Map<String, ChannelHandler> channelHandlers = new HashMap<>();
     private @Nullable ScheduledFuture<?> pollingFuture = null;
     private IpObserverConfiguration config = new IpObserverConfiguration();
+    private String idPass = "";
     // Config settings parsed from weather station.
     private boolean imperialTemperature = false;
     private boolean imperialRain = false;
@@ -89,10 +94,9 @@ public class IpObserverHandler extends BaseThingHandler {
         private Channel channel;
         private String previousValue = "";
         private Unit<?> unit;
-        private final ArrayList<Class<? extends State>> acceptedDataTypes = new ArrayList<Class<? extends State>>();
+        private final ArrayList<Class<? extends State>> acceptedDataTypes = new ArrayList<>();
 
         ChannelHandler(IpObserverHandler handler, Channel channel, Class<? extends State> acceptable, Unit<?> unit) {
-            super();
             this.handler = handler;
             this.channel = channel;
             this.unit = unit;
@@ -102,42 +106,123 @@ public class IpObserverHandler extends BaseThingHandler {
         public void processValue(String sensorValue) {
             if (!sensorValue.equals(previousValue)) {
                 previousValue = sensorValue;
-                switch (channel.getUID().getId()) {
-                    case LAST_UPDATED_TIME:
-                        try {
-                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm MM/dd/yyyy")
-                                    .withZone(TimeZone.getDefault().toZoneId());
-                            ZonedDateTime zonedDateTime = ZonedDateTime.parse(sensorValue, formatter);
-                            this.handler.updateState(this.channel.getUID(), new DateTimeType(zonedDateTime));
-                        } catch (DateTimeParseException e) {
-                            logger.debug("Could not parse {} as a valid dateTime", sensorValue);
-                        }
-                        return;
-                    case INDOOR_BATTERY:
-                    case OUTDOOR_BATTERY:
-                        if ("1".equals(sensorValue)) {
-                            handler.updateState(this.channel.getUID(), OnOffType.ON);
-                        } else {
-                            handler.updateState(this.channel.getUID(), OnOffType.OFF);
-                        }
-                        return;
+                if (LAST_UPDATED_TIME.equals(channel.getUID().getId())) {
+                    try {
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm MM/dd/yyyy")
+                                .withZone(TimeZone.getDefault().toZoneId());
+                        ZonedDateTime zonedDateTime = ZonedDateTime.parse(sensorValue, formatter);
+                        handler.updateState(this.channel.getUID(), new DateTimeType(zonedDateTime));
+                    } catch (DateTimeParseException e) {
+                        logger.debug("Could not parse {} as a valid dateTime", sensorValue);
+                    }
+                    return;
                 }
+
                 State state = TypeParser.parseState(this.acceptedDataTypes, sensorValue);
                 if (state == null) {
                     return;
                 } else if (state instanceof QuantityType) {
+                    switch (channel.getUID().getId()) {
+                        case TEMP_OUTDOOR:
+                        case TEMP_WIND_CHILL:
+                        case TEMP_INDOOR:
+                        case TEMP_DEW_POINT:
+                            QuantityType<Temperature> quantityType = new QuantityType<Temperature>(
+                                    ((QuantityType) state).toBigDecimal(), (Unit<Temperature>) unit);
+                            if (quantityType.compareTo(MAX_TEMPERATURE) > 0
+                                    || quantityType.compareTo(MIN_TEMPERATURE) < 0) {
+                                logger.debug("A temperature reading was outside of allowed values:{}", sensorValue);
+                                return; // RF packet must be corrupt.
+                            }
+                            break;
+                        // prevent negative values for these channels.
+                        case HOURLY_RAIN_RATE:
+                        case DAILY_RAIN:
+                        case WEEKLY_RAIN:
+                        case MONTHLY_RAIN:
+                        case YEARLY_RAIN:
+                        case TOTAL_RAIN:
+                        case SOLAR_RADIATION:
+                        case WIND_AVERAGE_SPEED:
+                        case WIND_SPEED:
+                        case WIND_GUST:
+                        case WIND_MAX_GUST:
+                            if (((QuantityType) state).toBigDecimal().compareTo(BigDecimal.ZERO) < 0) {
+                                return; // RF packet must be corrupt.
+                            }
+                            break;
+                    }
                     handler.updateState(this.channel.getUID(),
-                            QuantityType.valueOf(Double.parseDouble(sensorValue), unit));
-                } else {
-                    handler.updateState(this.channel.getUID(), state);
+                            new QuantityType<>(((QuantityType) state).toBigDecimal(), unit));
+                    return;
+                } else if (state instanceof DecimalType) {
+                    DecimalType decimalType = (DecimalType) state;
+                    switch (channel.getUID().getId()) {
+                        case INDOOR_HUMIDITY:
+                        case OUTDOOR_HUMIDITY:
+                            if (decimalType.compareTo(DecimalType.ZERO) < 0) {
+                                return; // RF packet must be corrupt.
+                            }
+                            break;
+                    }
+                } else if (state instanceof StringType) {
+                    switch (channel.getUID().getId()) {
+                        case INDOOR_BATTERY:
+                        case OUTDOOR_BATTERY:
+                            if ("1".equals(sensorValue)) {
+                                handler.updateState(this.channel.getUID(), OnOffType.ON);
+                            } else {
+                                handler.updateState(this.channel.getUID(), OnOffType.OFF);
+                            }
+                            return;
+                    }
                 }
+                handler.updateState(this.channel.getUID(), state);
             }
         }
     }
 
-    public IpObserverHandler(Thing thing, HttpClient httpClient) {
+    public IpObserverHandler(Thing thing, HttpClient httpClient, IpObserverUpdateReceiver UpdateReceiver) {
         super(thing);
         this.httpClient = httpClient;
+        ipObserverUpdateReceiver = UpdateReceiver;
+    }
+
+    /**
+     * Takes a String of queries from the GET request made to the openHAB Jetty server and splits them
+     * into keys and values made up from the weather stations readings.
+     *
+     * @param update
+     */
+    public void processServerQuery(String update) {
+        if (update.startsWith(idPass)) {
+            String matchedUpdate = update.substring(idPass.length() + 1, update.length());
+            logger.trace("Update received:{}", matchedUpdate);
+            updateState(LAST_UPDATED_TIME, new DateTimeType(ZonedDateTime.now()));
+            Map<String, String> mappedQuery = new HashMap<>();
+            String[] readings = matchedUpdate.split("&");
+            for (String pair : readings) {
+                int index = pair.indexOf("=");
+                if (index > 0) {
+                    mappedQuery.put(pair.substring(0, index), pair.substring(index + 1, pair.length()));
+                }
+            }
+            handleServerReadings(mappedQuery);
+        }
+    }
+
+    public void handleServerReadings(Map<String, String> updates) {
+        Iterator<?> it = updates.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<?, ?> pair = (Map.Entry<?, ?>) it.next();
+            ChannelHandler localUpdater = channelHandlers.get(pair.getKey());
+            if (localUpdater != null) {
+                logger.trace("Found element {}, value is {}", pair.getKey(), pair.getValue());
+                localUpdater.processValue(pair.getValue().toString());
+            } else {
+                logger.trace("UNKNOWN element {}, value is {}", pair.getKey(), pair.getValue());
+            }
+        }
     }
 
     @Override
@@ -229,7 +314,7 @@ public class IpObserverHandler extends BaseThingHandler {
             Thread.currentThread().interrupt();
             errorReason = String.format("InterruptedException: %s", e.getMessage());
         }
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, errorReason);
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, errorReason);
     }
 
     private void pollStation() {
@@ -242,6 +327,29 @@ public class IpObserverHandler extends BaseThingHandler {
         if (channel != null) {
             channelHandlers.put(htmlName, new ChannelHandler(this, channel, type, unit));
         }
+    }
+
+    private void setupServerChannels() {
+        createChannelHandler(WIND_DIRECTION, QuantityType.class, Units.DEGREE_ANGLE, "winddir");
+        createChannelHandler(INDOOR_HUMIDITY, DecimalType.class, Units.PERCENT, "indoorhumidity");
+        createChannelHandler(OUTDOOR_HUMIDITY, DecimalType.class, Units.PERCENT, "humidity");
+        createChannelHandler(TEMP_INDOOR, QuantityType.class, ImperialUnits.FAHRENHEIT, "indoortempf");
+        createChannelHandler(TEMP_OUTDOOR, QuantityType.class, ImperialUnits.FAHRENHEIT, "tempf");
+        createChannelHandler(TEMP_WIND_CHILL, QuantityType.class, ImperialUnits.FAHRENHEIT, "windchillf");
+        createChannelHandler(TEMP_DEW_POINT, QuantityType.class, ImperialUnits.FAHRENHEIT, "dewptf");
+        createChannelHandler(HOURLY_RAIN_RATE, QuantityType.class, ImperialUnits.INCH, "rainin");
+        createChannelHandler(DAILY_RAIN, QuantityType.class, ImperialUnits.INCH, "dailyrainin");
+        createChannelHandler(WEEKLY_RAIN, QuantityType.class, ImperialUnits.INCH, "weeklyrainin");
+        createChannelHandler(MONTHLY_RAIN, QuantityType.class, ImperialUnits.INCH, "monthlyrainin");
+        createChannelHandler(YEARLY_RAIN, QuantityType.class, ImperialUnits.INCH, "yearlyrainin");
+        createChannelHandler(TOTAL_RAIN, QuantityType.class, ImperialUnits.INCH, "totalrainin");
+        createChannelHandler(UV_INDEX, DecimalType.class, SIUnits.CELSIUS, "UV");
+        createChannelHandler(WIND_AVERAGE_SPEED, QuantityType.class, ImperialUnits.MILES_PER_HOUR, "windspeedmph");
+        createChannelHandler(WIND_GUST, QuantityType.class, ImperialUnits.MILES_PER_HOUR, "windgustmph");
+        createChannelHandler(SOLAR_RADIATION, QuantityType.class, Units.IRRADIANCE, "solarradiation");
+        createChannelHandler(ABS_PRESSURE, QuantityType.class, ImperialUnits.INCH_OF_MERCURY, "absbaromin");
+        createChannelHandler(REL_PRESSURE, QuantityType.class, ImperialUnits.INCH_OF_MERCURY, "baromin");
+        createChannelHandler(OUTDOOR_BATTERY, StringType.class, Units.PERCENT, "lowbatt");
     }
 
     private void setupChannels() {
@@ -322,9 +430,8 @@ public class IpObserverHandler extends BaseThingHandler {
         // The units for the following are ignored as they are not a QuantityType.class
         createChannelHandler(UV, DecimalType.class, SIUnits.CELSIUS, "uv");
         createChannelHandler(UV_INDEX, DecimalType.class, SIUnits.CELSIUS, "uvi");
-        // was outBattSta1 so some units may use this instead?
+        // was outBattSta1 so some units may use this instead? Can not create same channel twice
         createChannelHandler(OUTDOOR_BATTERY, StringType.class, Units.PERCENT, "outBattSta");
-        createChannelHandler(OUTDOOR_BATTERY, StringType.class, Units.PERCENT, "outBattSta1");
         createChannelHandler(INDOOR_BATTERY, StringType.class, Units.PERCENT, "inBattSta");
         createChannelHandler(LAST_UPDATED_TIME, DateTimeType.class, SIUnits.CELSIUS, "CurrTime");
     }
@@ -332,12 +439,20 @@ public class IpObserverHandler extends BaseThingHandler {
     @Override
     public void initialize() {
         config = getConfigAs(IpObserverConfiguration.class);
-        updateStatus(ThingStatus.UNKNOWN);
-        pollingFuture = scheduler.scheduleWithFixedDelay(this::pollStation, 1, config.pollTime, TimeUnit.SECONDS);
+        if (!config.id.isBlank() && !config.password.isBlank()) {
+            updateStatus(ThingStatus.ONLINE);
+            idPass = "ID=" + config.id + "&PASSWORD=" + config.password;
+            setupServerChannels();
+            ipObserverUpdateReceiver.addStation(this);
+        } else {
+            updateStatus(ThingStatus.UNKNOWN);
+            pollingFuture = scheduler.scheduleWithFixedDelay(this::pollStation, 1, config.pollTime, TimeUnit.SECONDS);
+        }
     }
 
     @Override
     public void dispose() {
+        ipObserverUpdateReceiver.removeStation(this);
         channelHandlers.clear();
         ScheduledFuture<?> localFuture = pollingFuture;
         if (localFuture != null) {

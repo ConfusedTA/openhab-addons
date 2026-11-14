@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,6 +15,7 @@ package org.openhab.binding.homematic.internal.communicator.client;
 import java.io.IOException;
 import java.net.Socket;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.homematic.internal.common.HomematicConfig;
 import org.openhab.binding.homematic.internal.communicator.message.BinRpcMessage;
 import org.openhab.binding.homematic.internal.communicator.message.RpcRequest;
@@ -28,6 +29,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 public class BinRpcClient extends RpcClient<byte[]> {
     private final Logger logger = LoggerFactory.getLogger(BinRpcClient.class);
 
@@ -40,6 +42,7 @@ public class BinRpcClient extends RpcClient<byte[]> {
 
     @Override
     public void dispose() {
+        super.dispose();
         socketHandler.flush();
     }
 
@@ -54,8 +57,8 @@ public class BinRpcClient extends RpcClient<byte[]> {
     }
 
     @Override
-    public void init(HmInterface hmInterface, String clientId) throws IOException {
-        super.init(hmInterface, clientId);
+    public void init(HmInterface hmInterface) throws IOException {
+        super.init(hmInterface);
         socketHandler.removeSocket(config.getRpcPort(hmInterface));
     }
 

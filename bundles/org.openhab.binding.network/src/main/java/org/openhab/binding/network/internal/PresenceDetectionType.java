@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,11 +19,13 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
  * Used by {@see PresenceDetectionValue}.
  *
  * @author David Graeff - Initial contribution
+ * @author Alexander Friese - Add HTTP presence detection
  */
 @NonNullByDefault
 public enum PresenceDetectionType {
     ARP_PING,
     ICMP_PING,
     TCP_CONNECTION,
-    DHCP_REQUEST
+    DHCP_REQUEST,
+    HTTP_REQUEST
 }

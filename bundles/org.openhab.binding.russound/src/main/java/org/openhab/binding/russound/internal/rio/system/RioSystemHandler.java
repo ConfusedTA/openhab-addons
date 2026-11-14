@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -180,8 +180,8 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
         }
 
         if (id.equals(RioConstants.CHANNEL_SYSLANG)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().setSystemLanguage(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().setSystemLanguage(stringCommand.toString());
             } else {
                 logger.debug("Received a SYSTEM LANGUAGE channel command with a non StringType: {}", command);
             }
@@ -247,8 +247,7 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
         }
 
         if (rioConfig.getIpAddress() == null || rioConfig.getIpAddress().trim().length() == 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "IP Address of Russound is missing from configuration");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "IP Address of Russound is missing from configuration");
             return;
         }
 
@@ -280,7 +279,11 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
             final StatefulHandlerCallback callback = new StatefulHandlerCallback(new AbstractRioHandlerCallback() {
                 @Override
                 public void statusChanged(ThingStatus status, ThingStatusDetail detail, String msg) {
-                    updateStatus(status, detail, msg);
+                    if (detail == ThingStatusDetail.NONE) {
+                        updateStatus(status, msg);
+                    } else {
+                        updateStatus(detail, msg);
+                    }
                     if (status != ThingStatus.ONLINE) {
                         disconnect();
                         reconnect();
@@ -342,7 +345,7 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
             sessionLock.unlock();
         }
 
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, response);
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, response);
         reconnect();
     }
 
@@ -420,10 +423,10 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
     public RioSystemConfig getRioConfig() {
         configLock.lock();
         try {
-            final RioSystemConfig sysConfig = getThing().getConfiguration().as(RioSystemConfig.class);
+            final RioSystemConfig sysConfig = getConfigAs(RioSystemConfig.class);
 
             if (sysConfig == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
             } else {
                 config = sysConfig;
             }
@@ -462,7 +465,7 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
     }
 
     /**
-     * Overrides the base to call {@link #childChanged(ThingHandler)} to recreate the sources/controllers names
+     * Overrides the base to call {@link #childChanged(ThingHandler, boolean)} to recreate the sources/controllers names
      */
     @Override
     public void childHandlerInitialized(ThingHandler childHandler, Thing childThing) {
@@ -470,7 +473,7 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
     }
 
     /**
-     * Overrides the base to call {@link #childChanged(ThingHandler)} to recreate the sources/controllers names
+     * Overrides the base to call {@link #childChanged(ThingHandler, boolean)} to recreate the sources/controllers names
      */
     @Override
     public void childHandlerDisposed(ThingHandler childHandler, Thing childThing) {
@@ -489,8 +492,8 @@ public class RioSystemHandler extends AbstractBridgeHandler<RioSystemProtocol> {
         if (childHandler == null) {
             throw new IllegalArgumentException("childHandler cannot be null");
         }
-        if (childHandler instanceof RioSourceHandler) {
-            final RioHandlerCallback callback = ((RioSourceHandler) childHandler).getRioHandlerCallback();
+        if (childHandler instanceof RioSourceHandler sourceHandler) {
+            final RioHandlerCallback callback = sourceHandler.getRioHandlerCallback();
             if (callback != null) {
                 if (added) {
                     callback.addListener(RioConstants.CHANNEL_SOURCENAME, handlerCallbackListener);

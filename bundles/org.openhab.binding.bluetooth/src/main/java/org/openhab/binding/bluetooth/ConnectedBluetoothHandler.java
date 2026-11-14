@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * @author Kai Kreuzer - Initial contribution and API
  */
 @NonNullByDefault
-public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
+public abstract class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
 
     private final Logger logger = LoggerFactory.getLogger(ConnectedBluetoothHandler.class);
     private @Nullable Future<?> reconnectJob;
@@ -60,7 +60,6 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
 
     @Override
     public void initialize() {
-
         // super.initialize adds callbacks that might require the connectionTaskExecutor to be present, so we initialize
         // the connectionTaskExecutor first
         ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1,
@@ -81,15 +80,26 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
 
         Object idleDisconnectDelayRaw = getConfig().get(BluetoothBindingConstants.CONFIGURATION_IDLE_DISCONNECT_DELAY);
         idleDisconnectDelay = 1000;
-        if (idleDisconnectDelayRaw instanceof Number) {
-            idleDisconnectDelay = ((Number) idleDisconnectDelayRaw).intValue();
+        if (idleDisconnectDelayRaw instanceof Number numberCommand) {
+            idleDisconnectDelay = numberCommand.intValue();
         }
 
-        if (alwaysConnected) {
+        // Start the recurrent job if the device is always connected
+        // or if the Services where not yet discovered.
+        // If the device is not always connected, the job will be terminated
+        // after successful connection and the device disconnected after Service
+        // discovery in `onServicesDiscovered()`.
+        if (alwaysConnected || !device.isServicesDiscovered()) {
             reconnectJob = connectionTaskExecutor.scheduleWithFixedDelay(() -> {
                 try {
                     if (device.getConnectionState() != ConnectionState.CONNECTED) {
-                        if (!device.connect()) {
+                        device.connect();
+                        if (device.awaitConnection(30, TimeUnit.SECONDS)) {
+                            if (!alwaysConnected) {
+                                cancel(reconnectJob, false);
+                                reconnectJob = null;
+                            }
+                        } else {
                             logger.debug("Failed to connect to {}", address);
                         }
                         // we do not set the Thing status here, because we will anyhow receive a call to
@@ -101,7 +111,7 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
                             logger.debug("Error while discovering services");
                         }
                     }
-                } catch (RuntimeException ex) {
+                } catch (RuntimeException | InterruptedException ex) {
                     logger.warn("Unexpected error occurred", ex);
                 }
             }, 0, 30, TimeUnit.SECONDS);
@@ -157,7 +167,7 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
                 throw new ConnectionException("Failed to start connecting");
             }
         }
-        if (!device.awaitConnection(1, TimeUnit.SECONDS)) {
+        if (!device.awaitConnection(30, TimeUnit.SECONDS)) {
             throw new TimeoutException("Connection attempt timeout.");
         }
         if (!device.isServicesDiscovered()) {
@@ -193,11 +203,11 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
             return CompletableFuture.failedFuture(new IllegalStateException("connectionTaskExecutor is shut down"));
         }
         // we use a RetryFuture because it supports running Callable instances
-        return RetryFuture.callWithRetry(() -> {
-            // we block for completion here so that we keep the lock on the connectionTaskExecutor active.
-            return callable.apply(connectAndGetCharacteristic(serviceUUID, characteristicUUID)).get();
-        }, connectionTaskExecutor)// we make this completion async so that operations chained off the returned future
-                                  // will not run on the connectionTaskExecutor
+        return RetryFuture.callWithRetry(() ->
+        // we block for completion here so that we keep the lock on the connectionTaskExecutor active.
+        callable.apply(connectAndGetCharacteristic(serviceUUID, characteristicUUID)).get(), connectionTaskExecutor)
+                // we make this completion async so that operations chained off the returned future
+                // will not run on the connectionTaskExecutor
                 .whenCompleteAsync((r, th) -> {
                     // we us a while loop here in case the exceptions get nested
                     while (th instanceof CompletionException || th instanceof ExecutionException) {
@@ -208,7 +218,7 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
                         return;
                     }
                     if (th instanceof TimeoutException) {
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, th.getMessage());
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, th.getMessage());
                     }
                     if (!alwaysConnected) {
                         scheduleDisconnect();
@@ -265,11 +275,11 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
                 if (device.getConnectionState() == ConnectionState.CONNECTED) {
                     updateStatus(ThingStatus.ONLINE);
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Device is not connected.");
+                    updateStatus(ThingStatus.OFFLINE, "Device is not connected.");
                 }
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
     }
 
@@ -301,7 +311,7 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
             case DISCONNECTED:
                 cancel(pendingDisconnect, false);
                 if (alwaysConnected) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
                 }
                 break;
             default:
@@ -313,7 +323,7 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
     public void onCharacteristicUpdate(BluetoothCharacteristic characteristic, byte[] value) {
         super.onCharacteristicUpdate(characteristic, value);
         if (logger.isDebugEnabled()) {
-            logger.debug("Recieved update {} to characteristic {} of device {}", HexUtils.bytesToHex(value),
+            logger.debug("Received update {} to characteristic {} of device {}", HexUtils.bytesToHex(value),
                     characteristic.getUuid(), address);
         }
     }
@@ -324,6 +334,16 @@ public class ConnectedBluetoothHandler extends BeaconBluetoothHandler {
         if (logger.isDebugEnabled()) {
             logger.debug("Received update {} to descriptor {} of device {}", HexUtils.bytesToHex(value),
                     descriptor.getUuid(), address);
+        }
+    }
+
+    @Override
+    public void onServicesDiscovered() {
+        super.onServicesDiscovered();
+
+        if (!alwaysConnected && device.getConnectionState() == ConnectionState.CONNECTED) {
+            // disconnect when the device was only connected to discover the Services.
+            disconnect();
         }
     }
 }

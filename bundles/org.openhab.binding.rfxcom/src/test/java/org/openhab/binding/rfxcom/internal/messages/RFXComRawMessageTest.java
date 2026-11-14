@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,18 +19,21 @@ import java.nio.ByteBuffer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.api.Test;
+import org.openhab.binding.rfxcom.internal.RFXComBindingConstants;
 import org.openhab.binding.rfxcom.internal.config.RFXComRawDeviceConfiguration;
 import org.openhab.binding.rfxcom.internal.exceptions.RFXComException;
 import org.openhab.binding.rfxcom.internal.exceptions.RFXComInvalidStateException;
+import org.openhab.binding.rfxcom.internal.exceptions.RFXComUnsupportedChannelException;
 import org.openhab.binding.rfxcom.internal.messages.RFXComBaseMessage.PacketType;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.types.Command;
 import org.openhab.core.util.HexUtils;
 
 /**
  * Test for RFXCom-binding
  *
- * @author James Hewitt-Thomas - New addition to the PRO RFXCom firmware
+ * @author James Hewitt-Thomas - Initial contribution, new addition to the PRO RFXCom firmware
  */
 @NonNullByDefault
 public class RFXComRawMessageTest {
@@ -70,6 +73,15 @@ public class RFXComRawMessageTest {
         config.onPulsesArray = new short[] { 0x10, 0x20, 0x30, 0x40 };
 
         testMessageTx(config, OnOffType.ON, "0C7F0000050010002000300040");
+    }
+
+    @Test
+    public void testContactStatesAreNotCommands() {
+        RFXComRawMessage message = new RFXComRawMessage();
+        for (OpenClosedType state : OpenClosedType.values()) {
+            assertThrows(RFXComUnsupportedChannelException.class,
+                    () -> message.convertFromState(RFXComBindingConstants.CHANNEL_COMMAND, state));
+        }
     }
 
     @Test

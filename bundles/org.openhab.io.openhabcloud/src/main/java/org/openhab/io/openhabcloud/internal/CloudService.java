@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,23 +17,26 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.openhab.core.OpenHAB;
 import org.openhab.core.config.core.ConfigurableService;
+import org.openhab.core.events.AbstractEvent;
 import org.openhab.core.events.Event;
 import org.openhab.core.events.EventFilter;
 import org.openhab.core.events.EventPublisher;
 import org.openhab.core.events.EventSubscriber;
 import org.openhab.core.id.InstanceUUID;
 import org.openhab.core.io.net.http.HttpClientFactory;
+import org.openhab.core.io.rest.Webhook;
+import org.openhab.core.io.rest.WebhookService;
 import org.openhab.core.items.Item;
 import org.openhab.core.items.ItemNotFoundException;
 import org.openhab.core.items.ItemRegistry;
@@ -47,6 +50,7 @@ import org.openhab.core.model.script.engine.action.ActionService;
 import org.openhab.core.net.HttpServiceUtil;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.TypeParser;
+import org.openhab.core.util.StringUtils;
 import org.openhab.io.openhabcloud.NotificationAction;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
@@ -63,12 +67,13 @@ import org.slf4j.LoggerFactory;
  *
  * @author Victor Belov - Initial contribution
  * @author Kai Kreuzer - migrated code to new Jetty client and ESH APIs
+ * @author Dan Cunningham - Extended notification enhancements
  */
-@Component(service = { CloudService.class, EventSubscriber.class,
-        ActionService.class }, configurationPid = "org.openhab.openhabcloud", property = Constants.SERVICE_PID
+@Component(service = { CloudService.class, EventSubscriber.class, ActionService.class,
+        WebhookService.class }, configurationPid = "org.openhab.openhabcloud", property = Constants.SERVICE_PID
                 + "=org.openhab.openhabcloud")
 @ConfigurableService(category = "io", label = "openHAB Cloud", description_uri = CloudService.CONFIG_URI)
-public class CloudService implements ActionService, CloudClientListener, EventSubscriber {
+public class CloudService implements ActionService, CloudClientListener, EventSubscriber, WebhookService {
 
     protected static final String CONFIG_URI = "io:openhabcloud";
 
@@ -80,8 +85,7 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
     private static final int DEFAULT_LOCAL_OPENHAB_MAX_CONCURRENT_REQUESTS = 200;
     private static final int DEFAULT_LOCAL_OPENHAB_REQUEST_TIMEOUT = 30000;
     private static final String HTTPCLIENT_NAME = "openhabcloud";
-    private static final String CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    private static final SecureRandom SR = new SecureRandom();
+    public static final String CLOUD_EVENT_SOURCE = "org.openhab.io.openhabcloud";
 
     private final Logger logger = LoggerFactory.getLogger(CloudService.class);
 
@@ -115,11 +119,22 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
      * @param userId the {@link String} containing the openHAB Cloud user id to send message to
      * @param message the {@link String} containing a message to send to specified user id
      * @param icon the {@link String} containing a name of the icon to be used with this notification
-     * @param severity the {@link String} containing severity (good, info, warning, error) of notification
+     * @param tag the {@link String} containing tag of notification (formerly severity)
+     * @param title the {@link String} containing the title to be used with this notification
+     * @param referenceId the {@link String} identifier used to collapse and hide notifications
+     * @param onClickAction the {@link String} containing the action to perform when clicked
+     * @param mediaAttachmentUrl the {@link String} containing the media to attach to a notification
+     * @param actionButton1 the {@link String} containing the action button in the format "Title=Action"
+     * @param actionButton2 the {@link String} containing the action button in the format "Title=Action"
+     * @param actionButton3 the {@link String} containing the action button in the format "Title=Action"
      */
-    public void sendNotification(String userId, String message, @Nullable String icon, @Nullable String severity) {
+    public void sendNotification(String userId, String message, @Nullable String icon, @Nullable String tag,
+            @Nullable String title, @Nullable String referenceId, @Nullable String onClickAction,
+            @Nullable String mediaAttachmentUrl, @Nullable String actionButton1, @Nullable String actionButton2,
+            @Nullable String actionButton3) {
         logger.debug("Sending message '{}' to user id {}", message, userId);
-        cloudClient.sendNotification(userId, message, icon, severity);
+        cloudClient.sendNotification(userId, message, icon, tag, title, referenceId, onClickAction, mediaAttachmentUrl,
+                actionButton1, actionButton2, actionButton3);
     }
 
     /**
@@ -141,11 +156,70 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
      *
      * @param message the {@link String} containing a message to send to specified user id
      * @param icon the {@link String} containing a name of the icon to be used with this notification
-     * @param severity the {@link String} containing severity (good, info, warning, error) of notification
+     * @param tag the {@link String} containing tag of notification (formerly severity)
+     * @param title the {@link String} containing the title to be used with this notification
+     * @param referenceId the {@link String} identifier used to collapse and hide notifications
+     * @param onClickAction the {@link String} containing the action to perform when clicked
+     * @param mediaAttachmentUrl the {@link String} containing the media to attach to a notification
+     * @param actionButton1 the {@link String} containing the action button in the format "Title=Action"
+     * @param actionButton2 the {@link String} containing the action button in the format "Title=Action"
+     * @param actionButton3 the {@link String} containing the action button in the format "Title=Action"
      */
-    public void sendBroadcastNotification(String message, @Nullable String icon, @Nullable String severity) {
+    public void sendBroadcastNotification(String message, @Nullable String icon, @Nullable String tag,
+            @Nullable String title, @Nullable String referenceId, @Nullable String onClickAction,
+            @Nullable String mediaAttachmentUrl, @Nullable String actionButton1, @Nullable String actionButton2,
+            @Nullable String actionButton3) {
         logger.debug("Sending broadcast message '{}' to all users", message);
-        cloudClient.sendBroadcastNotification(message, icon, severity);
+        cloudClient.sendBroadcastNotification(message, icon, tag, title, referenceId, onClickAction, mediaAttachmentUrl,
+                actionButton1, actionButton2, actionButton3);
+    }
+
+    /**
+     * This method hides a notification by its tag through the openHAB Cloud service for a specific user
+     *
+     * @param userId the {@link String} containing the openHAB Cloud user id to hide messages for
+     * @param tag the {@link String} containing severity group of notification
+     *
+     */
+    public void hideNotificationByTag(String userId, String tag) {
+        logger.debug("hiding with tag '{}' to user id {}", tag, userId);
+        cloudClient.hideNotificationByTag(userId, tag);
+    }
+
+    /**
+     * This method hides a notification by its tag through the openHAB Cloud service for all
+     * mobile devices of all users of the account
+     *
+     * @param severity the {@link String} containing severity (good, info, warning, error) of notification
+     *
+     */
+    public void hideBroadcastNotificationByTag(String tag) {
+        logger.debug("hiding broadcast with tag '{}'", tag);
+        cloudClient.hideBroadcastNotificationByTag(tag);
+    }
+
+    /**
+     * This method hides a notification by its reference id through the openHAB Cloud service for a specific user
+     *
+     * @param userId the {@link String} containing the openHAB Cloud user id to hide messages for
+     * @param severity the {@link String} containing severity group of notification
+     *
+     */
+    public void hideNotificationByReferenceId(String userId, String referenceId) {
+        logger.debug("hiding with referenceId '{}' to user id {}", referenceId, userId);
+        cloudClient.hideNotificationByReferenceId(userId, referenceId);
+    }
+
+    /**
+     * This method hides a notification by its reference id through the openHAB Cloud service for all
+     * mobile devices of all users of the account
+     *
+     * @param severity the {@link String} containing severity (good, info, warning, error) of notification
+     *
+     */
+    public void hideBroadcastNotificationByReferenceId(String referenceId) {
+        logger.debug("hiding broadcast with referenceId '{}'", referenceId);
+        cloudClient.hideBroadcastNotificationByReferenceId(referenceId);
     }
 
     private String substringBefore(String str, String separator) {
@@ -168,7 +242,7 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
 
     private void checkJavaVersion() {
         String version = System.getProperty("java.version");
-        if (version.charAt(2) == '8') {
+        if (version != null && version.charAt(2) == '8') {
             // we are on Java 8, let's check the update
             String update = version.substring(version.indexOf('_') + 1);
             try {
@@ -187,7 +261,10 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
     @Deactivate
     protected void deactivate() {
         logger.debug("openHAB Cloud connector deactivated");
-        cloudClient.shutdown();
+        NotificationAction.unsetCloudService(this);
+        if (cloudClient != null) {
+            cloudClient.shutdown();
+        }
         try {
             httpClient.stop();
         } catch (Exception e) {
@@ -197,22 +274,21 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
 
     @Modified
     protected void modified(Map<String, ?> config) {
-        if (config != null && config.get(CFG_MODE) != null) {
-            remoteAccessEnabled = "remote".equals(config.get(CFG_MODE));
+        if (config != null && config.get(CFG_MODE) instanceof String cfgMode) {
+            remoteAccessEnabled = "remote".equals(cfgMode);
         } else {
             logger.debug("remoteAccessEnabled is not set, keeping value '{}'", remoteAccessEnabled);
         }
 
-        if (config.get(CFG_BASE_URL) != null) {
-            cloudBaseUrl = (String) config.get(CFG_BASE_URL);
+        if (config != null && config.get(CFG_BASE_URL) instanceof String cfgBaseUrl) {
+            cloudBaseUrl = cfgBaseUrl;
         } else {
             cloudBaseUrl = DEFAULT_URL;
         }
 
         exposedItems = new HashSet<>();
-        Object expCfg = config.get(CFG_EXPOSE);
-        if (expCfg instanceof String) {
-            String value = (String) expCfg;
+        Object expCfg = config == null ? null : config.get(CFG_EXPOSE);
+        if (expCfg instanceof String value) {
             while (value.startsWith("[")) {
                 value = value.substring(1);
             }
@@ -222,13 +298,13 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
             for (String itemName : Arrays.asList((value).split(","))) {
                 exposedItems.add(itemName.trim());
             }
-        } else if (expCfg instanceof Iterable) {
-            for (Object entry : ((Iterable<?>) expCfg)) {
+        } else if (expCfg instanceof Iterable iterable) {
+            for (Object entry : iterable) {
                 exposedItems.add(entry.toString());
             }
         }
 
-        logger.debug("UUID = {}, secret = {}", InstanceUUID.get(), getSecret());
+        logger.debug("UUID = {}, secret = {}", censored(InstanceUUID.get()), censored(getSecret()));
 
         if (cloudClient != null) {
             cloudClient.shutdown();
@@ -237,6 +313,8 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
         if (!httpClient.isRunning()) {
             try {
                 httpClient.start();
+                // we act as a blind proxy, don't try to auto decode content
+                httpClient.getContentDecoderFactories().clear();
             } catch (Exception e) {
                 logger.error("Could not start Jetty http client", e);
             }
@@ -245,10 +323,41 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
         String localBaseUrl = "http://localhost:" + localPort;
         cloudClient = new CloudClient(httpClient, InstanceUUID.get(), getSecret(), cloudBaseUrl, localBaseUrl,
                 remoteAccessEnabled, exposedItems);
-        cloudClient.setOpenHABVersion(OpenHAB.getVersion());
         cloudClient.connect();
         cloudClient.setListener(this);
-        NotificationAction.cloudService = this;
+        NotificationAction.setCloudService(this);
+    }
+
+    @Override
+    public CompletableFuture<Webhook> requestWebhook(String localPath) {
+        CompletableFuture<Webhook> future = new CompletableFuture<>();
+        if (localPath.isBlank() || !localPath.startsWith("/")) {
+            future.completeExceptionally(new IllegalArgumentException("localPath must start with '/'"));
+            return future;
+        }
+        CloudClient client = cloudClient;
+        if (client != null) {
+            client.registerWebhook(localPath, future);
+        } else {
+            future.completeExceptionally(new IllegalStateException("Cloud connector is not initialized"));
+        }
+        return future;
+    }
+
+    @Override
+    public CompletableFuture<Void> removeWebhook(String localPath) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        if (localPath.isBlank() || !localPath.startsWith("/")) {
+            future.completeExceptionally(new IllegalArgumentException("localPath must start with '/'"));
+            return future;
+        }
+        CloudClient client = cloudClient;
+        if (client != null) {
+            client.removeWebhook(localPath, future);
+        } else {
+            future.completeExceptionally(new IllegalStateException("Cloud connector is not initialized"));
+        }
+        return future;
     }
 
     @Override
@@ -281,23 +390,18 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
 
     private void writeFile(File file, String content) {
         // create intermediary directories
-        file.getParentFile().mkdirs();
+        File parentFile = file.getParentFile();
+        if (parentFile != null) {
+            parentFile.mkdirs();
+        }
         try {
             Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
-            logger.debug("Created file '{}' with content '{}'", file.getAbsolutePath(), content);
+            logger.debug("Created file '{}' with content '{}'", file.getAbsolutePath(), censored(content));
         } catch (FileNotFoundException e) {
             logger.error("Couldn't create file '{}'.", file.getPath(), e);
         } catch (IOException e) {
             logger.error("Couldn't write to file '{}'.", file.getPath(), e);
         }
-    }
-
-    private String randomString(int length) {
-        StringBuilder sb = new StringBuilder(length);
-        for (int i = 0; i < length; i++) {
-            sb.append(CHARS.charAt(SR.nextInt(CHARS.length())));
-        }
-        return sb.toString();
     }
 
     /**
@@ -310,19 +414,26 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
         String newSecretString = "";
 
         if (!file.exists()) {
-            newSecretString = randomString(20);
-            logger.debug("New secret = {}", newSecretString);
+            newSecretString = StringUtils.getRandomAlphanumeric(20);
+            logger.debug("New secret = {}", censored(newSecretString));
             writeFile(file, newSecretString);
         } else {
             newSecretString = readFirstLine(file);
-            logger.debug("Using secret at '{}' with content '{}'", file.getAbsolutePath(), newSecretString);
+            logger.debug("Using secret at '{}' with content '{}'", file.getAbsolutePath(), censored(newSecretString));
         }
 
         return newSecretString;
     }
 
+    private static String censored(String secret) {
+        if (secret.length() < 4) {
+            return "*******";
+        }
+        return secret.substring(0, 2) + "..." + secret.substring(secret.length() - 2, secret.length());
+    }
+
     @Override
-    public void sendCommand(String itemName, String commandString) {
+    public void sendCommand(String itemName, String commandString, @Nullable String source, @Nullable String userId) {
         try {
             Item item = itemRegistry.getItem(itemName);
             Command command = null;
@@ -345,7 +456,8 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
             }
             if (command != null) {
                 logger.debug("Received command '{}' for item '{}'", commandString, itemName);
-                eventPublisher.post(ItemEventFactory.createCommandEvent(itemName, command));
+                eventPublisher.post(ItemEventFactory.createCommandEvent(itemName, command,
+                        AbstractEvent.buildDelegatedSource(source, CLOUD_EVENT_SOURCE, userId)));
             } else {
                 logger.warn("Received invalid command '{}' for item '{}'", commandString, itemName);
             }
@@ -367,8 +479,12 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
     @Override
     public void receive(Event event) {
         ItemStateEvent ise = (ItemStateEvent) event;
-        if (exposedItems != null && exposedItems.contains(ise.getItemName())) {
+        if (supportsUpdates() && exposedItems != null && exposedItems.contains(ise.getItemName())) {
             cloudClient.sendItemUpdate(ise.getItemName(), ise.getItemState().toString());
         }
+    }
+
+    private boolean supportsUpdates() {
+        return cloudBaseUrl.contains(CFG_BASE_URL);
     }
 }

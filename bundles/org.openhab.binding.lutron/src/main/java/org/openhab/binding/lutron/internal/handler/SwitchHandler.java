@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -50,7 +50,7 @@ public class SwitchHandler extends LutronHandler {
     public void initialize() {
         Number id = (Number) getThing().getConfiguration().get("integrationId");
         if (id == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId");
             return;
         }
         integrationId = id.intValue();
@@ -64,13 +64,13 @@ public class SwitchHandler extends LutronHandler {
         logger.debug("Initializing device state for Switch {}", getIntegrationId());
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
         } else if (bridge.getStatus() == ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Awaiting initial response");
+            updateStatus(ThingStatus.UNKNOWN, "Awaiting initial response");
             queryOutput(TargetType.SWITCH, OutputCommand.ACTION_ZONELEVEL);
             // handleUpdate() will set thing status to online when response arrives
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -98,7 +98,7 @@ public class SwitchHandler extends LutronHandler {
             if (getThing().getStatus() == ThingStatus.UNKNOWN) {
                 updateStatus(ThingStatus.ONLINE);
             }
-            postCommand(CHANNEL_SWITCH, level.compareTo(BigDecimal.ZERO) == 0 ? OnOffType.OFF : OnOffType.ON);
+            updateState(CHANNEL_SWITCH, OnOffType.from(level.compareTo(BigDecimal.ZERO) != 0));
         }
     }
 

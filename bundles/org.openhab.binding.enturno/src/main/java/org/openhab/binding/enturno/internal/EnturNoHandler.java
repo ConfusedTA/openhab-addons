@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -26,7 +26,7 @@ import org.eclipse.jetty.client.HttpClient;
 import org.openhab.binding.enturno.internal.connection.EnturCommunicationException;
 import org.openhab.binding.enturno.internal.connection.EnturConfigurationException;
 import org.openhab.binding.enturno.internal.connection.EnturNoConnection;
-import org.openhab.binding.enturno.internal.model.simplified.DisplayData;
+import org.openhab.binding.enturno.internal.dto.simplified.DisplayData;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.Channel;
@@ -95,16 +95,14 @@ public class EnturNoHandler extends BaseThingHandler {
         logger.debug("Stop place id: {}", stopId);
         boolean configValid = true;
         if (stopId == null || stopId.isBlank()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.conf-error-missing-stopId");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-missing-stopId");
             configValid = false;
         }
 
         String lineCode = config.getLineCode();
         logger.debug("Line code: {}", lineCode);
         if (lineCode == null || lineCode.isBlank()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.conf-error-missing-lineCode");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-missing-lineCode");
             configValid = false;
         }
 
@@ -147,7 +145,9 @@ public class EnturNoHandler extends BaseThingHandler {
             status = ThingStatus.OFFLINE;
         }
 
-        updateStatus(status);
+        if (status == ThingStatus.ONLINE || status == ThingStatus.OFFLINE || status == ThingStatus.UNKNOWN) {
+            updateStatus(status);
+        }
     }
 
     public void updateData(EnturNoConnection connection) {
@@ -157,9 +157,9 @@ public class EnturNoHandler extends BaseThingHandler {
                 updateStatus(ThingStatus.ONLINE);
             }
         } catch (EnturCommunicationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getLocalizedMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getLocalizedMessage());
         } catch (EnturConfigurationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getLocalizedMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getLocalizedMessage());
         }
     }
 

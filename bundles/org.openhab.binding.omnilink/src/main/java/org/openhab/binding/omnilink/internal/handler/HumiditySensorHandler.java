@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -30,7 +30,6 @@ import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.Units;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -72,7 +71,7 @@ public class HumiditySensorHandler extends AbstractOmnilinkStatusHandler<Extende
         if (bridgeHandler != null) {
             updateHumiditySensorProperties(bridgeHandler);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                     "Received null bridge while initializing Humidity Sensor!");
         }
     }
@@ -103,8 +102,8 @@ public class HumiditySensorHandler extends AbstractOmnilinkStatusHandler<Extende
         logger.debug("handleCommand called for channel: {}, command: {}", channelUID, command);
 
         if (command instanceof RefreshType) {
-            retrieveStatus().ifPresentOrElse(this::updateChannels, () -> updateStatus(ThingStatus.OFFLINE,
-                    ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
+            retrieveStatus().ifPresentOrElse(this::updateChannels,
+                    () -> updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
             return;
         }
 
@@ -125,7 +124,7 @@ public class HumiditySensorHandler extends AbstractOmnilinkStatusHandler<Extende
                         thingID);
                 break;
             default:
-                logger.warn("Unknown channel for Humdity Sensor thing: {}", channelUID);
+                logger.warn("Unknown channel for Humidity Sensor thing: {}", channelUID);
         }
     }
 

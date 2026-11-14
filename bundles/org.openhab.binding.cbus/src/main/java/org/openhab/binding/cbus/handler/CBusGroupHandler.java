@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -70,8 +70,7 @@ public abstract class CBusGroupHandler extends BaseThingHandler {
         CBusNetworkHandler cBusNetworkHandler = getCBusNetworkHandler();
         this.cBusNetworkHandler = cBusNetworkHandler;
         if (cBusNetworkHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "No CBusNetworkHandler Bridge available");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No CBusNetworkHandler Bridge available");
             return;
         }
         updateStatus();
@@ -88,7 +87,7 @@ public abstract class CBusGroupHandler extends BaseThingHandler {
             logger.debug("updateStatus UID: {} applicaton: {} group: {}", getThing().getUID(), applicationId, groupId);
             CBusNetworkHandler networkHandler = cBusNetworkHandler;
             if (networkHandler == null || !networkHandler.getThing().getStatus().equals(ThingStatus.ONLINE)) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             } else {
                 Group group = this.group;
                 if (group == null) {
@@ -97,8 +96,7 @@ public abstract class CBusGroupHandler extends BaseThingHandler {
                 }
                 if (group == null) {
                     logger.debug("Set state to configuration error -no group");
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                            "No Group object available");
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No Group object available");
                 } else if (group.getNetwork().isOnline()) {
                     updateStatus(ThingStatus.ONLINE);
 
@@ -110,13 +108,12 @@ public abstract class CBusGroupHandler extends BaseThingHandler {
                         // Cant get name so properties wont be updated
                     }
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "Network is not reporting online");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Network is not reporting online");
                 }
             }
         } catch (CGateException e) {
             logger.debug("Problem checking network state for network {}", e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
     }
 
@@ -151,8 +148,8 @@ public abstract class CBusGroupHandler extends BaseThingHandler {
             return null;
         }
         ThingHandler handler = bridge.getHandler();
-        if (handler instanceof CBusNetworkHandler) {
-            return (CBusNetworkHandler) handler;
+        if (handler instanceof CBusNetworkHandler networkHandler) {
+            return networkHandler;
         }
         logger.debug("No available bridge handler found for bridge: {}", bridge.getUID());
         return null;

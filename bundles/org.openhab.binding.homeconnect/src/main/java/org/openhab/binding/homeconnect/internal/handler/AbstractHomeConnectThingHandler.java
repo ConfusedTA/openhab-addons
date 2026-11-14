@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -27,9 +27,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -52,6 +54,7 @@ import org.openhab.binding.homeconnect.internal.client.model.Data;
 import org.openhab.binding.homeconnect.internal.client.model.Event;
 import org.openhab.binding.homeconnect.internal.client.model.HomeAppliance;
 import org.openhab.binding.homeconnect.internal.client.model.Option;
+import org.openhab.binding.homeconnect.internal.client.model.PowerStateAccess;
 import org.openhab.binding.homeconnect.internal.client.model.Program;
 import org.openhab.binding.homeconnect.internal.handler.cache.ExpiringStateMap;
 import org.openhab.binding.homeconnect.internal.type.HomeConnectDynamicStateDescriptionProvider;
@@ -70,6 +73,7 @@ import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
@@ -79,6 +83,7 @@ import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.StateOption;
 import org.openhab.core.types.UnDefType;
+import org.openhab.core.util.ColorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,6 +106,8 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
     private @Nullable ScheduledFuture<?> reinitializationFuture1;
     private @Nullable ScheduledFuture<?> reinitializationFuture2;
     private @Nullable ScheduledFuture<?> reinitializationFuture3;
+    private final AtomicReference<@Nullable Future<?>> initializationFuture = new AtomicReference<>();
+    private volatile long initializationGeneration;
     private boolean ignoreEventSourceClosedEvent;
     private @Nullable String programOptionsDelayedUpdate;
 
@@ -133,31 +140,59 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
 
     @Override
     public void initialize() {
+        // Mark a new initialization generation; any previously scheduled or running init task becomes stale.
+        final long generation = ++initializationGeneration;
+        if (getBridge() == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            accessible.set(false);
+            return;
+        }
         if (getBridgeHandler().isEmpty()) {
-            updateStatus(OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+            updateStatus(ThingStatus.UNKNOWN);
             accessible.set(false);
         } else if (isBridgeOffline()) {
-            updateStatus(OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             accessible.set(false);
         } else {
             updateStatus(UNKNOWN);
-            scheduler.submit(() -> {
+            initializationFuture.set(scheduler.submit(() -> {
+                if (isStaleInitialization(generation)) {
+                    return;
+                }
                 refreshThingStatus(); // set ONLINE / OFFLINE
+                if (isStaleInitialization(generation)) {
+                    return;
+                }
                 updateSelectedProgramStateDescription();
+                if (isStaleInitialization(generation)) {
+                    return;
+                }
                 updateChannels();
+                if (isStaleInitialization(generation)) {
+                    return;
+                }
                 registerEventListener();
+                if (isStaleInitialization(generation)) {
+                    return;
+                }
                 scheduleOfflineMonitor1();
                 scheduleOfflineMonitor2();
-            });
+            }));
         }
+    }
+
+    /**
+     * Returns {@code true} if the init task that captured {@code generation} has been superseded by a later
+     * {@link #initialize()} or stopped by {@link #teardown(boolean)}. Used to skip work and rescheduling after
+     * the handler was disposed or reinitialized.
+     */
+    private boolean isStaleInitialization(long generation) {
+        return generation != initializationGeneration;
     }
 
     @Override
     public void dispose() {
-        stopRetryRegistering();
-        stopOfflineMonitor1();
-        stopOfflineMonitor2();
-        unregisterEventListener(true);
+        teardown(true);
     }
 
     @Override
@@ -168,11 +203,33 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
 
     private void reinitialize() {
         logger.debug("Reinitialize thing handler ({}). haId={}", getThingLabel(), getThingHaId());
+        teardown(false);
+        initialize();
+    }
+
+    /**
+     * Stop all asynchronous work performed by this handler.
+     *
+     * @param immediate if {@code true} the event listener is unregistered immediately (used during
+     *            {@link #dispose()}); if {@code false} a graceful unregistration is performed (used
+     *            during {@link #reinitialize()}).
+     */
+    private void teardown(boolean immediate) {
+        // Invalidate the current init generation so a running/queued init task stops at its next checkpoint.
+        initializationGeneration++;
+        cancelInitialization();
         stopRetryRegistering();
         stopOfflineMonitor1();
         stopOfflineMonitor2();
-        unregisterEventListener();
-        initialize();
+        unregisterEventListener(immediate);
+    }
+
+    private void cancelInitialization() {
+        Future<?> future = initializationFuture.getAndSet(null);
+        if (future != null) {
+            // graceful cancel: do not interrupt a running task, only prevent a queued one from starting
+            future.cancel(false);
+        }
     }
 
     /**
@@ -234,7 +291,7 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
             } catch (ApplianceOfflineException e) {
                 logger.debug("Could not handle command {}. Appliance offline. thing={}, haId={}, error={}",
                         command.toFullString(), getThingLabel(), getThingHaId(), e.getMessage());
-                updateStatus(OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
                 resetChannelsOnOfflineEvent();
                 resetProgramStateChannels(true);
             } catch (CommunicationException e) {
@@ -453,8 +510,8 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
         Bridge bridge = getBridge();
         if (bridge != null) {
             BridgeHandler bridgeHandler = bridge.getHandler();
-            if (bridgeHandler instanceof HomeConnectBridgeHandler) {
-                return Optional.of((HomeConnectBridgeHandler) bridgeHandler);
+            if (bridgeHandler instanceof HomeConnectBridgeHandler homeConnectBridgeHandler) {
+                return Optional.of(homeConnectBridgeHandler);
             }
         }
         return Optional.empty();
@@ -537,7 +594,7 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
      * @param channelUID channel UID
      */
     protected void updateChannel(ChannelUID channelUID) {
-        if (!getApiClient().isPresent()) {
+        if (getApiClient().isEmpty()) {
             logger.error("Cannot update channel. No instance of api client found! thing={}, haId={}", getThingLabel(),
                     getThingHaId());
             return;
@@ -717,9 +774,10 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
      * @return color code e.g. #001122
      */
     protected String mapColor(HSBType color) {
-        String redValue = String.format("%02X", (int) (color.getRed().floatValue() * 2.55));
-        String greenValue = String.format("%02X", (int) (color.getGreen().floatValue() * 2.55));
-        String blueValue = String.format("%02X", (int) (color.getBlue().floatValue() * 2.55));
+        int[] rgb = ColorUtil.hsbToRgb(color);
+        String redValue = String.format("%02X", rgb[0]);
+        String greenValue = String.format("%02X", rgb[1]);
+        String blueValue = String.format("%02X", rgb[2]);
         return "#" + redValue + greenValue + blueValue;
     }
 
@@ -742,21 +800,21 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
                 logger.debug(
                         "Update status to OFFLINE. Home Connect service is not reachable or a problem occurred!  thing={}, haId={}, error={}.",
                         getThingLabel(), getThingHaId(), e.getMessage());
-                updateStatus(OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         "Home Connect service is not reachable or a problem occurred! (" + e.getMessage() + ").");
                 accessible.set(false);
             } catch (AuthorizationException e) {
                 logger.debug(
                         "Update status to OFFLINE. Home Connect service is not reachable or a problem occurred!  thing={}, haId={}, error={}",
                         getThingLabel(), getThingHaId(), e.getMessage());
-                updateStatus(OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         "Home Connect service is not reachable or a problem occurred! (" + e.getMessage() + ").");
                 accessible.set(false);
                 handleAuthenticationError(e);
             }
         });
         if (apiClient.isEmpty()) {
-            updateStatus(OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+            updateStatus(ThingStatus.UNKNOWN);
             accessible.set(false);
         }
     }
@@ -1005,6 +1063,17 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
                 .ifPresent(channel -> updateState(channel.getUID(), new PercentType(event.getValueAsInt())));
     }
 
+    protected EventHandler defaultStringEventHandler(String channelId) {
+        return event -> getLinkedChannel(channelId).ifPresent(channel -> {
+            String value = event.getValue();
+            if (value != null) {
+                updateState(channel.getUID(), new StringType(value));
+            } else {
+                updateState(channel.getUID(), UnDefType.UNDEF);
+            }
+        });
+    }
+
     protected ChannelUpdateHandler defaultDoorStateChannelUpdateHandler() {
         return (channelUID, cache) -> updateState(channelUID, cache.putIfAbsentAndGet(channelUID, () -> {
             Optional<HomeConnectApiClient> apiClient = getApiClient();
@@ -1025,6 +1094,13 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
         return (channelUID, cache) -> updateState(channelUID, cache.putIfAbsentAndGet(channelUID, () -> {
             Optional<HomeConnectApiClient> apiClient = getApiClient();
             if (apiClient.isPresent()) {
+                // set read-only state description, if device has read-only power state option
+                Optional<Channel> powerStateChannel = getThingChannel(CHANNEL_POWER_STATE);
+                if (powerStateChannel.isPresent()) {
+                    dynamicStateDescriptionProvider.withReadOnly(powerStateChannel.get().getUID(),
+                            apiClient.get().getPowerStateAccess(getThingHaId()) == PowerStateAccess.READ_ONLY);
+                }
+
                 Data data = apiClient.get().getPowerState(getThingHaId());
                 if (data.getValue() != null) {
                     return OnOffType.from(STATE_POWER_ON.equals(data.getValue()));
@@ -1206,23 +1282,22 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
     protected void handleTemperatureCommand(final ChannelUID channelUID, final Command command,
             final HomeConnectApiClient apiClient)
             throws CommunicationException, AuthorizationException, ApplianceOfflineException {
-        if (command instanceof QuantityType) {
-            QuantityType<?> quantity = (QuantityType<?>) command;
-
+        if (command instanceof QuantityType<?> quantityCommand) {
             String value;
             String unit;
 
             try {
-                if (quantity.getUnit().equals(SIUnits.CELSIUS) || quantity.getUnit().equals(ImperialUnits.FAHRENHEIT)) {
-                    unit = quantity.getUnit().toString();
-                    value = String.valueOf(quantity.intValue());
+                if (quantityCommand.getUnit().equals(SIUnits.CELSIUS)
+                        || quantityCommand.getUnit().equals(ImperialUnits.FAHRENHEIT)) {
+                    unit = quantityCommand.getUnit().toString();
+                    value = String.valueOf(quantityCommand.intValue());
                 } else {
                     logger.debug("Converting target temperature from {}{} to °C value. thing={}, haId={}",
-                            quantity.intValue(), quantity.getUnit().toString(), getThingLabel(), getThingHaId());
+                            quantityCommand.intValue(), quantityCommand.getUnit(), getThingLabel(), getThingHaId());
                     unit = "°C";
-                    var celsius = quantity.toUnit(SIUnits.CELSIUS);
+                    var celsius = quantityCommand.toUnit(SIUnits.CELSIUS);
                     if (celsius == null) {
-                        logger.warn("Converting temperature to celsius failed! quantity={}", quantity);
+                        logger.warn("Converting temperature to celsius failed! quantity={}", quantityCommand);
                         value = null;
                     } else {
                         value = String.valueOf(celsius.intValue());
@@ -1272,10 +1347,10 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
                     } else {
                         newBrightness = currentBrightness - BRIGHTNESS_DIM_STEP;
                     }
-                } else if (command instanceof PercentType) {
-                    newBrightness = (int) Math.floor(((PercentType) command).doubleValue());
-                } else if (command instanceof DecimalType) {
-                    newBrightness = ((DecimalType) command).intValue();
+                } else if (command instanceof PercentType percentCommand) {
+                    newBrightness = (int) Math.floor(percentCommand.doubleValue());
+                } else if (command instanceof DecimalType decimalCommand) {
+                    newBrightness = decimalCommand.intValue();
                 }
 
                 // check in in range
@@ -1308,8 +1383,8 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
                     apiClient.setAmbientLightColorState(getThingHaId(), STATE_AMBIENT_LIGHT_COLOR_CUSTOM_COLOR);
                 }
 
-                if (command instanceof HSBType) {
-                    apiClient.setAmbientLightCustomColorState(getThingHaId(), mapColor((HSBType) command));
+                if (command instanceof HSBType hsbCommand) {
+                    apiClient.setAmbientLightCustomColorState(getThingHaId(), mapColor(hsbCommand));
                 } else if (command instanceof StringType) {
                     apiClient.setAmbientLightCustomColorState(getThingHaId(), command.toFullString());
                 }
@@ -1320,7 +1395,8 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
     protected void handlePowerCommand(final ChannelUID channelUID, final Command command,
             final HomeConnectApiClient apiClient, String stateNotOn)
             throws CommunicationException, AuthorizationException, ApplianceOfflineException {
-        if (command instanceof OnOffType && CHANNEL_POWER_STATE.equals(channelUID.getId())) {
+        if (command instanceof OnOffType && CHANNEL_POWER_STATE.equals(channelUID.getId())
+                && apiClient.getPowerStateAccess(getThingHaId()) == PowerStateAccess.READ_WRITE) {
             apiClient.setPowerState(getThingHaId(), OnOffType.ON.equals(command) ? STATE_POWER_ON : stateNotOn);
         }
     }
@@ -1417,13 +1493,17 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
         Map.of(CHANNEL_WASHER_TEMPERATURE, OPTION_WASHER_TEMPERATURE, CHANNEL_WASHER_SPIN_SPEED,
                 OPTION_WASHER_SPIN_SPEED, CHANNEL_WASHER_IDOS1_LEVEL, OPTION_WASHER_IDOS_1_DOSING_LEVEL,
                 CHANNEL_WASHER_IDOS2_LEVEL, OPTION_WASHER_IDOS_2_DOSING_LEVEL, CHANNEL_DRYER_DRYING_TARGET,
-                OPTION_DRYER_DRYING_TARGET)
+                OPTION_DRYER_DRYING_TARGET, CHANNEL_CLEANING_MODE_STATE, OPTION_CLEANING_MODE,
+                CHANNEL_SUCTION_POWER_STATE, OPTION_SUCTION_POWER, CHANNEL_WATER_FLOW_RATE_STATE,
+                OPTION_WATER_FLOW_RATE, CHANNEL_CLEANING_PASSES_STATE, OPTION_CLEANING_PASSES,
+                CHANNEL_CLEANING_SPEED_STATE, OPTION_CLEANING_SPEED)
                 .forEach((channel, option) -> setStringChannelFromOption(channel, options, option, UnDefType.UNDEF));
 
         Map.of(CHANNEL_WASHER_IDOS1, OPTION_WASHER_IDOS_1_ACTIVE, CHANNEL_WASHER_IDOS2, OPTION_WASHER_IDOS_2_ACTIVE,
                 CHANNEL_WASHER_LESS_IRONING, OPTION_WASHER_LESS_IRONING, CHANNEL_WASHER_PRE_WASH,
                 OPTION_WASHER_PRE_WASH, CHANNEL_WASHER_SOAK, OPTION_WASHER_SOAK, CHANNEL_WASHER_RINSE_HOLD,
-                OPTION_WASHER_RINSE_HOLD)
+                OPTION_WASHER_RINSE_HOLD, CHANNEL_CARPET_BOOST, OPTION_CARPET_BOOST, CHANNEL_MOP_EXTENSION,
+                OPTION_MOP_EXTENSION)
                 .forEach((channel, option) -> setOnOffChannelFromOption(channel, options, option, OnOffType.OFF));
 
         setStringChannelFromOption(CHANNEL_HOOD_INTENSIVE_LEVEL, options, OPTION_HOOD_INTENSIVE_LEVEL,
@@ -1546,9 +1626,9 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
                     .filter(option -> OPTION_DRYER_DRYING_TARGET.equals(option.getKey())).findFirst();
 
             // Save options in cache only if we got options for all expected channels
-            if (cacheToSet && (!channelSpinSpeed.isPresent() || optionsSpinSpeed.isPresent())
-                    && (!channelTemperature.isPresent() || optionsTemperature.isPresent())
-                    && (!channelDryingTarget.isPresent() || optionsDryingTarget.isPresent())) {
+            if (cacheToSet && (channelSpinSpeed.isEmpty() || optionsSpinSpeed.isPresent())
+                    && (channelTemperature.isEmpty() || optionsTemperature.isPresent())
+                    && (channelDryingTarget.isEmpty() || optionsDryingTarget.isPresent())) {
                 logger.debug("Saving options in cache for program '{}'.", programKey);
                 availableProgramOptionsCache.put(programKey, availableProgramOptions);
             }
@@ -1673,7 +1753,7 @@ public abstract class AbstractHomeConnectThingHandler extends BaseThingHandler i
     private boolean addUnsupportedProgramInCache(String programKey) {
         Optional<AvailableProgram> prog = programsCache.stream().filter(program -> programKey.equals(program.getKey()))
                 .findFirst();
-        if (!prog.isPresent()) {
+        if (prog.isEmpty()) {
             programsCache.add(new AvailableProgram(programKey, false));
             logger.debug("{} added in programs cache as an unsupported program", programKey);
             return true;

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,7 +15,7 @@ package org.openhab.binding.digiplex.internal.handler;
 import static org.openhab.binding.digiplex.internal.DigiplexBindingConstants.*;
 import static org.openhab.binding.digiplex.internal.handler.TypeUtils.openClosedFromBoolean;
 
-import java.time.ZonedDateTime;
+import java.time.Instant;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -41,6 +41,8 @@ import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link DigiplexZoneHandler} is responsible for handling commands, which are
@@ -50,6 +52,7 @@ import org.openhab.core.types.UnDefType;
  */
 @NonNullByDefault
 public class DigiplexZoneHandler extends BaseThingHandler {
+    private final Logger logger = LoggerFactory.getLogger(DigiplexZoneHandler.class);
 
     private @Nullable DigiplexBridgeHandler bridgeHandler;
     private DigiplexZoneMessageHandler messageHandler = new DigiplexZoneMessageHandler();
@@ -115,7 +118,7 @@ public class DigiplexZoneHandler extends BaseThingHandler {
     public void initialize() {
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
         this.bridgeHandler = (DigiplexBridgeHandler) bridge.getHandler();
@@ -164,7 +167,12 @@ public class DigiplexZoneHandler extends BaseThingHandler {
     @Override
     public void bridgeStatusChanged(ThingStatusInfo thingStatusInfo) {
         if (thingStatusInfo.getStatus() == ThingStatus.OFFLINE) {
-            updateStatus(ThingStatus.OFFLINE, thingStatusInfo.getStatusDetail());
+            ThingStatusDetail detail = thingStatusInfo.getStatusDetail();
+            if (detail == ThingStatusDetail.NONE) {
+                updateStatus(ThingStatus.OFFLINE);
+            } else {
+                updateStatus(detail);
+            }
         } else if (thingStatusInfo.getStatus() == ThingStatus.ONLINE) {
             updateStatus(ThingStatus.ONLINE);
             DigiplexRequest request = new ZoneStatusRequest(zoneNo);
@@ -199,7 +207,7 @@ public class DigiplexZoneHandler extends BaseThingHandler {
             if (event.getZoneNo() == DigiplexZoneHandler.this.zoneNo) {
                 status = event.getStatus().toOpenClosedType();
                 extendedStatus = new StringType(event.getStatus().toString());
-                lastTriggered = new DateTimeType(ZonedDateTime.now());
+                lastTriggered = new DateTimeType(Instant.now());
                 updateChannels(false);
                 updateAreaNo(event.getAreaNo());
             }

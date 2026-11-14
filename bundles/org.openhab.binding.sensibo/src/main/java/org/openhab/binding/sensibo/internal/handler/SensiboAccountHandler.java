@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -44,7 +44,6 @@ import org.openhab.binding.sensibo.internal.dto.poddetails.AcStateDTO;
 import org.openhab.binding.sensibo.internal.dto.poddetails.GetPodsDetailsRequest;
 import org.openhab.binding.sensibo.internal.dto.poddetails.PodDetailsDTO;
 import org.openhab.binding.sensibo.internal.dto.pods.GetPodsRequest;
-import org.openhab.binding.sensibo.internal.dto.pods.PodDTO;
 import org.openhab.binding.sensibo.internal.dto.setacstateproperty.SetAcStatePropertyReponse;
 import org.openhab.binding.sensibo.internal.dto.setacstateproperty.SetAcStatePropertyRequest;
 import org.openhab.binding.sensibo.internal.dto.settimer.SetTimerReponse;
@@ -67,6 +66,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.Strictness;
 import com.google.gson.TypeAdapter;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
@@ -82,6 +82,7 @@ import com.google.gson.stream.JsonWriter;
 public class SensiboAccountHandler extends BaseBridgeHandler {
     private static final int MIN_TIME_BETWEEEN_MODEL_UPDATES_MS = 30_000;
     private static final int SECONDS_IN_MINUTE = 60;
+    private static final int REQUEST_TIMEOUT_MS = 10_000;
     public static String API_ENDPOINT = "https://home.sensibo.com/api";
     private final Logger logger = LoggerFactory.getLogger(SensiboAccountHandler.class);
     private final HttpClient httpClient;
@@ -107,7 +108,7 @@ public class SensiboAccountHandler extends BaseBridgeHandler {
             public @Nullable ZonedDateTime read(final JsonReader in) throws IOException {
                 return ZonedDateTime.parse(in.nextString());
             }
-        }).setLenient().setPrettyPrinting().create();
+        }).setStrictness(Strictness.LENIENT).setPrettyPrinting().create();
 
         requestLogger = new RequestLogger(bridge.getUID().getId(), gson);
     }
@@ -152,13 +153,11 @@ public class SensiboAccountHandler extends BaseBridgeHandler {
         } catch (final SensiboConfigurationException e) {
             logger.info("Error initializing Sensibo data: {}", e.getMessage());
             model = new SensiboModel(0); // Empty model
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Error fetching initial data: " + e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Error fetching initial data: " + e.getMessage());
         } catch (final SensiboException e) {
             logger.info("Error initializing Sensibo data: {}", e.getMessage());
             model = new SensiboModel(0); // Empty model
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "Error fetching initial data: " + e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Error fetching initial data: " + e.getMessage());
             // Reschedule init
             scheduler.schedule(this::initializeInternal, 30, TimeUnit.SECONDS);
         }
@@ -183,18 +182,12 @@ public class SensiboAccountHandler extends BaseBridgeHandler {
         final SensiboModel updatedModel = new SensiboModel(System.currentTimeMillis());
 
         final GetPodsRequest getPodsRequest = new GetPodsRequest();
-        final List<PodDTO> pods = sendRequest(buildRequest(getPodsRequest), getPodsRequest,
-                new TypeToken<ArrayList<PodDTO>>() {
+        final List<PodDetailsDTO> pods = sendRequest(buildRequest(getPodsRequest), getPodsRequest,
+                new TypeToken<ArrayList<PodDetailsDTO>>() {
                 }.getType());
 
-        for (final PodDTO pod : pods) {
-            final GetPodsDetailsRequest getPodsDetailsRequest = new GetPodsDetailsRequest(pod.id);
-
-            final PodDetailsDTO podDetails = sendRequest(buildGetPodDetailsRequest(getPodsDetailsRequest),
-                    getPodsDetailsRequest, new TypeToken<PodDetailsDTO>() {
-                    }.getType());
-
-            updatedModel.addPod(new SensiboSky(podDetails));
+        for (final PodDetailsDTO pod : pods) {
+            updatedModel.addPod(new SensiboSky(pod));
         }
 
         return updatedModel;
@@ -246,10 +239,10 @@ public class SensiboAccountHandler extends BaseBridgeHandler {
                 updateStatus(ThingStatus.ONLINE);
             } catch (SensiboConfigurationException e) {
                 logger.debug("Error updating Sensibo model do to {}", e.getMessage());
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR);
             } catch (SensiboException e) {
                 logger.debug("Error updating Sensibo model do to {}", e.getMessage());
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
             }
         }
     }
@@ -275,6 +268,7 @@ public class SensiboAccountHandler extends BaseBridgeHandler {
     private Request buildRequest(final AbstractRequest req) {
         Request request = httpClient.newRequest(API_ENDPOINT + req.getRequestUrl()).param("apiKey", config.apiKey)
                 .method(req.getMethod());
+        request.timeout(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
         if (!req.getMethod().contentEquals(HttpMethod.GET.asString())) { // POST, PATCH
             final String reqJson = gson.toJson(req);

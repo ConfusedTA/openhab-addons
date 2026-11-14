@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,10 +15,10 @@ package org.openhab.binding.networkupstools.internal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -112,7 +112,7 @@ public class NUTHandler extends BaseThingHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(NUTChannelTypeProvider.class);
+        return Set.of(NUTChannelTypeProvider.class);
     }
 
     public void setChannelTypeProvider(final NUTChannelTypeProvider channelTypeProvider) {
@@ -234,7 +234,7 @@ public class NUTHandler extends BaseThingHandler {
             }
         } catch (final RuntimeException e) {
             logger.debug("Updating ups status failed: ", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -269,7 +269,7 @@ public class NUTHandler extends BaseThingHandler {
             return true;
         } catch (final RuntimeException e) {
             logger.debug("Refresh Network UPS Tools failed: ", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             return false;
         }
     }
@@ -320,7 +320,7 @@ public class NUTHandler extends BaseThingHandler {
             return nutApiFunction.apply(localConfig.device);
         } catch (final NutException e) {
             logger.debug("Refresh Network UPS Tools failed: ", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             return null;
         }
     }

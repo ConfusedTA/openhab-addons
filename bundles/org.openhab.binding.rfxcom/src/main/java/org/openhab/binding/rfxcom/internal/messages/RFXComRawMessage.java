@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -28,7 +28,6 @@ import org.openhab.binding.rfxcom.internal.exceptions.RFXComUnsupportedChannelEx
 import org.openhab.binding.rfxcom.internal.exceptions.RFXComUnsupportedValueException;
 import org.openhab.binding.rfxcom.internal.handler.DeviceState;
 import org.openhab.core.library.types.OnOffType;
-import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.Type;
@@ -37,7 +36,7 @@ import org.openhab.core.util.HexUtils;
 /**
  * RFXCOM data class for raw messages.
  *
- * @author James Hewitt-Thomas - New addition to the PRO RFXCom firmware
+ * @author James Hewitt-Thomas - Initial contribution, new addition to the PRO RFXCom firmware
  */
 public class RFXComRawMessage extends RFXComDeviceMessageImpl<RFXComRawMessage.SubType> {
 
@@ -188,12 +187,6 @@ public class RFXComRawMessage extends RFXComDeviceMessageImpl<RFXComRawMessage.S
                         this.pulses = config.onPulsesArray;
                     } else {
                         this.pulses = config.offPulsesArray;
-                    }
-                } else if (type instanceof OpenClosedType) {
-                    if (type == OpenClosedType.OPEN) {
-                        this.pulses = config.openPulsesArray;
-                    } else {
-                        this.pulses = config.closedPulsesArray;
                     }
                 } else {
                     throw new RFXComUnsupportedChannelException("Channel " + channelId + " does not accept " + type);

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,9 +19,6 @@ import static org.openhab.core.library.unit.Units.PERCENT;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 
-import javax.measure.quantity.Dimensionless;
-import javax.measure.quantity.ElectricCurrent;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.opensprinkler.internal.OpenSprinklerStateDescriptionProvider;
 import org.openhab.binding.opensprinkler.internal.api.OpenSprinklerApi;
@@ -36,7 +33,6 @@ import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
-import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -82,7 +78,7 @@ public class OpenSprinklerDeviceHandler extends OpenSprinklerBaseHandler {
                 updateState(channel, QuantityType.valueOf(localAPI.waterLevel(), PERCENT));
                 break;
             case SENSOR_CURRENT_DRAW:
-                updateState(channel, new QuantityType<ElectricCurrent>(localAPI.currentDraw(), MILLI(Units.AMPERE)));
+                updateState(channel, new QuantityType<>(localAPI.currentDraw(), MILLI(Units.AMPERE)));
                 break;
             case SENSOR_SIGNAL_STRENGTH:
                 int rssiValue = localAPI.signalStrength();
@@ -99,7 +95,7 @@ public class OpenSprinklerDeviceHandler extends OpenSprinklerBaseHandler {
                 }
                 break;
             case SENSOR_FLOW_COUNT:
-                updateState(channel, new QuantityType<Dimensionless>(localAPI.flowSensorCount(), Units.ONE));
+                updateState(channel, new QuantityType<>(localAPI.flowSensorCount(), Units.ONE));
                 break;
             case CHANNEL_PROGRAMS:
                 break;
@@ -115,6 +111,15 @@ public class OpenSprinklerDeviceHandler extends OpenSprinklerBaseHandler {
             case NEXT_DURATION:
                 break;
             case CHANNEL_RESET_STATIONS:
+                break;
+            case CHANNEL_QUEUED_ZONES:
+                updateState(channel, new DecimalType(localAPI.getQueuedZones()));
+                break;
+            case CHANNEL_CLOUD_CONNECTED:
+                updateState(channel, OnOffType.from(localAPI.getCloudConnected() == 3));
+                break;
+            case CHANNEL_PAUSE_PROGRAMS:
+                updateState(channel, new QuantityType<>(localAPI.getPausedState(), Units.SECOND));
                 break;
             default:
                 logger.debug("Can not update the unknown channel {}", channel);
@@ -143,6 +148,18 @@ public class OpenSprinklerDeviceHandler extends OpenSprinklerBaseHandler {
             }
             channel = thing.getChannel(SENSOR_2);
             if (localAPI.getSensor2State() == -1 && channel != null) {
+                removeChannels.add(channel);
+            }
+            channel = thing.getChannel(CHANNEL_QUEUED_ZONES);
+            if (localAPI.getQueuedZones() == -1 && channel != null) {
+                removeChannels.add(channel);
+            }
+            channel = thing.getChannel(CHANNEL_CLOUD_CONNECTED);
+            if (localAPI.getCloudConnected() == -1 && channel != null) {
+                removeChannels.add(channel);
+            }
+            channel = thing.getChannel(CHANNEL_PAUSE_PROGRAMS);
+            if (localAPI.getPausedState() == -1 && channel != null) {
                 removeChannels.add(channel);
             }
             if (!removeChannels.isEmpty()) {
@@ -189,7 +206,7 @@ public class OpenSprinklerDeviceHandler extends OpenSprinklerBaseHandler {
     public void handleCommand(ChannelUID channelUID, Command command) {
         OpenSprinklerApi api = getApi();
         if (api == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "OpenSprinkler bridge returned no API.");
+            updateStatus(ThingStatus.OFFLINE, "OpenSprinkler bridge returned no API.");
             return;
         }
         OpenSprinklerHttpBridgeHandler localBridge = bridgeHandler;
@@ -232,6 +249,23 @@ public class OpenSprinklerDeviceHandler extends OpenSprinklerBaseHandler {
                         break;
                     case CHANNEL_RAIN_DELAY:
                         handleRainDelayCommand(channelUID, command, api);
+                        break;
+                    case CHANNEL_PAUSE_PROGRAMS:
+                        if (command == OnOffType.OFF) {
+                            api.setPausePrograms(0);
+                        } else if (command instanceof DecimalType) {
+                            api.setPausePrograms(((BigDecimal) command).intValue());
+                        } else if (command instanceof QuantityType<?>) {
+                            QuantityType<?> quantity = (QuantityType<?>) command;
+                            quantity = quantity.toUnit(Units.SECOND);
+                            if (quantity != null) {
+                                api.setPausePrograms(quantity.toBigDecimal().intValue());
+                            }
+                        } else {
+                            logger.warn(
+                                    "The CHANNEL_PAUSE_PROGRAMS only supports QuanityType in seconds, DecimalType and OFF");
+                            return;
+                        }
                         break;
                 }
                 localBridge.delayedRefresh();// update sensors and controls after command is sent

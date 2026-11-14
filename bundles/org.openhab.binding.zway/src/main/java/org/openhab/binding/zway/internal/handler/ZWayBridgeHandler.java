@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -99,7 +99,7 @@ public class ZWayBridgeHandler extends BaseBridgeHandler implements IZWayApiCall
             // suppressed. Otherwise, the task will only terminate via cancellation or
             // termination of the executor.
             try {
-                // Authenticate - thing status update with a error message
+                // Authenticate - thing status update with an error message
                 if (mZWayApi.getLogin() != null) {
                     // Thing status set to online in login callback
                     logger.info("Z-Way bridge successfully authenticated");
@@ -139,8 +139,7 @@ public class ZWayBridgeHandler extends BaseBridgeHandler implements IZWayApiCall
                     logger.error("Unexpected error");
                 }
                 if (getThing().getStatus() == ThingStatus.ONLINE) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
-                            "Error occurred when initialize bridge.");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Error occurred when initialize bridge.");
                 }
             }
         }
@@ -238,14 +237,13 @@ public class ZWayBridgeHandler extends BaseBridgeHandler implements IZWayApiCall
     public void initialize() {
         logger.info("Initializing Z-Way bridge ...");
 
-        // Set thing status to a valid status
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_PENDING, "Checking configuration...");
-
-        // Configuration - thing status update with a error message
+        // Configuration - thing status update with an error message
         mConfig = loadAndCheckConfiguration();
 
         if (mConfig != null) {
             logger.debug("Configuration complete: {}", mConfig);
+
+            updateStatus(ThingStatus.UNKNOWN);
 
             mZWayApi = new ZWayApiHttp(mConfig.getZWayIpAddress(), mConfig.getZWayPort(), mConfig.getZWayProtocol(),
                     mConfig.getZWayUsername(), mConfig.getZWayPassword(), -1, false, this);
@@ -310,7 +308,7 @@ public class ZWayBridgeHandler extends BaseBridgeHandler implements IZWayApiCall
             updateProperties(properties);
 
             // Update channels
-            if (zwaveController.getData().getSecureInclusion().getValue().equals("true")) {
+            if ("true".equals(zwaveController.getData().getSecureInclusion().getValue())) {
                 updateState(SECURE_INCLUSION_CHANNEL, OnOffType.ON);
             } else {
                 updateState(SECURE_INCLUSION_CHANNEL, OnOffType.OFF);
@@ -387,42 +385,28 @@ public class ZWayBridgeHandler extends BaseBridgeHandler implements IZWayApiCall
 
         // Z-Way IP address
         String zWayIpAddress = config.getZWayIpAddress();
-        if (zWayIpAddress == null || zWayIpAddress.isBlank()) {
+        if (zWayIpAddress.isBlank()) {
             config.setZWayIpAddress("localhost"); // default value
-        }
-
-        // Z-Way Port
-        if (config.getZWayPort() == null) {
-            config.setZWayPort(8083);
         }
 
         // Z-Way Protocol
         String zWayProtocol = config.getZWayProtocol();
-        if (zWayProtocol == null || zWayProtocol.isBlank()) {
+        if (zWayProtocol.isBlank()) {
             config.setZWayProtocol("http");
         }
 
         // Z-Way Password
         String zWayPassword = config.getZWayPassword();
         if (zWayPassword == null || zWayPassword.isBlank()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The connection to the Z-Way Server can't established, because the Z-Way password is missing. Please set a Z-Way password.");
             return null;
         }
 
         // Z-Way Username
         String zWayUsername = config.getZWayUsername();
-        if (zWayUsername == null || zWayUsername.isBlank()) {
+        if (zWayUsername.isBlank()) {
             config.setZWayUsername("admin"); // default value
-        }
-
-        /***********************************
-         ****** General configuration ******
-         **********************************/
-
-        // Polling interval
-        if (config.getPollingInterval() == null) {
-            config.setPollingInterval(3600);
         }
 
         return config;
@@ -564,28 +548,27 @@ public class ZWayBridgeHandler extends BaseBridgeHandler implements IZWayApiCall
     @Override
     public void apiError(String message, boolean invalidateState) {
         if (invalidateState) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, message);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, message);
         }
     }
 
     @Override
     public void httpStatusError(int httpStatus, String message, boolean invalidateState) {
         if (invalidateState) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    message + "(HTTP status code: " + httpStatus + ").");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, message + "(HTTP status code: " + httpStatus + ").");
         }
     }
 
     @Override
     public void authenticationError() {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                 "Authentication error. Please check username and password.");
     }
 
     @Override
     public void responseFormatError(String message, boolean invalidateApiState) {
         if (invalidateApiState) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, message);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, message);
         }
     }
 

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,15 +18,22 @@ import static org.openhab.binding.enocean.internal.messages.ESP3Packet.*;
 import java.util.Arrays;
 import java.util.function.Function;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.enocean.internal.Helper;
 import org.openhab.binding.enocean.internal.messages.ERP1Message;
 import org.openhab.binding.enocean.internal.messages.ERP1Message.RORG;
+import org.openhab.binding.enocean.internal.statemachine.STMStateMachine;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.thing.Channel;
+import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
+import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
@@ -37,29 +44,26 @@ import org.slf4j.LoggerFactory;
  *
  * @author Daniel Weber - Initial contribution
  */
+@NonNullByDefault
 public abstract class EEP {
 
     protected RORG newRORG = RORG.Unknown;
-    protected byte[] bytes;
-    protected byte[] optionalData;
-    protected byte[] senderId;
-    protected byte status;
+    protected byte[] bytes = new byte[0];
+    protected byte[] optionalData = new byte[0];
+    protected byte[] senderId = new byte[0];
+    protected byte status = 0x00;
 
-    protected byte[] destinationId;
+    protected byte[] destinationId = new byte[0];
 
     protected boolean suppressRepeating;
 
     protected Logger logger = LoggerFactory.getLogger(EEP.class);
 
-    private EEPType eepType = null;
-    protected ERP1Message packet = null;
+    private @Nullable EEPType eepType = null;
+    protected @Nullable ERP1Message packet = null;
 
     public EEP() {
         // ctor for sending
-
-        status = 0x00;
-        senderId = null;
-        bytes = null;
     }
 
     public EEP(ERP1Message packet) {
@@ -73,8 +77,22 @@ public abstract class EEP {
         setOptionalData(packet.getOptionalPayload());
     }
 
-    public EEP convertFromCommand(String channelId, String channelTypeId, Command command,
-            Function<String, State> getCurrentStateFunc, Configuration config) {
+    public EEP convertFromCommand(Thing thing, ChannelUID channelUID, Command command,
+            Function<String, State> getCurrentStateFunc, @Nullable STMStateMachine<?, ?> stm) {
+
+        String channelId = channelUID.getId();
+        Channel channel = thing.getChannel(channelUID);
+        // Virtual channels (e.g. sendCommand) are not registered as real Thing channels.
+        // Allow those through; for any other unknown channel, log and bail out.
+        if (channel == null && !VIRTUALCHANNEL_SEND_COMMAND.equals(channelId)) {
+            logger.debug("Channel {} not found on thing {}; ignoring command {}", channelUID, thing.getUID(), command);
+            return this;
+        }
+
+        ChannelTypeUID channelTypeUID = (channel != null) ? channel.getChannelTypeUID() : null;
+        String channelTypeId = (channelTypeUID != null) ? channelTypeUID.getId() : "";
+        Configuration config = (channel != null) ? channel.getConfiguration() : new Configuration();
+
         if (!getEEPType().isChannelSupported(channelId, channelTypeId)) {
             throw new IllegalArgumentException(String.format("Command %s of channel %s(%s) is not supported",
                     command.toString(), channelId, channelTypeId));
@@ -83,13 +101,27 @@ public abstract class EEP {
         if (channelTypeId.equals(CHANNEL_TEACHINCMD) && command == OnOffType.ON) {
             teachInQueryImpl(config);
         } else {
-            convertFromCommandImpl(channelId, channelTypeId, command, getCurrentStateFunc, config);
+            convertFromCommandImpl(thing, channelUID, command, getCurrentStateFunc, stm);
+        }
+        return this;
+    }
+
+    public EEP convertFromCommand(String channelId, String channelTypeId, Command command,
+            Function<String, State> getCurrentStateFunc, @Nullable Configuration channelConfig) {
+        if (!getEEPType().isChannelSupported(channelId, channelTypeId)) {
+            throw new IllegalArgumentException(String.format("Command %s of channel %s(%s) is not supported",
+                    command.toString(), channelId, channelTypeId));
+        }
+        if (channelTypeId.equals(CHANNEL_TEACHINCMD) && command == OnOffType.ON) {
+            teachInQueryImpl(channelConfig);
+        } else {
+            convertFromCommandImpl(channelId, channelTypeId, command, getCurrentStateFunc, channelConfig);
         }
         return this;
     }
 
     public State convertToState(String channelId, String channelTypeId, Configuration config,
-            Function<String, State> getCurrentStateFunc) {
+            Function<String, @Nullable State> getCurrentStateFunc, @Nullable STMStateMachine<?, ?> stm) {
         if (!getEEPType().isChannelSupported(channelId, channelTypeId)) {
             throw new IllegalArgumentException(
                     String.format("Channel %s(%s) is not supported", channelId, channelTypeId));
@@ -97,13 +129,13 @@ public abstract class EEP {
 
         switch (channelTypeId) {
             case CHANNEL_RSSI:
-                if (this.optionalData == null || this.optionalData.length < 6) {
+                if (this.optionalData.length < 6) {
                     return UnDefType.UNDEF;
                 }
 
                 return new DecimalType((this.optionalData[5] & 0xFF) * -1);
             case CHANNEL_REPEATCOUNT:
-                if (this.optionalData == null || this.optionalData.length < 6) {
+                if (this.optionalData.length < 6) {
                     return UnDefType.UNDEF;
                 }
 
@@ -112,16 +144,17 @@ public abstract class EEP {
                 return new DateTimeType();
         }
 
-        return convertToStateImpl(channelId, channelTypeId, getCurrentStateFunc, config);
+        return convertToStateImpl(channelId, channelTypeId, getCurrentStateFunc, config, stm);
     }
 
-    public String convertToEvent(String channelId, String channelTypeId, String lastEvent, Configuration config) {
+    public @Nullable String convertToEvent(String channelId, String channelTypeId, @Nullable String lastEvent,
+            Configuration config, @Nullable STMStateMachine<?, ?> stm) {
         if (!getEEPType().isChannelSupported(channelId, channelTypeId)) {
             throw new IllegalArgumentException(
                     String.format("Channel %s(%s) is not supported", channelId, channelTypeId));
         }
 
-        return convertToEventImpl(channelId, channelTypeId, lastEvent, config);
+        return convertToEventImpl(channelId, channelTypeId, lastEvent, config, stm);
     }
 
     public EEP setRORG(RORG newRORG) {
@@ -129,7 +162,7 @@ public abstract class EEP {
         return this;
     }
 
-    public EEP setData(byte... bytes) {
+    public EEP setData(byte... bytes) throws IllegalArgumentException {
         if (!validateData(bytes)) {
             throw new IllegalArgumentException();
         }
@@ -139,11 +172,11 @@ public abstract class EEP {
     }
 
     public boolean hasData() {
-        return (this.bytes != null) && (this.bytes.length > 0);
+        return (this.bytes.length > 0);
     }
 
     public EEP setOptionalData(byte... bytes) {
-        if (bytes != null) {
+        if (bytes.length > 0) {
             this.optionalData = Arrays.copyOf(bytes, bytes.length);
         }
 
@@ -151,7 +184,7 @@ public abstract class EEP {
     }
 
     public EEP setSenderId(byte[] senderId) {
-        if (senderId == null || senderId.length != ESP3_SENDERID_LENGTH) {
+        if (senderId.length != ESP3_SENDERID_LENGTH) {
             throw new IllegalArgumentException();
         }
 
@@ -169,15 +202,10 @@ public abstract class EEP {
         return this;
     }
 
-    public final ERP1Message getERP1Message() {
+    public final @Nullable ERP1Message getERP1Message() {
         if (isValid()) {
-            int optionalDataLength = 0;
-            if (optionalData != null) {
-                optionalDataLength = optionalData.length;
-            }
-
             byte[] payLoad = new byte[ESP3_RORG_LENGTH + getDataLength() + ESP3_SENDERID_LENGTH + ESP3_STATUS_LENGTH
-                    + optionalDataLength];
+                    + optionalData.length];
             Arrays.fill(payLoad, ZERO);
 
             byte rorgValue = getEEPType().getRORG().getValue();
@@ -189,7 +217,7 @@ public abstract class EEP {
             payLoad = Helper.concatAll(new byte[] { rorgValue }, bytes, senderId,
                     new byte[] { (byte) (status | (suppressRepeating ? 0b1111 : 0)) }, optionalData);
 
-            return new ERP1Message(payLoad.length - optionalDataLength, optionalDataLength, payLoad);
+            return new ERP1Message(payLoad.length - optionalData.length, optionalData.length, payLoad);
         } else {
             logger.warn("ERP1Message for EEP {} is not valid!", this.getClass().getName());
         }
@@ -198,45 +226,73 @@ public abstract class EEP {
     }
 
     protected boolean validateData(byte[] bytes) {
-        return bytes != null && bytes.length == getDataLength();
+        return bytes.length == getDataLength();
     }
 
     public boolean isValid() {
-        return validateData(bytes) && senderId != null && senderId.length == ESP3_SENDERID_LENGTH;
+        return validateData(bytes) && senderId.length == ESP3_SENDERID_LENGTH;
     }
 
     protected EEPType getEEPType() {
-        if (eepType == null) {
-            eepType = EEPType.getType(this.getClass());
+        EEPType localType = eepType;
+        if (localType == null) {
+            localType = EEPType.getType(this.getClass());
         }
 
-        return eepType;
+        return localType;
     }
 
     protected int getDataLength() {
-        if (getEEPType() != null) {
-            return getEEPType().getRORG().getDataLength();
-        }
-
-        return 0;
+        return getEEPType().getRORG().getDataLength();
     }
 
     protected void convertFromCommandImpl(String channelId, String channelTypeId, Command command,
-            Function<String, State> getCurrentStateFunc, Configuration config) {
+            Function<String, State> getCurrentStateFunc, @Nullable Configuration config) {
+        // legacy interface
         logger.warn("No implementation for sending data from channel {}/{} for this EEP!", channelId, channelTypeId);
     }
 
+    protected void convertFromCommandImpl(Thing thing, ChannelUID channelUID, Command command,
+            Function<String, State> getCurrentStateFunc, @Nullable STMStateMachine<?, ?> stm) {
+
+        // interface for EEPs using the state machine
+        Channel channel = thing.getChannel(channelUID);
+        if (channel != null) {
+            Configuration channelConfig = channel.getConfiguration();
+            String channelId = channelUID.getId();
+            ChannelTypeUID channelTypeUID = channel.getChannelTypeUID();
+            String channelTypeId = (channelTypeUID != null) ? channelTypeUID.getId() : "";
+
+            convertFromCommandImpl(channelId, channelTypeId, command, getCurrentStateFunc, channelConfig);
+        }
+    }
+
     protected State convertToStateImpl(String channelId, String channelTypeId,
-            Function<String, State> getCurrentStateFunc, Configuration config) {
+            Function<String, @Nullable State> getCurrentStateFunc, Configuration config) {
+        // legacy interface
         return UnDefType.UNDEF;
     }
 
-    protected String convertToEventImpl(String channelId, String channelTypeId, String lastEvent,
+    protected State convertToStateImpl(String channelId, String channelTypeId,
+            Function<String, @Nullable State> getCurrentStateFunc, Configuration config,
+            @Nullable STMStateMachine<?, ?> stm) {
+        // interface for EEPs using the state machine
+        return convertToStateImpl(channelId, channelTypeId, getCurrentStateFunc, config);
+    }
+
+    protected @Nullable String convertToEventImpl(String channelId, String channelTypeId, @Nullable String lastEvent,
             Configuration config) {
+        // legacy interface
         return null;
     }
 
-    protected void teachInQueryImpl(Configuration config) {
+    protected @Nullable String convertToEventImpl(String channelId, String channelTypeId, @Nullable String lastEvent,
+            Configuration config, @Nullable STMStateMachine<?, ?> stm) {
+        // interface for EEPs using the state machine
+        return convertToEventImpl(channelId, channelTypeId, lastEvent, config);
+    }
+
+    protected void teachInQueryImpl(@Nullable Configuration config) {
         logger.warn("No implementation for sending a response for this teach in!");
     }
 
@@ -245,7 +301,7 @@ public abstract class EEP {
         return (byteData & mask) != 0;
     }
 
-    public ThingTypeUID getThingTypeUID() {
+    public @Nullable ThingTypeUID getThingTypeUID() {
         return getEEPType().getThingTypeUID();
     }
 
@@ -258,7 +314,7 @@ public abstract class EEP {
     }
 
     public EEP setDestinationId(byte[] destinationId) {
-        if (destinationId != null) {
+        if (destinationId.length > 0) {
             this.destinationId = Arrays.copyOf(destinationId, destinationId.length);
             setOptionalData(Helper.concatAll(new byte[] { 0x01 }, destinationId, new byte[] { (byte) 0xff, 0x00 }));
         }

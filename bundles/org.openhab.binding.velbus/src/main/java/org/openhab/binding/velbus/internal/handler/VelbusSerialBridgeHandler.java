@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -78,7 +78,7 @@ public class VelbusSerialBridgeHandler extends VelbusBridgeHandler implements Se
         // parse ports and if the port is found, initialize the reader
         SerialPortIdentifier portId = serialPortManager.getIdentifier(serialBridgeConfig.port);
         if (portId == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR, "Port is not known!");
+            updateStatus(ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR, "Port is not known!");
             return false;
         }
 

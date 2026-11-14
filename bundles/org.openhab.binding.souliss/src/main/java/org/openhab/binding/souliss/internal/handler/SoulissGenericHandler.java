@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -87,14 +87,13 @@ public abstract class SoulissGenericHandler extends BaseThingHandler implements 
                         "N" + Integer.toString(iNode) + "S" + Integer.toString(iSlot));
             }
         } catch (Exception e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "Error getting node/slot from souliss typical (thing config)");
         }
     }
 
     /**
-     * @param SoulissNode
-     *            the SoulissNodeID to get
+     * @return the SoulissNodeID
      */
     public int getNode() {
         return iNode;

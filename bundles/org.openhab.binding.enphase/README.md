@@ -11,9 +11,10 @@ Therefore using a refresh rate shorter doesn't provide more information.
 
 The follow things are supported:
 
-* `envoy` The Envoy gateway thing, which is a bridge thing.
-* `inverter` A Enphase micro inverter connected to a solar panel.
-* `relay`  A Enphase relay.
+- `envoy` The Envoy gateway thing, which is a bridge thing.
+- `inverter` An Enphase micro inverter connected to a solar panel.
+- `relay`  An Enphase relay.
+- `battery` An Enphase IQ Battery (Encharge). Only available on Envoy gateways with version 7 firmware and higher.
 
 Not all Envoy gateways support all channels and things.
 Therefore some data on inverters and the relay may not be available.
@@ -21,32 +22,61 @@ The binding auto detects which data is available and will report this in the log
 
 ## Discovery
 
-The binding can discover Envoy gateways, micro inverters and relays.
+The binding can discover Envoy gateways, micro inverters, relays and IQ Batteries.
+If login access is needed the Bridge `envoy` needs to be configured after discovering and adding before other things can be discovered.
+In that case, after configuring the login, run discovery again.
 
 ## Thing Configuration
 
-The Envoy gateway thing `envoy` has the following configuration options:
+### Bridge configuration
+
+Depending on the software version of the Envoy gateway thing `envoy` there are different configuration options needed.
+Newer versions of the Envoy software (> version 7) require a different authentication method.
+Because the configuration is different, different bridge things are available.
+
+The following options are relevant for all envoy versions:
 
 | parameter    | required | description                                                                                                 |
 |--------------|----------|-------------------------------------------------------------------------------------------------------------|
 | serialNumber | yes      | The serial number of the Envoy gateway which can be found on the gateway                                    |
 | hostname     | no       | The host name/ip address of the Envoy gateway. Leave empty to auto detect                                   |
+| refresh      | no       | Period between data updates. The default is the same 5 minutes the data is actually refreshed on the Envoy  |
+
+#### Envoy below version 7
+
+For Envoy versions below 7 has the following authentication configuration options are relevant:
+
+| parameter    | required | description                                                                                                 |
+|--------------|----------|-------------------------------------------------------------------------------------------------------------|
 | username     | no       | The user name to the Envoy gateway. Leave empty when using the default user name                            |
 | password     | no       | The password to the Envoy gateway. Leave empty when using the default password                              |
-| refresh      | no       | Period between data updates. The default is the same 5 minutes the data is actual refreshed on the Envoy    |
 
-The micro inverter `inverter` and `relay` things have only 1 parameter:
+#### Envoy from version 7
+
+For Envoy versions 7 and newer has the following authentication configuration options are relevant:
+
+| parameter    | required | description                                                                                                 |
+|--------------|----------|-------------------------------------------------------------------------------------------------------------|
+| autoJwt      | yes      | Specify if the JWT access token should be obtained by logging in or if the jwt is provided manually         |
+| username     | yes/no   | The user name to the Entrez server. Required if auto Jwt is true                                            |
+| password     | yes/no   | The password to the Entrez server. Required if auto Jwt is true                                             |
+| siteName     | yes/no   | The name of the site. Can be found above the Site Id in the Enphase app. Required when autoJwt is true      |
+| jwt          | yes/no   | The jwt is required if autoJWT is false, if it's true jwt is not used                                       |
+
+### Thing configuration
+
+The micro inverter `inverter`, `relay` and `battery` things have only 1 parameter:
 
 | parameter    | required | description                       |
 |--------------|----------|-----------------------------------|
-| serialNumber | yes      | The serial number of the inverter |
+| serialNumber | yes      | The serial number of the device   |
 
 ## Channels
 
 The `envoy` thing has can show both production as well as consumption data.
 There are channel groups for `production` and `consumption` data.
 The `consumption` data is only available if the gateway reports this.
-A example of a production channel name is: `production#wattsNow`.
+An example of a production channel name is: `production#wattsNow`.
 
 | channel            | type          | description                           |
 |--------------------|---------------|---------------------------------------|
@@ -55,13 +85,32 @@ A example of a production channel name is: `production#wattsNow`.
 | wattHoursLifetime  | Number:Energy | Watt hours produced over the lifetime |
 | wattsNow           | Number:Power  | Latest watts produced                 |
 
+On Envoy gateways with version 7 firmware and higher the `consumption` data is read from the metering endpoint.
+This endpoint only provides the instantaneous `wattsNow` value (and `wattHoursLifetime` when a total-consumption meter is present).
+The `wattHoursToday` and `wattHoursSevenDays` consumption channels are not available from this endpoint and stay undefined.
+
+When IQ Batteries are installed, the `storage` channel group shows the aggregated data of all batteries.
+This data is only available on Envoy gateways with version 7 firmware and higher, and is only retrieved when at least one of these channels is linked.
+
+| channel         | type                 | description                                                                  |
+|-----------------|----------------------|------------------------------------------------------------------------------|
+| wattsNow        | Number:Power         | Latest battery power. Positive when discharging, negative when charging      |
+| stateOfCharge   | Number:Dimensionless | State of charge of all IQ Batteries combined                                 |
+| availableEnergy | Number:Energy        | Energy currently stored in the batteries                                     |
+
 The `inverter` thing has the following channels:
 
-| channel         | type         | description                          |
-|-----------------|--------------|--------------------------------------|
-| lastReportWatts | Number:Power | Last reported power delivery         |
-| maxReportWatts  | Number:Power | Maximum reported power               |
-| lastReportDate  | DateTime     | Date of last reported power delivery |
+| channel            | type          | description                           |
+|--------------------|---------------|---------------------------------------|
+| lastReportWatts    | Number:Power  | Last reported power delivery          |
+| maxReportWatts     | Number:Power  | Maximum reported power                |
+| lastReportDate     | DateTime      | Date of last reported power delivery  |
+| wattHoursToday     | Number:Energy | Watt hours produced today             |
+| wattHoursSevenDays | Number:Energy | Watt hours produced the last 7 days   |
+| wattHoursLifetime  | Number:Energy | Watt hours produced over the lifetime |
+| wattsNow           | Number:Power  | Latest watts produced                 |
+
+The `wattHoursToday`, `wattHoursSevenDays`, `wattHoursLifetime` and `wattsNow` inverter channels are only available if the Envoy gateway supports the per-device energy data endpoint.
 
 The following channels are only available if supported by the Envoy gateway:
 
@@ -73,6 +122,18 @@ The `relay` thing has the following channels:
 | line1Connected  | Contact      | If power line 1 is connected. If closed it's connected |
 | line2Connected  | Contact      | If power line 2 is connected. If closed it's connected |
 | line2Connected  | Contact      | If power line 3 is connected. If closed it's connected |
+
+The `battery` thing has the following channels:
+
+| channel            | type                 | advanced | description                              |
+|--------------------|----------------------|----------|------------------------------------------|
+| stateOfCharge      | Number:Dimensionless | no       | State of charge of the battery           |
+| temperature        | Number:Temperature   | no       | Temperature of the battery               |
+| maxCellTemperature | Number:Temperature   | no       | Highest temperature of the battery cells |
+| capacity           | Number:Energy        | yes      | Capacity of the battery                  |
+| sleepEnabled       | Switch (Read Only)   | yes      | If the battery sleep mode is enabled     |
+| status             | String               | no       | The status of the battery                |
+| communicating      | Switch (Read Only)   | yes      | If the battery is communicating          |
 
 The `inverter` and `relay` have the following additional advanced channels:
 
@@ -87,27 +148,39 @@ The `inverter` and `relay` have the following additional advanced channels:
 
 Things example:
 
-```
+```java
 Bridge enphase:envoy:789012 "Envoy" [ serialNumber="12345789012" ] {
   Things:
     inverter 123456 "Enphase Inverter 123456" [ serialNumber="789012123456" ]
     inverter 223456 "Enphase Inverter 223456" [ serialNumber="789012223456" ]
+    battery 323456 "Enphase Battery 323456" [ serialNumber="789012323456" ]
 }
 ```
 
 Items example:
 
-```
+```java
 Number:Power  envoyWattsNow          "Watts Now [%d %unit%]"          { channel="enphase:envoy:789012:production#wattsNow" }
 Number:Energy envoyWattHoursToday    "Watt Hours Today [%d %unit%]"   { channel="enphase:envoy:789012:production#wattHoursToday" }
 Number:Energy envoyWattHours7Days    "Watt Hours 7 Days [%.1f kWh]"   { channel="enphase:envoy:789012:production#wattHoursSevenDays" }
 Number:Energy envoyWattHoursLifetime "Watt Hours Lifetime [%.1f kWh]" { channel="enphase:envoy:789012:production#wattHoursLifetime" }
 
-Number:Power i1LastReportWatts "Last Report [%d %unit%]"                          { channel="enphase:inverter:789012:123456:lastReportWatts" }
-Number:Power i1MaxReportWatts  "Max Report [%d %unit%]"                           { channel="enphase:inverter:789012:123456:maxReportWatts" }
-DateTime     i1LastReportDate  "Last Report Date [%1$tY-%1$tm-%1$td %1$tH:%1$tM]" { channel="enphase:inverter:789012:123456:lastReportDate" }
+Number:Power  i1LastReportWatts    "Last Report [%d %unit%]"                          { channel="enphase:inverter:789012:123456:lastReportWatts" }
+Number:Power  i1MaxReportWatts     "Max Report [%d %unit%]"                           { channel="enphase:inverter:789012:123456:maxReportWatts" }
+DateTime      i1LastReportDate     "Last Report Date [%1$tY-%1$tm-%1$td %1$tH:%1$tM]" { channel="enphase:inverter:789012:123456:lastReportDate" }
+Number:Energy i1WattHoursToday     "Watt Hours Today [%d %unit%]"                     { channel="enphase:inverter:789012:123456:wattHoursToday" }
+Number:Energy i1WattHoursSevenDays "Watt Hours 7 Days [%.1f kWh]"                    { channel="enphase:inverter:789012:123456:wattHoursSevenDays" }
+Number:Energy i1WattHoursLifetime  "Watt Hours Lifetime [%.1f kWh]"                   { channel="enphase:inverter:789012:123456:wattHoursLifetime" }
+Number:Power  i1WattsNow           "Watts Now [%d %unit%]"                            { channel="enphase:inverter:789012:123456:wattsNow" }
 
 Number:Power i2LastReportWatts "Last Report [%d %unit%]"                          { channel="enphase:inverter:789012:223456:lastReportWatts" }
 Number:Power i21MaxReportWatts "Max Report [%d %unit%]"                           { channel="enphase:inverter:789012:223456:maxReportWatts" }
 DateTime     i2LastReportDate  "Last Report Date [%1$tY-%1$tm-%1$td %1$tH:%1$tM]" { channel="enphase:inverter:789012:223456:lastReportDate" }
+
+Number:Power         envoyBatteryPower    "Battery Power [%d %unit%]"     { channel="enphase:envoy:789012:storage#wattsNow" }
+Number:Dimensionless envoyBatterySoc      "Battery SoC [%d %unit%]"       { channel="enphase:envoy:789012:storage#stateOfCharge" }
+Number:Energy        envoyBatteryEnergy   "Battery Energy [%.1f kWh]"     { channel="enphase:envoy:789012:storage#availableEnergy" }
+
+Number:Dimensionless b1StateOfCharge      "Battery SoC [%d %unit%]"       { channel="enphase:battery:789012:323456:stateOfCharge" }
+Number:Temperature   b1Temperature        "Battery Temperature [%d %unit%]" { channel="enphase:battery:789012:323456:temperature" }
 ```

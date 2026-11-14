@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -20,11 +20,13 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.gpstracker.internal.discovery.TrackerDiscoveryService;
 import org.openhab.binding.gpstracker.internal.handler.TrackerHandler;
-import org.openhab.binding.gpstracker.internal.message.LocationMessage;
 import org.openhab.binding.gpstracker.internal.message.MessageUtil;
-import org.openhab.binding.gpstracker.internal.message.TransitionMessage;
+import org.openhab.binding.gpstracker.internal.message.dto.LocationMessage;
+import org.openhab.binding.gpstracker.internal.message.dto.TransitionMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +35,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Gabor Bicskei - Initial contribution
  */
+@NonNullByDefault
 public abstract class AbstractCallbackServlet extends HttpServlet {
 
     private static final long serialVersionUID = -2725161358635927815L;
@@ -71,7 +74,20 @@ public abstract class AbstractCallbackServlet extends HttpServlet {
     protected abstract String getPath();
 
     /**
-     * Process the HTTP requests from tracker applications
+     * Process the HTTP requests from tracker applications.
+     *
+     * <p>
+     * On success the response always contains HTTP 200 with {@code Content-Type: application/json}
+     * and a JSON array body, possibly empty. The empty case is {@code []}; when notifications are
+     * returned, the array contains notification objects. This conforms to the OwnTracks HTTP
+     * protocol specification:
+     * <a href="https://owntracks.org/booklet/tech/http/">https://owntracks.org/booklet/tech/http/</a>
+     * </p>
+     * <p>
+     * OwnTracks Android &ge; 2.5.x strictly parses the response body. An empty body causes a
+     * {@code JsonDecodingException} in the client, which re-queues every sent message indefinitely
+     * and stops location updates from reaching openHAB.
+     * </p>
      *
      * @param req HTTP request
      * @param resp HTTP response
@@ -91,14 +107,19 @@ public abstract class AbstractCallbackServlet extends HttpServlet {
             String json = jb.toString().replaceAll("\\p{Z}", "");
             logger.debug("Post message received from {} tracker: {}", getProvider(), json);
 
+            List<? extends LocationMessage> responseMessages = Collections.emptyList();
             LocationMessage message = messageUtil.fromJson(json);
             if (message != null) {
-                List<? extends LocationMessage> response = processMessage(message);
-                if (response != null) {
-                    resp.getWriter().append(messageUtil.toJson(response)).flush();
-                }
+                responseMessages = processMessage(message);
             }
+
+            // Set status and Content-Type before writing the body (servlet spec requirement).
+            // The OwnTracks HTTP spec mandates "[]" as the response body on HTTP 200, even when
+            // there are no notifications to return.
             resp.setStatus(HttpServletResponse.SC_OK);
+            resp.setContentType("application/json");
+            resp.setCharacterEncoding("UTF-8");
+            resp.getWriter().append(messageUtil.toJson(responseMessages)).flush();
         } catch (Exception e) {
             logger.error("Error processing location report:", e);
             resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -117,9 +138,8 @@ public abstract class AbstractCallbackServlet extends HttpServlet {
         if (!trackerId.isEmpty()) {
             TrackerHandler recorder = getHandlerById(trackerId);
             if (recorder != null) {
-                if (message instanceof TransitionMessage) {
-                    TransitionMessage tm = (TransitionMessage) message;
-                    recorder.doTransition(tm);
+                if (message instanceof TransitionMessage transitionMessage) {
+                    recorder.doTransition(transitionMessage);
                 } else {
                     recorder.updateLocation(message);
                 }
@@ -139,16 +159,15 @@ public abstract class AbstractCallbackServlet extends HttpServlet {
      * @param trackerId Tracker id.
      * @return Handler for tracker.
      */
-    private TrackerHandler getHandlerById(String trackerId) {
-        if (trackerId != null) {
-            TrackerHandler handler = trackerRegistry.getTrackerHandler(trackerId);
-            if (handler == null) {
-                // handler was not found - adding the tracker to discovery service.
-                discoveryService.addTracker(trackerId);
-            } else {
-                return handler;
-            }
+    private @Nullable TrackerHandler getHandlerById(String trackerId) {
+        TrackerHandler handler = trackerRegistry.getTrackerHandler(trackerId);
+        if (handler == null) {
+            // handler was not found - adding the tracker to discovery service.
+            discoveryService.addTracker(trackerId);
+        } else {
+            return handler;
         }
+
         return null;
     }
 

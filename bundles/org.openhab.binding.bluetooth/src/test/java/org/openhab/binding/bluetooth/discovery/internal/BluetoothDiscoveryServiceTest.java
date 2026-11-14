@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,15 +16,12 @@ import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
-import org.apache.commons.lang3.RandomStringUtils;
-import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,8 +51,7 @@ import org.openhab.core.config.discovery.DiscoveryResult;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.openhab.core.util.StringUtils;
 
 /**
  * Tests {@link BluetoothDiscoveryService}.
@@ -63,13 +59,11 @@ import org.slf4j.LoggerFactory;
  * @author Connor Petty - Initial contribution
  */
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.WARN)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @NonNullByDefault
 public class BluetoothDiscoveryServiceTest {
 
     private static final int TIMEOUT = 2000;
-
-    private final Logger logger = LoggerFactory.getLogger(BluetoothDiscoveryServiceTest.class);
 
     private @NonNullByDefault({}) BluetoothDiscoveryService discoveryService;
 
@@ -201,7 +195,7 @@ public class BluetoothDiscoveryServiceTest {
 
         MockBluetoothAdapter mockAdapter1 = new MockBluetoothAdapter();
         MockBluetoothDevice mockDevice = mockAdapter1.getDevice(address);
-        String deviceName = RandomStringUtils.randomAlphanumeric(10);
+        String deviceName = StringUtils.getRandomAlphanumeric(10);
         mockDevice.setDeviceName(deviceName);
 
         BluetoothDevice device = Mockito.spy(mockDevice);
@@ -228,7 +222,7 @@ public class BluetoothDiscoveryServiceTest {
         MockBluetoothAdapter mockAdapter2 = new MockBluetoothAdapter();
         MockBluetoothDevice mockDevice1 = mockAdapter1.getDevice(address);
         MockBluetoothDevice mockDevice2 = mockAdapter2.getDevice(address);
-        String deviceName = RandomStringUtils.randomAlphanumeric(10);
+        String deviceName = StringUtils.getRandomAlphanumeric(10);
         mockDevice1.setDeviceName(deviceName);
         mockDevice2.setDeviceName(deviceName);
 
@@ -266,7 +260,7 @@ public class BluetoothDiscoveryServiceTest {
     public void nonConnectionParticipantTest() {
         MockBluetoothAdapter mockAdapter1 = new MockBluetoothAdapter();
         MockBluetoothDevice mockDevice = mockAdapter1.getDevice(TestUtils.randomAddress());
-        String deviceName = RandomStringUtils.randomAlphanumeric(10);
+        String deviceName = StringUtils.getRandomAlphanumeric(10);
         mockDevice.setDeviceName(deviceName);
 
         BluetoothDevice device = Mockito.spy(mockDevice);
@@ -423,7 +417,7 @@ public class BluetoothDiscoveryServiceTest {
         MockBluetoothAdapter mockAdapter2 = new MockBluetoothAdapter();
         MockBluetoothDevice mockDevice1 = mockAdapter1.getDevice(address);
         MockBluetoothDevice mockDevice2 = mockAdapter2.getDevice(address);
-        String deviceName = RandomStringUtils.randomAlphanumeric(10);
+        String deviceName = StringUtils.getRandomAlphanumeric(10);
 
         MockDiscoveryParticipant participant2 = new MockDiscoveryParticipant() {
             @Override
@@ -514,7 +508,7 @@ public class BluetoothDiscoveryServiceTest {
 
         @Override
         public Set<ThingTypeUID> getSupportedThingTypeUIDs() {
-            return Collections.emptySet();
+            return Set.of();
         }
 
         @Override
@@ -539,27 +533,30 @@ public class BluetoothDiscoveryServiceTest {
         private ThingTypeUID typeUID;
 
         public MockDiscoveryParticipant() {
-            this.typeUID = new ThingTypeUID(BluetoothBindingConstants.BINDING_ID,
-                    RandomStringUtils.randomAlphabetic(6));
+            this.typeUID = new ThingTypeUID(BluetoothBindingConstants.BINDING_ID, StringUtils.getRandomAlphabetic(6));
         }
 
         @Override
         public Set<ThingTypeUID> getSupportedThingTypeUIDs() {
-            return Collections.singleton(typeUID);
+            return Set.of(typeUID);
         }
 
         @Override
         public @Nullable DiscoveryResult createResult(BluetoothDiscoveryDevice device) {
-            String repProp = RandomStringUtils.randomAlphabetic(6);
-            return DiscoveryResultBuilder.create(getThingUID(device)).withLabel(RandomStringUtils.randomAlphabetic(6))
-                    .withProperty(repProp, RandomStringUtils.randomAlphabetic(6)).withRepresentationProperty(repProp)
+            String repProp = StringUtils.getRandomAlphabetic(6);
+            ThingUID thingUID = getThingUID(device);
+            if (thingUID == null) {
+                return null;
+            }
+            return DiscoveryResultBuilder.create(thingUID).withLabel(StringUtils.getRandomAlphabetic(6))
+                    .withProperty(repProp, StringUtils.getRandomAlphabetic(6)).withRepresentationProperty(repProp)
                     .withBridge(device.getAdapter().getUID()).build();
         }
 
         @Override
-        public @NonNull ThingUID getThingUID(BluetoothDiscoveryDevice device) {
+        public @Nullable ThingUID getThingUID(BluetoothDiscoveryDevice device) {
             String deviceName = device.getName();
-            String id = deviceName != null ? deviceName : RandomStringUtils.randomAlphabetic(6);
+            String id = deviceName != null ? deviceName : StringUtils.getRandomAlphabetic(6);
             return new ThingUID(typeUID, device.getAdapter().getUID(), id);
         }
     }

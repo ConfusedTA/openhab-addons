@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -88,7 +88,7 @@ public class EtherRainHandler extends BaseThingHandler {
         try {
             device.commandStatus();
         } catch (EtherRainException | IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                     "Could not create a connection to the EtherRain");
             logger.debug("Could not open API connection to the EtherRain device. Exception received: {}",
                     e.getMessage());
@@ -107,7 +107,7 @@ public class EtherRainHandler extends BaseThingHandler {
         logger.debug("Starting Etherrain Update Job");
         this.updateJob = scheduler.scheduleWithFixedDelay(this::updateBridge, 0, config.refresh, TimeUnit.SECONDS);
 
-        logger.debug("EtherRain sucessfully initialized. Starting status poll at: {}", config.refresh);
+        logger.debug("EtherRain successfully initialized. Starting status poll at: {}", config.refresh);
     }
 
     private void stopUpdateJob() {
@@ -138,7 +138,7 @@ public class EtherRainHandler extends BaseThingHandler {
         try {
             response = device.commandStatus();
         } catch (EtherRainException | IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                     "Could not create a connection to the EtherRain");
             logger.debug("Could not open API connection to the EtherRain device. Exception received: {}",
                     e.getMessage());

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -81,8 +81,7 @@ public class BuienradarHandler extends BaseThingHandler {
 
         boolean configValid = true;
         if (config.location == null || config.location.isBlank()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.conf-error-missing-location");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-missing-location");
             configValid = false;
         }
 
@@ -90,8 +89,7 @@ public class BuienradarHandler extends BaseThingHandler {
             location = new PointType(config.location);
         } catch (IllegalArgumentException e) {
             location = null;
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.conf-error-parsing-location");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-parsing-location");
             configValid = false;
         }
 
@@ -121,12 +119,12 @@ public class BuienradarHandler extends BaseThingHandler {
         }
         if (tries <= 0) {
             // We are out of tries, stop retrying.
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
             return;
         }
         try {
             final Optional<List<Prediction>> predictionsOpt = client.getPredictions(location);
-            if (!predictionsOpt.isPresent()) {
+            if (predictionsOpt.isEmpty()) {
                 // Did not get a result, retry the retrieval.
                 // Buienradar is not a very stable source and returns nothing quite regular
                 if (tries <= 2) {
@@ -164,7 +162,7 @@ public class BuienradarHandler extends BaseThingHandler {
             updateStatus(ThingStatus.ONLINE);
         } catch (IOException e) {
             logger.warn("Cannot retrieve predictions", e);
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                     String.format("Could not reach buienradar: %s", e.getMessage()));
         }
     }

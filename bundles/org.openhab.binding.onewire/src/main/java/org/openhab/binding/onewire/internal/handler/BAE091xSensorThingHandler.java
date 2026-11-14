@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,7 +14,6 @@ package org.openhab.binding.onewire.internal.handler;
 
 import static org.openhab.binding.onewire.internal.OwBindingConstants.*;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -47,11 +46,11 @@ import org.slf4j.LoggerFactory;
  */
 @NonNullByDefault
 public class BAE091xSensorThingHandler extends OwBaseThingHandler {
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Collections.singleton(THING_TYPE_BAE091X);
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_BAE091X);
 
     private final Logger logger = LoggerFactory.getLogger(BAE091xSensorThingHandler.class);
 
-    public static final Set<OwSensorType> SUPPORTED_SENSOR_TYPES = Collections.singleton(OwSensorType.BAE0910);
+    public static final Set<OwSensorType> SUPPORTED_SENSOR_TYPES = Set.of(OwSensorType.BAE0910);
 
     public BAE091xSensorThingHandler(Thing thing, OwDynamicStateDescriptionProvider dynamicStateDescriptionProvider) {
         super(thing, dynamicStateDescriptionProvider, SUPPORTED_SENSOR_TYPES);
@@ -89,9 +88,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
 
         sensors.add(new BAE0910(sensorId, this));
 
-        scheduler.execute(() -> {
-            configureThingChannels();
-        });
+        scheduler.execute(this::configureThingChannels);
     }
 
     @Override
@@ -101,8 +98,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
 
         BAE091xHandlerConfiguration configuration = getConfig().as(BAE091xHandlerConfiguration.class);
 
-        Set<OwChannelConfig> wantedChannel = new HashSet<>();
-        wantedChannel.addAll(SENSOR_TYPE_CHANNEL_MAP.getOrDefault(sensorType, Set.of()));
+        Set<OwChannelConfig> wantedChannel = new HashSet<>(SENSOR_TYPE_CHANNEL_MAP.getOrDefault(sensorType, Set.of()));
 
         // Pin1:
         switch (configuration.pin1) {
@@ -112,8 +108,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
                 wantedChannel.add(new OwChannelConfig(CHANNEL_COUNTER, CHANNEL_TYPE_UID_BAE_COUNTER));
                 break;
             default:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "unknown configuration option for pin 1");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "unknown configuration option for pin 1");
                 return;
         }
 
@@ -132,8 +127,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
                         "Frequency PWM 1/3"));
                 break;
             default:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "unknown configuration option for pin 2");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "unknown configuration option for pin 2");
                 return;
         }
 
@@ -151,8 +145,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
                         "Frequency PWM 2/4"));
                 break;
             default:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "unknown configuration option for pin 6");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "unknown configuration option for pin 6");
                 return;
         }
 
@@ -174,8 +167,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
                         "Frequency PWM 2/4"));
                 break;
             default:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "unknown configuration option for pin 7");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "unknown configuration option for pin 7");
                 return;
         }
 
@@ -198,8 +190,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
 
                 break;
             default:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "unknown configuration option for pin 8");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "unknown configuration option for pin 8");
                 return;
         }
 
@@ -214,7 +205,7 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
                 .forEach(channelId -> removeChannelIfExisting(thingBuilder, channelId));
 
         // add or update wanted channels
-        wantedChannel.stream().forEach(channelConfig -> {
+        wantedChannel.forEach(channelConfig -> {
             addChannelIfMissingAndEnable(thingBuilder, channelConfig);
         });
 
@@ -223,12 +214,12 @@ public class BAE091xSensorThingHandler extends OwBaseThingHandler {
         try {
             sensors.get(0).configureChannels();
         } catch (OwException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             return;
         }
 
         validConfig = true;
-        updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE);
+        updateStatus(ThingStatus.UNKNOWN);
     }
 
     @Override

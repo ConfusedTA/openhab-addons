@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -42,9 +42,10 @@ public class SimpleCommand implements AvrCommand {
         LISTENING_MODE_QUERY("?S"),
         INPUT_QUERY("?F", "?ZS", "?ZT", "?ZEA"),
         MCACC_MEMORY_CHANGE_CYCLIC("0MC"),
-        MCACC_MEMORY_QUERY("?MC");
+        MCACC_MEMORY_QUERY("?MC"),
+        SPEAKER_SELECTION_QUERY("?SPK");
 
-        private String zoneCommands[];
+        private String[] zoneCommands;
 
         private SimpleCommandType(String... command) {
             this.zoneCommands = command;

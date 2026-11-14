@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,7 +14,6 @@ package org.openhab.binding.hyperion.internal.handler;
 
 import static org.openhab.binding.hyperion.internal.HyperionBindingConstants.*;
 
-import java.awt.Color;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.UnknownHostException;
@@ -50,6 +49,7 @@ import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.UnDefType;
+import org.openhab.core.util.ColorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -255,10 +255,9 @@ public class HyperionHandler extends BaseThingHandler {
     }
 
     private void handleBrightness(Command command) throws IOException, CommandUnsuccessfulException {
-        if (command instanceof PercentType) {
-            PercentType percent = (PercentType) command;
+        if (command instanceof PercentType percentCommand) {
             Transform transform = new Transform();
-            transform.setLuminanceGain(percent.doubleValue() / 100);
+            transform.setLuminanceGain(percentCommand.doubleValue() / 100);
             TransformCommand transformCommand = new TransformCommand(transform);
             sendCommand(transformCommand);
         } else {
@@ -267,12 +266,11 @@ public class HyperionHandler extends BaseThingHandler {
     }
 
     private void handleColor(Command command) throws IOException, CommandUnsuccessfulException {
-        if (command instanceof HSBType) {
-            HSBType color = (HSBType) command;
-            Color c = new Color(color.getRGB());
-            int r = c.getRed();
-            int g = c.getGreen();
-            int b = c.getBlue();
+        if (command instanceof HSBType hsbCommand) {
+            int[] rgb = ColorUtil.hsbToRgb(hsbCommand);
+            int r = rgb[0];
+            int g = rgb[1];
+            int b = rgb[2];
 
             ColorCommand colorCommand = new ColorCommand(r, g, b, priority);
             sendCommand(colorCommand);
@@ -309,7 +307,11 @@ public class HyperionHandler extends BaseThingHandler {
         ThingStatus current = thing.getStatus();
         ThingStatusDetail currentDetail = thing.getStatusInfo().getStatusDetail();
         if (!current.equals(status) || !currentDetail.equals(detail)) {
-            updateStatus(status, detail, message);
+            if (detail == ThingStatusDetail.NONE) {
+                updateStatus(status, message);
+            } else {
+                updateStatus(detail, message);
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,12 +22,9 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -73,6 +70,11 @@ import okhttp3.OkHttpClient;
  * The {@link TelegramHandler} is responsible for handling commands, which are
  * sent to one of the channels.
  *
+ * <p>
+ * Message IDs and callback IDs are now persisted via {@link TelegramMessageStore}
+ * so that inline-keyboard messages can still be edited or deleted after an
+ * openHAB restart.
+ *
  * @author Jens Runge - Initial contribution
  * @author Alexander Krasnogolowy - using Telegram library from pengrad
  * @author Jan N. Klug - handle file attachments
@@ -81,59 +83,38 @@ import okhttp3.OkHttpClient;
 @NonNullByDefault
 public class TelegramHandler extends BaseThingHandler {
 
-    private class ReplyKey {
-        final Long chatId;
-        final String replyId;
-
-        public ReplyKey(Long chatId, String replyId) {
-            this.chatId = chatId;
-            this.replyId = replyId;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(chatId, replyId);
-        }
-
-        @Override
-        public boolean equals(@Nullable Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            ReplyKey other = (ReplyKey) obj;
-            return Objects.equals(chatId, other.chatId) && Objects.equals(replyId, other.replyId);
-        }
-    }
-
     private static Gson gson = new Gson();
     private final List<Long> authorizedSenderChatId = new ArrayList<>();
     private final List<Long> receiverChatId = new ArrayList<>();
     private final Logger logger = LoggerFactory.getLogger(TelegramHandler.class);
     private @Nullable ScheduledFuture<?> thingOnlineStatusJob;
 
-    // Keep track of the callback id created by Telegram. This must be sent back in
-    // the answerCallbackQuery
-    // to stop the progress bar in the Telegram client
-    private final Map<ReplyKey, String> replyIdToCallbackId = new HashMap<>();
-    // Keep track of message id sent with reply markup because we want to remove the
-    // markup after the user provided an
-    // answer and need the id of the original message
-    private final Map<ReplyKey, Integer> replyIdToMessageId = new HashMap<>();
+    /**
+     * Persistent store for (chatId, replyId) → message-ID and callback-ID mappings.
+     *
+     * <p>
+     * Previously these were plain in-memory {@code HashMap}s ({@code replyIdToMessageId}
+     * and {@code replyIdToCallbackId}). They are now backed by openHAB's
+     * {@link org.openhab.core.storage.StorageService} so entries survive restarts.
+     */
+    private final TelegramMessageStore messageStore;
 
     private @Nullable TelegramBot bot;
     private @Nullable OkHttpClient botLibClient;
     private @Nullable HttpClient downloadDataClient;
     private @Nullable ParseMode parseMode;
 
-    public TelegramHandler(Thing thing, @Nullable HttpClient httpClient) {
+    /**
+     * Creates a new handler.
+     *
+     * @param thing the Thing this handler belongs to
+     * @param httpClient shared Jetty {@link HttpClient} for file downloads
+     * @param messageStore persistent store for message and callback IDs
+     */
+    public TelegramHandler(Thing thing, @Nullable HttpClient httpClient, TelegramMessageStore messageStore) {
         super(thing);
-        downloadDataClient = httpClient;
+        this.downloadDataClient = httpClient;
+        this.messageStore = messageStore;
     }
 
     @Override
@@ -156,7 +137,8 @@ public class TelegramHandler extends BaseThingHandler {
             try {
                 parseMode = ParseMode.valueOf(parseModeAsString);
             } catch (IllegalArgumentException e) {
-                logger.warn("parseMode is invalid and will be ignored. Only Markdown or HTML are allowed values");
+                logger.warn(
+                        "parseMode is invalid and will be ignored. Only Markdown, MarkdownV2 or HTML are allowed values");
             }
         }
 
@@ -186,8 +168,11 @@ public class TelegramHandler extends BaseThingHandler {
         updateStatus(ThingStatus.UNKNOWN);
         delayThingOnlineStatus();
         TelegramBot localBot = bot = new TelegramBot.Builder(botToken).okHttpClient(botLibClient).build();
-        localBot.setUpdatesListener(this::handleUpdates, this::handleExceptions,
-                getGetUpdatesRequest(config.getLongPollingTime()));
+        int longPollingTime = config.getLongPollingTime();
+        if (longPollingTime > 0) {
+            localBot.setUpdatesListener(this::handleUpdates, this::handleExceptions,
+                    getGetUpdatesRequest(longPollingTime));
+        }
     }
 
     private void createReceiverChatIdsAndAuthorizedSenderChatIds(List<String> chatIds) {
@@ -216,7 +201,7 @@ public class TelegramHandler extends BaseThingHandler {
     }
 
     private GetUpdates getGetUpdatesRequest(int longPollingTime) {
-        return new GetUpdates().timeout(longPollingTime * 1000);
+        return new GetUpdates().timeout(longPollingTime);
     }
 
     private void handleExceptions(@Nullable TelegramException exception) {
@@ -224,23 +209,38 @@ public class TelegramHandler extends BaseThingHandler {
         if (exception != null) {
             if (exception.response() != null) {
                 BaseResponse localResponse = exception.response();
-                if (localResponse.errorCode() == 401) { // unauthorized
-                    cancelThingOnlineStatusJob();
-                    if (localBot != null) {
-                        localBot.removeGetUpdatesListener();
-                    }
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                            "Unauthorized attempt to connect to the Telegram server, please check if the bot token is valid");
-                    return;
+                switch (localResponse.errorCode()) {
+                    case 401: // unauthorized
+                        cancelThingOnlineStatusJob();
+                        if (localBot != null) {
+                            localBot.removeGetUpdatesListener();
+                        }
+                        updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
+                                "Unauthorized attempt to connect to the Telegram server, please check if the bot token is valid");
+                        return;
+                    case 429:
+                        cancelThingOnlineStatusJob();
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
+                                "Too Many Requests; temporarily delaying reconnection.");
+                        delayThingOnlineStatus();
+                        return;
+                    case 502:
+                        cancelThingOnlineStatusJob();
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
+                                "Unable to communicate to Telegram servers, check your connection");
+                        delayThingOnlineStatus();
+                        return;
+                    default:
+                        logger.warn("Telegram exception: {}", exception.getMessage());
+                        return;
                 }
-            }
-            if (exception.getCause() != null) { // cause is only non-null in case of an IOException
+            } else if (exception.getCause() != null) { // cause is only non-null in case of an IOException
                 cancelThingOnlineStatusJob();
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, exception.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, exception.getMessage());
                 delayThingOnlineStatus();
-                return;
+            } else {
+                logger.warn("Telegram exception: {}", exception.getMessage());
             }
-            logger.warn("Telegram exception: {}", exception.getMessage());
         }
     }
 
@@ -281,6 +281,9 @@ public class TelegramHandler extends BaseThingHandler {
             String replyId = null;
 
             Message message = update.message();
+            if (message == null) {
+                message = update.channelPost();
+            }
             CallbackQuery callbackQuery = update.callbackQuery();
 
             if (message != null) {
@@ -297,8 +300,10 @@ public class TelegramHandler extends BaseThingHandler {
                 JsonObject messageRaw = JsonParser.parseString(gson.toJson(message)).getAsJsonObject();
                 JsonObject messagePayload = new JsonObject();
                 messagePayload.addProperty("message_id", message.messageId());
-                messagePayload.addProperty("from",
-                        String.join(" ", new String[] { message.from().firstName(), message.from().lastName() }));
+                if (messageRaw.has("from")) {
+                    messagePayload.addProperty("from",
+                            String.join(" ", new String[] { message.from().firstName(), message.from().lastName() }));
+                }
                 messagePayload.addProperty("chat_id", message.chat().id());
                 if (messageRaw.has("text")) {
                     messagePayload.addProperty("text", message.text());
@@ -355,7 +360,7 @@ public class TelegramHandler extends BaseThingHandler {
                 } else if (message.photo() != null) {
                     PhotoSize[] photoSizes = message.photo();
                     logger.trace("Received photos {}", Arrays.asList(photoSizes));
-                    Arrays.sort(photoSizes, Comparator.comparingInt(PhotoSize::fileSize).reversed());
+                    Arrays.sort(photoSizes, Comparator.comparingLong(PhotoSize::fileSize).reversed());
                     lastMessageURL = getFullDownloadUrl(photoSizes[0].fileId());
                 } else if (message.text() != null) {
                     lastMessageText = message.text();
@@ -371,30 +376,34 @@ public class TelegramHandler extends BaseThingHandler {
                 // process metadata
                 if (lastMessageURL != null || lastMessageText != null) {
                     lastMessageDate = message.date();
-                    lastMessageFirstName = message.from().firstName();
-                    lastMessageLastName = message.from().lastName();
-                    lastMessageUsername = message.from().username();
+                    if (message.from() != null) {
+                        lastMessageFirstName = message.from().firstName();
+                        lastMessageLastName = message.from().lastName();
+                        lastMessageUsername = message.from().username();
+                    }
                 }
-            } else if (callbackQuery != null && callbackQuery.message() != null
-                    && callbackQuery.message().text() != null) {
+            } else if (callbackQuery != null && callbackQuery.maybeInaccessibleMessage() instanceof Message cbMessage
+                    && cbMessage.text() != null) {
                 String[] callbackData = callbackQuery.data().split(" ", 2);
 
                 if (callbackData.length == 2) {
                     replyId = callbackData[0];
                     lastMessageText = callbackData[1];
-                    lastMessageDate = callbackQuery.message().date();
+                    lastMessageDate = cbMessage.date();
                     lastMessageFirstName = callbackQuery.from().firstName();
                     lastMessageLastName = callbackQuery.from().lastName();
                     lastMessageUsername = callbackQuery.from().username();
-                    chatId = callbackQuery.message().chat().id();
-                    replyIdToCallbackId.put(new ReplyKey(chatId, replyId), callbackQuery.id());
+                    chatId = cbMessage.chat().id();
+
+                    // Persist callback ID so it can be answered (acknowledged) after a restart.
+                    messageStore.putCallbackId(chatId, replyId, callbackQuery.id());
 
                     // build and publish callbackEvent trigger channel payload
                     JsonObject callbackRaw = JsonParser.parseString(gson.toJson(callbackQuery)).getAsJsonObject();
                     JsonObject callbackPayload = new JsonObject();
-                    callbackPayload.addProperty("message_id", callbackQuery.message().messageId());
+                    callbackPayload.addProperty("message_id", cbMessage.messageId());
                     callbackPayload.addProperty("from", lastMessageFirstName + " " + lastMessageLastName);
-                    callbackPayload.addProperty("chat_id", callbackQuery.message().chat().id());
+                    callbackPayload.addProperty("chat_id", cbMessage.chat().id());
                     callbackPayload.addProperty("callback_id", callbackQuery.id());
                     callbackPayload.addProperty("reply_id", callbackData[0]);
                     callbackPayload.addProperty("text", callbackData[1]);
@@ -448,7 +457,10 @@ public class TelegramHandler extends BaseThingHandler {
         OkHttpClient localClient = botLibClient;
         TelegramBot localBot = bot;
         if (localClient != null && localBot != null) {
-            localBot.removeGetUpdatesListener();
+            TelegramConfiguration config = this.getConfig().as(TelegramConfiguration.class);
+            if (config.getLongPollingTime() > 0) {
+                localBot.removeGetUpdatesListener();
+            }
             localClient.dispatcher().executorService().shutdown();
             localClient.connectionPool().evictAll();
             logger.debug("Telegram client closed");
@@ -466,11 +478,11 @@ public class TelegramHandler extends BaseThingHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(TelegramActions.class);
+        return Set.of(TelegramActions.class);
     }
 
     /**
-     * get the list of all authorized senders
+     * Returns the list of all authorized sender chat IDs.
      *
      * @return list of chatIds
      */
@@ -479,7 +491,7 @@ public class TelegramHandler extends BaseThingHandler {
     }
 
     /**
-     * get the list of all receivers
+     * Returns the list of all receiver chat IDs.
      *
      * @return list of chatIds
      */
@@ -487,17 +499,52 @@ public class TelegramHandler extends BaseThingHandler {
         return receiverChatId;
     }
 
+    /**
+     * Persists the Telegram message ID for the given (chatId, replyId) pair.
+     * Called by {@link TelegramActions} after successfully sending a query with
+     * an inline keyboard.
+     *
+     * @param chatId Telegram chat ID
+     * @param replyId application-level reply identifier
+     * @param messageId Telegram message ID returned by the send API
+     */
     public void addMessageId(Long chatId, String replyId, Integer messageId) {
-        replyIdToMessageId.put(new ReplyKey(chatId, replyId), messageId);
+        messageStore.putMessageId(chatId, replyId, messageId);
     }
 
+    /**
+     * Retrieves the persisted Telegram callback ID for (chatId, replyId).
+     * Returns {@code null} if none is stored.
+     *
+     * @param chatId Telegram chat ID
+     * @param replyId application-level reply identifier
+     * @return Telegram callback ID or {@code null}
+     */
     @Nullable
     public String getCallbackId(Long chatId, String replyId) {
-        return replyIdToCallbackId.get(new ReplyKey(chatId, replyId));
+        return messageStore.getCallbackId(chatId, replyId);
     }
 
+    /**
+     * Removes the persisted Telegram callback ID for (chatId, replyId).
+     *
+     * @param chatId Telegram chat ID
+     * @param replyId application-level reply identifier
+     */
+    public void removeCallbackId(Long chatId, String replyId) {
+        messageStore.removeCallbackId(chatId, replyId);
+    }
+
+    /**
+     * Retrieves and removes the persisted Telegram message ID for (chatId, replyId).
+     * Returns {@code null} if none is stored.
+     *
+     * @param chatId Telegram chat ID
+     * @param replyId application-level reply identifier
+     * @return Telegram message ID or {@code null}
+     */
     public @Nullable Integer removeMessageId(Long chatId, String replyId) {
-        return replyIdToMessageId.remove(new ReplyKey(chatId, replyId));
+        return messageStore.removeMessageId(chatId, replyId);
     }
 
     @Nullable

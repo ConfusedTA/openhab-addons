@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -59,12 +59,16 @@ public class MinecraftSignHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        this.bridgeHandler = getBridgeHandler();
-        this.config = getThing().getConfiguration().as(SignConfig.class);
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        this.bridgeHandler = getBridgeHandler(bridge);
+        this.config = getConfigAs(SignConfig.class);
 
-        if (getThing().getBridgeUID() == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
-
+        if (bridgeHandler == null) {
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Bridge handler missing");
             return;
         }
 
@@ -75,7 +79,7 @@ public class MinecraftSignHandler extends BaseThingHandler {
     @Override
     public void dispose() {
         super.dispose();
-        if (!signSubscription.isUnsubscribed()) {
+        if (signSubscription != null && !signSubscription.isUnsubscribed()) {
             signSubscription.unsubscribe();
         }
     }
@@ -95,26 +99,16 @@ public class MinecraftSignHandler extends BaseThingHandler {
      * @param sign the sign to update
      */
     private void updateSignState(SignData sign) {
-        State activeState = sign.getState() ? OnOffType.ON : OnOffType.OFF;
+        State activeState = OnOffType.from(sign.getState());
         updateState(MinecraftBindingConstants.CHANNEL_SIGN_ACTIVE, activeState);
-    }
-
-    private synchronized MinecraftServerHandler getBridgeHandler() {
-        Bridge bridge = getBridge();
-        if (bridge == null) {
-            logger.debug("Required bridge not defined for device {}.", getThing().getUID());
-            return null;
-        } else {
-            return getBridgeHandler(bridge);
-        }
     }
 
     private synchronized MinecraftServerHandler getBridgeHandler(Bridge bridge) {
         MinecraftServerHandler bridgeHandler = null;
 
         ThingHandler handler = bridge.getHandler();
-        if (handler instanceof MinecraftServerHandler) {
-            bridgeHandler = (MinecraftServerHandler) handler;
+        if (handler instanceof MinecraftServerHandler serverHandler) {
+            bridgeHandler = serverHandler;
         } else {
             logger.debug("No available bridge handler found yet. Bridge: {} .", bridge.getUID());
             bridgeHandler = null;

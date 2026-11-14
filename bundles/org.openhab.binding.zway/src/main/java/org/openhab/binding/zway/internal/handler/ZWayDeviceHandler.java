@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -44,6 +44,7 @@ import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.util.ColorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,8 +118,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
                     logger.error("Unexpected error");
                 }
                 if (getThing().getStatus() == ThingStatus.ONLINE) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
-                            "Error occurred when starting polling.");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Error occurred when starting polling.");
                 }
             }
         }
@@ -156,8 +156,8 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
             return null;
         }
         ThingHandler handler = bridge.getHandler();
-        if (handler instanceof ZWayBridgeHandler) {
-            return (ZWayBridgeHandler) handler;
+        if (handler instanceof ZWayBridgeHandler bridgeHandler) {
+            return bridgeHandler;
         } else {
             return null;
         }
@@ -199,7 +199,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
         logger.debug("Z-Way bridge status changed: {}", bridgeStatusInfo);
 
         if (bridgeStatusInfo.getStatus().equals(ThingStatus.OFFLINE)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Bridge status is offline.");
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "Bridge status is offline.");
         } else if (bridgeStatusInfo.getStatus().equals(ThingStatus.ONLINE)) {
             // Initialize thing, if all OK the status of device thing will be ONLINE
 
@@ -235,8 +235,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
                                 logger.error("Error occurred when performing polling: Unexpected error");
                             }
                             if (getThing().getStatus() == ThingStatus.ONLINE) {
-                                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE,
-                                        "Error occurred when performing polling.");
+                                updateStatus(ThingStatus.OFFLINE, "Error occurred when performing polling.");
                             }
                         }
                     } else {
@@ -257,7 +256,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
         Map<String, String> properties = getThing().getProperties();
         // Load location from properties
         String location = properties.get(ZWayBindingConstants.DEVICE_PROP_LOCATION);
-        if (location != null && !location.equals("") && getThing().getLocation() == null) {
+        if (location != null && !location.isBlank() && getThing().getLocation() == null) {
             logger.debug("Set location to {}", location);
             ThingBuilder thingBuilder = editThing();
             thingBuilder.withLocation(location);
@@ -299,7 +298,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
                             iae.getMessage(), device.getMetrics().getTitle(), device.getMetrics().getLevel(),
                             channel.getChannelTypeUID());
 
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE,
+                    updateStatus(ThingStatus.OFFLINE,
                             "Channel refresh for device: " + device.getMetrics().getTitle() + " (level: "
                                     + device.getMetrics().getLevel() + ") with channel: " + channel.getChannelTypeUID()
                                     + " failed!");
@@ -371,7 +370,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
 
         // Load device id from channel's properties for the compatibility of ZAutomation and ZWave devices
         final Channel channel = getThing().getChannel(channelUID.getId());
-        final String deviceId = channel.getProperties().get("deviceId");
+        final String deviceId = channel != null ? channel.getProperties().get("deviceId") : null;
 
         if (deviceId != null) {
             DeviceList deviceList = zwayBridgeHandler.getDeviceList();
@@ -448,23 +447,18 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
                             }
                         } else if (device instanceof SwitchRGBW) {
                             // possible commands: on(), off(), exact(red, green, blue)
-                            if (command instanceof HSBType) {
+                            if (command instanceof HSBType hsb) {
                                 logger.debug("Handle command: HSBType");
-
-                                HSBType hsb = (HSBType) command;
 
                                 // first set on/off
                                 if (hsb.getBrightness().intValue() > 0) {
-                                    if (device.getMetrics().getLevel().toLowerCase().equals("off")) {
+                                    if ("off".equals(device.getMetrics().getLevel().toLowerCase())) {
                                         device.on();
                                     }
 
                                     // then set color
-                                    int red = (int) Math.round(255 * (hsb.getRed().doubleValue() / 100));
-                                    int green = (int) Math.round(255 * (hsb.getGreen().doubleValue() / 100));
-                                    int blue = (int) Math.round(255 * (hsb.getBlue().doubleValue() / 100));
-
-                                    device.exact(red, green, blue);
+                                    int[] rgb = ColorUtil.hsbToRgb(hsb);
+                                    device.exact(rgb[0], rgb[1], rgb[2]);
                                 } else {
                                     device.off();
                                 }
@@ -578,7 +572,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
             }
 
             // 2. Check if device information includes further information about sensor type
-            if (!device.getProbeType().equals("")) {
+            if (!"".equals(device.getProbeType())) {
                 if (device instanceof SensorMultilevel) {
                     switch (device.getProbeType()) {
                         case PROBE_TYPE_TEMPERATURE:
@@ -680,7 +674,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
                             break;
                     }
                 }
-            } else if (!device.getMetrics().getProbeTitle().equals("")) {
+            } else if (!"".equals(device.getMetrics().getProbeTitle())) {
                 if (device instanceof SensorMultilevel) {
                     switch (device.getMetrics().getProbeTitle()) {
                         case PROBE_TITLE_CO2_LEVEL:
@@ -691,7 +685,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
                             break;
                     }
                 }
-            } else if (!device.getMetrics().getIcon().equals("")) {
+            } else if (!"".equals(device.getMetrics().getIcon())) {
                 if (device instanceof SwitchBinary) {
                     switch (device.getMetrics().getIcon()) {
                         case ICON_SWITCH:
@@ -707,7 +701,7 @@ public abstract class ZWayDeviceHandler extends BaseThingHandler {
             }
 
             // If at least one rule could mapped to a channel
-            if (!id.equals("")) {
+            if (!id.isBlank()) {
                 addChannel(id, acceptedItemType, device.getMetrics().getTitle(), properties);
 
                 logger.debug(

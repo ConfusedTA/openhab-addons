@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,12 +12,14 @@
  */
 package org.openhab.binding.leapmotion.internal.discovery;
 
-import java.util.Collections;
+import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.leapmotion.internal.LeapMotionBindingConstants;
+import org.openhab.binding.leapmotion.internal.LeapMotionNativeLibrary;
 import org.openhab.core.config.discovery.AbstractDiscoveryService;
 import org.openhab.core.config.discovery.DiscoveryResult;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
@@ -42,11 +44,15 @@ public class LeapMotionDiscoveryService extends AbstractDiscoveryService {
     private @NonNullByDefault({}) Listener listener;
 
     public LeapMotionDiscoveryService() throws IllegalArgumentException {
-        super(Collections.singleton(LeapMotionBindingConstants.THING_TYPE_CONTROLLER), 10, true);
+        super(Set.of(LeapMotionBindingConstants.THING_TYPE_CONTROLLER), 10, true);
     }
 
     @Override
     protected void activate(@Nullable Map<String, Object> configProperties) {
+        if (!LeapMotionNativeLibrary.isAvailable()) {
+            return;
+        }
+
         leapController = new Controller();
         listener = new Listener() {
             @Override
@@ -64,16 +70,18 @@ public class LeapMotionDiscoveryService extends AbstractDiscoveryService {
 
     @Override
     protected void deactivate() {
-        leapController.removeListener(listener);
+        if (leapController != null) {
+            leapController.removeListener(listener);
+            leapController.delete();
+            leapController = null;
+        }
         listener = null;
-        leapController.delete();
-        leapController = null;
         super.deactivate();
     }
 
     @Override
     protected void startScan() {
-        if (leapController.isConnected()) {
+        if (leapController != null && leapController.isConnected()) {
             createDiscoveryResult();
         }
     }
@@ -81,7 +89,9 @@ public class LeapMotionDiscoveryService extends AbstractDiscoveryService {
     @Override
     protected void startBackgroundDiscovery() {
         super.startBackgroundDiscovery();
-        leapController.addListener(listener);
+        if (leapController != null) {
+            leapController.addListener(listener);
+        }
     }
 
     private void createDiscoveryResult() {
@@ -92,6 +102,6 @@ public class LeapMotionDiscoveryService extends AbstractDiscoveryService {
     }
 
     private void removeDiscoveryResult() {
-        removeOlderResults(System.currentTimeMillis());
+        removeOlderResults(Instant.now());
     }
 }

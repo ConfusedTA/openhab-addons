@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -88,7 +88,7 @@ public class RS232Handler extends BaseBridgeHandler implements RadioRAFeedbackLi
         try {
             connection.open(portName, baud);
         } catch (RadioRAConnectionException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             return;
         }
 
@@ -119,8 +119,8 @@ public class RS232Handler extends BaseBridgeHandler implements RadioRAFeedbackLi
     public void handleRadioRAFeedback(RadioRAFeedback feedback) {
         for (Thing thing : getThing().getThings()) {
             ThingHandler handler = thing.getHandler();
-            if (handler instanceof LutronHandler) {
-                ((LutronHandler) handler).handleFeedback(feedback);
+            if (handler instanceof LutronHandler lutronHandler) {
+                lutronHandler.handleFeedback(feedback);
             } else {
                 logger.debug("Unexpected - Thing {} is not a LutronHandler", thing.getClass());
             }

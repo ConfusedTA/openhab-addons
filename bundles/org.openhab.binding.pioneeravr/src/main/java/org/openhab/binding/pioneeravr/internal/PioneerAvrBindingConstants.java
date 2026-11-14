@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,10 +22,11 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ThingTypeUID;
 
 /**
- * The {@link PioneerAvrBinding} class defines common constants, which are used across the whole binding.
+ * The {@link PioneerAvrBindingConstants} class defines common constants, which are used across the whole binding.
  *
  * @author Antoine Besnard - Initial contribution
  * @author Leroy Foerster - Listening Mode, Playing Listening Mode
+ * @author william - Speaker selection
  */
 @NonNullByDefault
 public class PioneerAvrBindingConstants {
@@ -93,6 +94,7 @@ public class PioneerAvrBindingConstants {
     public static final String PLAYING_LISTENING_MODE_CHANNEL = "playingListeningMode";
     public static final String DISPLAY_INFORMATION_CHANNEL = "displayInformation#displayInformation";
     public static final String MCACC_MEMORY_CHANNEL = "MCACCMemory#MCACCMemory";
+    public static final String SPEAKER_SELECTION_CHANNEL = "speakerSelection#speakerSelection";
 
     public static final String GROUP_CHANNEL_PATTERN = "zone%s#%s";
     public static final Pattern GROUP_CHANNEL_ZONE_PATTERN = Pattern.compile("zone([0-4])#.*");

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -50,6 +50,7 @@ public class RRMapDrawOptions {
     private static final Color COLOR_PATH = new Color(147, 194, 238);
     private static final Color COLOR_ZONES = new Color(0xAD, 0xD8, 0xFF, 0x8F);
     private static final Color COLOR_NO_GO_ZONES = new Color(255, 33, 55, 127);
+    private static final Color COLOR_EXT_ZONES = new Color(76, 175, 80, 127);
     private static final Color COLOR_CHARGER_HALO = new Color(0x66, 0xfe, 0xda, 0x7f);
     private static final Color COLOR_ROBO = new Color(75, 235, 149);
     private static final Color COLOR_SCAN = new Color(0xDF, 0xDF, 0xDF);
@@ -93,9 +94,8 @@ public class RRMapDrawOptions {
                         throw new JsonParseException("missing json text");
                     }
                     JsonObject colorSave = json.getAsJsonObject();
-                    Color color = new Color(colorSave.get("red").getAsInt(), colorSave.get("green").getAsInt(),
+                    return new Color(colorSave.get("red").getAsInt(), colorSave.get("green").getAsInt(),
                             colorSave.get("blue").getAsInt(), colorSave.get("alpha").getAsInt());
-                    return color;
                 }
             }).create();
 
@@ -123,6 +123,9 @@ public class RRMapDrawOptions {
     @SerializedName("colorNoGoZones")
     @Expose
     private Color colorNoGoZones = COLOR_NO_GO_ZONES;
+    @SerializedName("colorExtZones")
+    @Expose
+    private Color colorExtZones = COLOR_EXT_ZONES;
     @SerializedName("colorChargerHalo")
     @Expose
     private Color colorChargerHalo = COLOR_CHARGER_HALO;
@@ -217,6 +220,14 @@ public class RRMapDrawOptions {
         this.colorNoGoZones = colorNoGoZones;
     }
 
+    public Color getColorExtZones() {
+        return colorExtZones;
+    }
+
+    public void setColorExtZones(Color colorExtZones) {
+        this.colorExtZones = colorExtZones;
+    }
+
     public Color getColorChargerHalo() {
         return colorChargerHalo;
     }
@@ -301,8 +312,7 @@ public class RRMapDrawOptions {
 
     public static RRMapDrawOptions getOptionsFromFile(String fileName, Logger logger) {
         try {
-            RRMapDrawOptions options = GSON.fromJson(new FileReader(fileName), RRMapDrawOptions.class);
-            return options;
+            return GSON.fromJson(new FileReader(fileName), RRMapDrawOptions.class);
         } catch (FileNotFoundException e) {
             logger.debug("Vacuum map draw options file {} not found. Using defaults", fileName);
             return new RRMapDrawOptions();

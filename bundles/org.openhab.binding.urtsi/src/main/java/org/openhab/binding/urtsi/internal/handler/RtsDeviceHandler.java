@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,6 +17,7 @@ import org.openhab.binding.urtsi.internal.config.RtsDeviceConfig;
 import org.openhab.binding.urtsi.internal.mapping.UrtsiChannelMapping;
 import org.openhab.core.library.types.StopMoveType;
 import org.openhab.core.library.types.UpDownType;
+import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -25,6 +26,8 @@ import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link RtsDeviceHandler} is responsible for handling commands, which are
@@ -33,6 +36,7 @@ import org.openhab.core.types.State;
  * @author Oliver Libutzki - Initial contribution
  */
 public class RtsDeviceHandler extends BaseThingHandler {
+    private final Logger logger = LoggerFactory.getLogger(RtsDeviceHandler.class);
 
     public RtsDeviceHandler(Thing thing) {
         super(thing);
@@ -42,8 +46,8 @@ public class RtsDeviceHandler extends BaseThingHandler {
     public void handleCommand(ChannelUID channelUID, Command command) {
         if (channelUID.getId().equals(UrtsiBindingConstants.POSITION)) {
             RtsCommand rtsCommand = null;
-            if (command instanceof UpDownType) {
-                switch ((UpDownType) command) {
+            if (command instanceof UpDownType upDownCommand) {
+                switch (upDownCommand) {
                     case UP:
                         rtsCommand = RtsCommand.UP;
                         break;
@@ -53,8 +57,8 @@ public class RtsDeviceHandler extends BaseThingHandler {
                     default:
                         break;
                 }
-            } else if (command instanceof StopMoveType) {
-                switch ((StopMoveType) command) {
+            } else if (command instanceof StopMoveType stopMoveCommand) {
+                switch (stopMoveCommand) {
                     case STOP:
                         rtsCommand = RtsCommand.STOP;
                         break;
@@ -64,12 +68,16 @@ public class RtsDeviceHandler extends BaseThingHandler {
             }
             if (rtsCommand != null) {
                 // We delegate the execution to the bridge handler
-                ThingHandler bridgeHandler = getBridge().getHandler();
-                if (bridgeHandler instanceof UrtsiDeviceHandler) {
-                    boolean executedSuccessfully = ((UrtsiDeviceHandler) bridgeHandler).executeRtsCommand(getThing(),
-                            rtsCommand);
-                    if (executedSuccessfully && command instanceof State) {
-                        updateState(channelUID, (State) command);
+                Bridge bridge = getBridge();
+                if (bridge == null) {
+                    logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
+                    return;
+                }
+                ThingHandler bridgeHandler = bridge.getHandler();
+                if (bridgeHandler instanceof UrtsiDeviceHandler deviceHandler) {
+                    boolean executedSuccessfully = deviceHandler.executeRtsCommand(getThing(), rtsCommand);
+                    if (executedSuccessfully && command instanceof State state) {
+                        updateState(channelUID, state);
                     }
                 }
             }
@@ -81,13 +89,19 @@ public class RtsDeviceHandler extends BaseThingHandler {
         RtsDeviceConfig rtsDeviceConfig = getConfigAs(RtsDeviceConfig.class);
         String mappedChannel = UrtsiChannelMapping.getMappedChannel(rtsDeviceConfig.channel);
         if (mappedChannel == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The channel '" + rtsDeviceConfig.channel + "' is invalid.");
         } else {
             // Just use the status of the bridge as we do not have any information if there a RTS device listening at
             // the configured channel
-            ThingStatus bridgeStatus = getBridge().getStatus();
-            updateStatus(bridgeStatus);
+            Bridge bridge = getBridge();
+            if (bridge == null) {
+                logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+                return;
+            }
+            ThingStatus bridgeStatus = bridge.getStatus();
+            updateStatus((bridgeStatus == ThingStatus.ONLINE || bridgeStatus == ThingStatus.OFFLINE) ? bridgeStatus
+                    : ThingStatus.UNKNOWN);
 
         }
     }

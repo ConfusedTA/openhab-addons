@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,13 +13,12 @@
 package org.openhab.binding.plugwiseha.internal.handler;
 
 import static org.openhab.binding.plugwiseha.internal.PlugwiseHABindingConstants.*;
-import static org.openhab.core.thing.ThingStatus.OFFLINE;
 import static org.openhab.core.thing.ThingStatus.ONLINE;
 import static org.openhab.core.thing.ThingStatusDetail.*;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -95,10 +94,10 @@ public class PlugwiseHABridgeHandler extends BaseBridgeHandler {
             logger.debug("Initializing the Plugwise Home Automation bridge handler with config = {}", bridgeConfig);
             try {
                 this.controller = new PlugwiseHAController(httpClient, bridgeConfig.getHost(), bridgeConfig.getPort(),
-                        bridgeConfig.getUsername(), bridgeConfig.getsmileId());
+                        bridgeConfig.getUsername(), bridgeConfig.getsmileId(), bridgeConfig.getRefresh());
                 scheduleRefreshJob(bridgeConfig);
             } catch (PlugwiseHAException e) {
-                updateStatus(OFFLINE, CONFIGURATION_ERROR, e.getMessage());
+                updateStatus(CONFIGURATION_ERROR, e.getMessage());
             }
         } else {
             logger.warn("Invalid config for the Plugwise Home Automation bridge handler with config = {}",
@@ -108,7 +107,7 @@ public class PlugwiseHABridgeHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(PlugwiseHADiscoveryService.class);
+        return Set.of(PlugwiseHADiscoveryService.class);
     }
 
     @Override
@@ -144,7 +143,7 @@ public class PlugwiseHABridgeHandler extends BaseBridgeHandler {
      */
     private boolean checkConfig(PlugwiseHABridgeThingConfig bridgeConfig) {
         if (!bridgeConfig.isValid()) {
-            updateStatus(OFFLINE, CONFIGURATION_ERROR, STATUS_DESCRIPTION_CONFIGURATION_ERROR);
+            updateStatus(CONFIGURATION_ERROR, STATUS_DESCRIPTION_CONFIGURATION_ERROR);
             return false;
         } else {
             return true;
@@ -163,7 +162,7 @@ public class PlugwiseHABridgeHandler extends BaseBridgeHandler {
 
     private void run() {
         try {
-            logger.trace("Executing refresh job");
+            this.logger.trace("Executing refresh job");
             refresh();
 
             if (super.thing.getStatus() == ThingStatus.INITIALIZING) {
@@ -171,17 +170,21 @@ public class PlugwiseHABridgeHandler extends BaseBridgeHandler {
             }
 
         } catch (PlugwiseHAInvalidHostException e) {
-            updateStatus(OFFLINE, CONFIGURATION_ERROR, STATUS_DESCRIPTION_INVALID_HOSTNAME);
+            updateStatus(CONFIGURATION_ERROR, STATUS_DESCRIPTION_INVALID_HOSTNAME);
         } catch (PlugwiseHAUnauthorizedException | PlugwiseHANotAuthorizedException e) {
-            updateStatus(OFFLINE, CONFIGURATION_ERROR, STATUS_DESCRIPTION_INVALID_CREDENTIALS);
+            updateStatus(CONFIGURATION_ERROR, STATUS_DESCRIPTION_INVALID_CREDENTIALS);
         } catch (PlugwiseHACommunicationException e) {
-            updateStatus(OFFLINE, COMMUNICATION_ERROR, STATUS_DESCRIPTION_COMMUNICATION_ERROR);
+            this.logger.trace("Bridge encountered an error {}", e.getMessage(), e);
+            updateStatus(COMMUNICATION_ERROR, STATUS_DESCRIPTION_COMMUNICATION_ERROR);
         } catch (PlugwiseHATimeoutException e) {
-            updateStatus(OFFLINE, COMMUNICATION_ERROR, STATUS_DESCRIPTION_TIMEOUT);
+            this.logger.trace("Bridge encountered an error {}", e.getMessage(), e);
+            updateStatus(COMMUNICATION_ERROR, STATUS_DESCRIPTION_TIMEOUT);
         } catch (PlugwiseHAException e) {
-            updateStatus(OFFLINE, COMMUNICATION_ERROR, e.getMessage());
+            this.logger.trace("Bridge encountered an error {}", e.getMessage(), e);
+            updateStatus(COMMUNICATION_ERROR, e.getMessage());
         } catch (RuntimeException e) {
-            updateStatus(OFFLINE, COMMUNICATION_ERROR, e.getMessage());
+            this.logger.trace("Bridge encountered an error {}", e.getMessage(), e);
+            updateStatus(COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -246,7 +249,7 @@ public class PlugwiseHABridgeHandler extends BaseBridgeHandler {
                 updateProperties(properties);
             }
         } catch (PlugwiseHAException e) {
-            updateStatus(OFFLINE, COMMUNICATION_ERROR, STATUS_DESCRIPTION_COMMUNICATION_ERROR);
+            updateStatus(COMMUNICATION_ERROR, STATUS_DESCRIPTION_COMMUNICATION_ERROR);
         }
     }
 }

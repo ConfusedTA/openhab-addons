@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -114,10 +114,10 @@ public class LIRCBridgeHandler extends BaseBridgeHandler {
             }
         } catch (UnknownHostException e) {
             logger.error("Connection to LIRC failed: unknown host");
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Unknown Host");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Unknown Host");
         } catch (IOException e) {
             logger.error("Connection to LIRC failed", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -191,9 +191,9 @@ public class LIRCBridgeHandler extends BaseBridgeHandler {
         }
 
         @Override
-        public void errorOccured(String error) {
-            logger.error("Error occured: {}", error);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, error);
+        public void errorOccurred(String error) {
+            logger.error("Error occurred: {}", error);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, error);
         }
     }
 }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -48,7 +48,6 @@ import org.openhab.binding.nibeheatpump.internal.models.VariableInformation.Type
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
-import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.library.types.UpDownType;
@@ -124,12 +123,12 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
                             }
                         } catch (TimeoutException e) {
                             logger.debug("Message sending to heat pump failed, no response");
-                            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
                         } catch (InterruptedException e) {
                             logger.debug("Message sending to heat pump failed, sending interrupted");
                         } catch (NibeHeatPumpException e) {
                             logger.debug("Message sending to heat pump failed, exception {}", e.getMessage());
-                            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
                         } finally {
                             readResult = null;
                         }
@@ -218,13 +217,12 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
                     }
                 } catch (TimeoutException e) {
                     logger.warn("Message sending to heat pump failed, no response");
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "No response received from the heat pump");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "No response received from the heat pump");
                 } catch (InterruptedException e) {
                     logger.debug("Message sending to heat pump failed, sending interrupted");
                 } catch (NibeHeatPumpException e) {
                     logger.debug("Message sending to heat pump failed, exception {}", e.getMessage());
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
                 } catch (CommandTypeNotSupportedException e) {
                     logger.warn("Unsupported command type {} received for channel {}, coil address {}.",
                             command.getClass().getName(), channelUID.getId(), coilAddress);
@@ -241,7 +239,7 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
             }
         } else {
             logger.debug("No connection to heat pump");
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_MISSING_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
     }
 
@@ -291,7 +289,7 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
             connector = getConnector();
         } catch (IllegalArgumentException | NibeHeatPumpException e) {
             String description = String.format("Illegal configuration, %s", e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, description);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, description);
             return;
         }
 
@@ -334,7 +332,7 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
                 }
             } catch (NibeHeatPumpException e) {
                 logger.debug("Error occurred when connecting to heat pump, exception {}", e.getMessage());
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             }
         } else {
             logger.debug("Connection to heat pump already open");
@@ -377,19 +375,17 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
 
         if (command instanceof DecimalType || command instanceof QuantityType || command instanceof StringType) {
             BigDecimal v;
-            if (command instanceof DecimalType) {
-                v = ((DecimalType) command).toBigDecimal();
-            } else if (command instanceof QuantityType) {
-                v = ((QuantityType) command).toBigDecimal();
+            if (command instanceof DecimalType decimalCommand) {
+                v = decimalCommand.toBigDecimal();
+            } else if (command instanceof QuantityType quantityCommand) {
+                v = quantityCommand.toBigDecimal();
             } else {
                 v = new BigDecimal(command.toString());
             }
             int decimals = (int) Math.log10(variableInfo.factor);
             value = v.movePointRight(decimals).intValue();
-        } else if ((command instanceof OnOffType || command instanceof OpenClosedType || command instanceof UpDownType)
-                && variableInfo.factor == 1) {
-            value = (command.equals(OnOffType.ON) || command.equals(UpDownType.UP)
-                    || command.equals(OpenClosedType.OPEN)) ? 1 : 0;
+        } else if ((command instanceof OnOffType || command instanceof UpDownType) && variableInfo.factor == 1) {
+            value = (command.equals(OnOffType.ON) || command.equals(UpDownType.UP)) ? 1 : 0;
         } else {
             throw new CommandTypeNotSupportedException();
         }
@@ -455,7 +451,7 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
             state = new StringType(converted.toString());
 
         } else if ("Switch".equalsIgnoreCase(acceptedItemType)) {
-            state = converted.intValue() == 0 ? OnOffType.OFF : OnOffType.ON;
+            state = OnOffType.from(converted.intValue() != 0);
 
         } else if ("Number".equalsIgnoreCase(acceptedItemType)) {
             state = new DecimalType(converted);
@@ -491,12 +487,12 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
 
             updateStatus(ThingStatus.ONLINE);
 
-            if (msg instanceof ModbusReadResponseMessage) {
-                handleReadResponseMessage((ModbusReadResponseMessage) msg);
-            } else if (msg instanceof ModbusWriteResponseMessage) {
-                handleWriteResponseMessage((ModbusWriteResponseMessage) msg);
-            } else if (msg instanceof ModbusDataReadOutMessage) {
-                handleDataReadOutMessage((ModbusDataReadOutMessage) msg);
+            if (msg instanceof ModbusReadResponseMessage readResponseMessage) {
+                handleReadResponseMessage(readResponseMessage);
+            } else if (msg instanceof ModbusWriteResponseMessage writeResponseMessage) {
+                handleWriteResponseMessage(writeResponseMessage);
+            } else if (msg instanceof ModbusDataReadOutMessage dataReadOutMessage) {
+                handleDataReadOutMessage(dataReadOutMessage);
             } else {
                 logger.debug("Received unknown message: {}", msg.toString());
             }
@@ -509,7 +505,7 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
     public void errorOccurred(String error) {
         logger.debug("Error '{}' occurred, re-establish the connection", error);
         reconnectionRequest = true;
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, error);
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, error);
     }
 
     private void handleReadResponseMessage(ModbusReadResponseMessage msg) {
@@ -567,7 +563,7 @@ public class NibeHeatPumpHandler extends BaseThingHandler implements NibeHeatPum
                 logger.trace("Value did not change, ignoring update");
             } else {
                 final String channelPrefix = (variableInfo.type == Type.SETTING ? "setting#" : "sensor#");
-                final String channelId = channelPrefix + String.valueOf(coilAddress);
+                final String channelId = channelPrefix + coilAddress;
                 final String acceptedItemType = thing.getChannel(channelId).getAcceptedItemType();
 
                 logger.trace("AcceptedItemType for channel {} = {}", channelId, acceptedItemType);

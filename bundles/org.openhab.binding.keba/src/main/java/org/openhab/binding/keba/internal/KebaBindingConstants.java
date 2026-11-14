@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,12 +15,11 @@ package org.openhab.binding.keba.internal;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ThingTypeUID;
 
 /**
- * The {@link KebaBinding} class defines common constants, which are used across
+ * The {@link KebaBindingConstants} class defines common constants, which are used across
  * the whole binding.
  *
  * @author Karel Goderis - Initial contribution
@@ -31,7 +30,7 @@ public class KebaBindingConstants {
     public static final String BINDING_ID = "keba";
 
     // List of all Thing Type UIDs
-    public static final ThingTypeUID THING_TYPE_KECONTACTP20 = new ThingTypeUID(BINDING_ID, "kecontact");
+    public static final ThingTypeUID THING_TYPE_KECONTACT = new ThingTypeUID(BINDING_ID, "kecontact");
 
     // List of all Channel ids
     public static final String CHANNEL_MODEL = "model";
@@ -42,7 +41,8 @@ public class KebaBindingConstants {
     public static final String CHANNEL_WALLBOX = "wallbox";
     public static final String CHANNEL_VEHICLE = "vehicle";
     public static final String CHANNEL_PLUG_LOCKED = "locked";
-    public static final String CHANNEL_ENABLED = "enabled";
+    public static final String CHANNEL_ENABLED_SYSTEM = "enabledsystem";
+    public static final String CHANNEL_ENABLED_USER = "enableduser";
     public static final String CHANNEL_PILOT_CURRENT = "maxpilotcurrent";
     public static final String CHANNEL_PILOT_PWM = "maxpilotcurrentdutycyle";
     public static final String CHANNEL_MAX_SYSTEM_CURRENT = "maxsystemcurrent";
@@ -52,6 +52,10 @@ public class KebaBindingConstants {
     public static final String CHANNEL_INPUT = "input";
     public static final String CHANNEL_OUTPUT = "output";
     public static final String CHANNEL_SERIAL = "serial";
+    public static final String PROPERTY_MODEL = "model";
+    public static final String PROPERTY_FIRMWARE = "firmware";
+    public static final String PROPERTY_PRODUCT_TYPE = "productType";
+    public static final String PROPERTY_SERIAL = "serial";
     public static final String CHANNEL_UPTIME = "uptime";
     public static final String CHANNEL_I1 = "I1";
     public static final String CHANNEL_I2 = "I2";
@@ -71,6 +75,31 @@ public class KebaBindingConstants {
     public static final String CHANNEL_SESSION_SESSION_ID = "sessionid";
     public static final String CHANNEL_SETENERGY = "setenergylimit";
     public static final String CHANNEL_AUTHENTICATE = "authenticate";
+    public static final String CHANNEL_UDP_STOP = "udpstop";
+    public static final String CHANNEL_BACKEND = "backend";
+    public static final String CHANNEL_TIME_QUALITY = "timequality";
+    public static final String CHANNEL_BOOT_FLAG = "bootflag";
+    public static final String CHANNEL_DIP_SWITCH_1 = "dipswitch1";
+    public static final String CHANNEL_DIP_SWITCH_2 = "dipswitch2";
+    public static final String CHANNEL_FAILSAFE_TIMEOUT = "failsafetimeout";
+    public static final String CHANNEL_CURR_TIMER = "currtimer";
+    public static final String CHANNEL_CURR_TIMER_TIMEOUT = "currtimertimeout";
+
+    // Additional channel ids used by the Modbus TCP Thing type
+    public static final String CHANNEL_CABLE_STATE = "cablestate";
+    public static final String CHANNEL_ERROR_CODE = "errorcode";
+    public static final String CHANNEL_MAX_CHARGING_CURRENT = "maxchargingcurrent";
+    public static final String CHANNEL_MAX_SUPPORTED_CURRENT = "maxsupportedcurrent";
+    public static final String CHANNEL_PHASE_SWITCH_SOURCE = "phaseswitchsource";
+    public static final String CHANNEL_PHASE_SWITCH_STATE = "phaseswitchstate";
+    public static final String CHANNEL_FAILSAFE_CURRENT_SETTING = "failsafecurrentsetting";
+    public static final String CHANNEL_FAILSAFE_TIMEOUT_SETTING = "failsafetimeoutsetting";
+    public static final String CHANNEL_FAST_CHARGING_STATUS = "fastchargingstatus";
+    public static final String CHANNEL_SET_CHARGING_CURRENT = "setchargingcurrent";
+    public static final String CHANNEL_FAILSAFE_PERSIST = "failsafepersist";
+    public static final String CHANNEL_ACTIVATE_FAST_CHARGING = "activatefastcharging";
+    public static final String CHANNEL_UNLOCK_PLUG = "unlockplug";
+    public static final String CHANNEL_STOP_CHARGING = "stop";
 
     public enum KebaType {
         P20,
@@ -79,16 +108,22 @@ public class KebaBindingConstants {
 
     public enum KebaSeries {
 
+        /*
+         * Mapping derived from:
+         * - https://www.keba.com/download/x/ea958eb797/kecontactp30_bden_web.pdf
+         * - https://www.keba.com/file/downloads/e-mobility/KeContact_KCP20_30_ih_de.pdf
+         * 'G' is still unclear
+         */
         E('0'),
         B('1'),
-        C('2', '3'),
-        X('A', 'B', 'C', 'D', 'E', 'G', 'H');
+        C('2', '3', 'A'), // '3' is P20 c-series + PLC
+        // A('3'), // '3' is also P30 a-series - but P30 a-series doesn't support the required UDS protocol
+        X('B', 'C', 'D', 'E', 'G', 'H', 'S', 'U');
 
         private final List<Character> things = new ArrayList<>();
 
         KebaSeries(char... e) {
-            Character[] cArray = ArrayUtils.toObject(e);
-            for (char c : cArray) {
+            for (char c : e) {
                 things.add(c);
             }
         }

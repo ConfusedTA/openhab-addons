@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -39,6 +39,9 @@ public class SDMAccountConfiguration {
 
     public static final String PUBSUB_SUBSCRIPTION_ID = "pubsubSubscriptionId";
     public String pubsubSubscriptionId = "";
+
+    public static final String PUBSUB_TOPIC_NAME = "pubsubTopicName";
+    public String pubsubTopicName = "";
 
     public static final String SDM_AUTHORIZATION_CODE = "sdmAuthorizationCode";
     public String sdmAuthorizationCode = "";

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,13 +12,14 @@
  */
 package org.openhab.binding.solaredge.internal.command;
 
+import java.util.function.LongSupplier;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.Response.CompleteListener;
 import org.eclipse.jetty.client.api.Response.ContentListener;
 import org.eclipse.jetty.client.api.Response.FailureListener;
 import org.eclipse.jetty.client.api.Response.SuccessListener;
-import org.openhab.binding.solaredge.internal.connector.StatusUpdateListener;
 
 /**
  * public interface for all commands
@@ -37,16 +38,6 @@ public interface SolarEdgeCommand extends SuccessListener, FailureListener, Cont
      */
     void performAction(HttpClient asyncclient);
 
-    /**
-     * updates the listener's status
-     *
-     */
-    void updateListenerStatus();
-
-    /**
-     * register a listener
-     *
-     * @param listener
-     */
-    void setListener(StatusUpdateListener listener);
+    /** Bind the command to the connector generation in which it was first queued. */
+    boolean bindRequestGeneration(long generation, LongSupplier currentGeneration);
 }

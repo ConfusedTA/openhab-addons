@@ -1,28 +1,32 @@
 # iRobot Binding
 
-This binding provides integration of products by iRobot company (https://www.irobot.com/). It is currently developed
+This binding provides integration of products by iRobot company (<https://www.irobot.com/>). It is currently developed
 to support Roomba vacuum cleaner/mopping robots with built-in Wi-Fi module. The binding interfaces to the robot directly
 without any need for a dedicated MQTT server.
 
 ## Supported Things
 
-- iRobot Roomba robotic vacuum cleaner (https://www.irobot.com/roomba).
+- iRobot Roomba robotic vacuum cleaner (<https://www.irobot.com/roomba>).
 - iRobot Braava has also been reported to (partially) work.
 - In general, the channel list is far from complete. There is a lot to do now.
 
 ## Discovery
 
-Roombas on the same network will be discovered automatically, however in order to connect to them a password is needed. The
-password is a machine-generated string, which is unfortunately not exposed by the original iRobot smartphone application,
-but it can be downloaded from the robot itself. If no password is configured, the Thing enters "CONFIGURATION PENDING" state.
-Now you need to perform authorization by pressing and holding the HOME button on your robot until it plays series of tones
-(approximately 2 seconds). The Wi-Fi indicator on the robot will flash for 30 seconds, the binding should automatically
-receive the password and go ONLINE.
+Roombas on the same network will be discovered automatically, however in order to connect to them a password is needed.
+The password is a machine-generated string, which is unfortunately not exposed by the original iRobot smartphone application, but it can be downloaded from the robot itself.
+If no password is configured, the Thing enters "CONFIGURATION PENDING" state.
+Now you need to perform authorization by pressing and holding the HOME/DOCK button on your robot until it plays series of tones (approximately 2 seconds).
+The Wi-Fi indicator on the robot will flash for 30 seconds, the binding should automatically receive the password and go ONLINE.
 
-After you've done this procedure you can write the password somewhere in case if you need to reconfigure your binding. It's
-not known, however, whether the password is eternal or can change during factory reset.
+After you've done this procedure you can write the password somewhere in case if you need to reconfigure your binding.
+It's not known, however, whether the password is eternal or can change during factory reset.
 If you have issues getting the password make sure there are no other devices like your smartphone communicating with the robot.
-You can also try using [these python scripts](https://github.com/NickWaterton/Roomba980-Python) to get the password. 
+You can also try using [these python scripts](https://github.com/NickWaterton/Roomba980-Python) to get the password.
+
+**NOTE:** For file-based configuration, storing the password is essential.
+Once the password for the Thing is populated in the Code tab in the UI, you must copy that into the [config files](#irobotthings-example) in order for it to persist.
+Without this, the Roomba will appear to work temporarily.
+However, as soon as the Things file is edited, the password will be lost, and the button will need to be pressed again.
 
 ## Thing Configuration
 
@@ -149,31 +153,69 @@ Error codes. Data type is string in order to be able to utilize mapping to human
 
 You can clean one or many specific regions of a given map by sending the following String to the command channel:
 
-```
- cleanRegions:<pmapId>;<region_id1>,<region_id2>,..
+```text
+cleanRegions:<pmapId>;[r=]<region_id1>,[r=]<region_id2>,z=<zone_id1>,...;[<user_pmapv_id>]
 ```
 
-The easiest way to determine the pmapId and region_ids is to monitor the last_command channel while starting a new mission for the specific region with the iRobot-App.
+Some devices support cleaning rooms (aka regions). Additionally, support for cleaning rectangle areas previously defined in the iRobot-App (aka zones) may be available.
+If the type string such as `r=` (region) or `z=` (zone) is omnitted, the type defaults to region.
+
+The easiest way to determine the pmapId, region_ids/zoneids and userPmapvId is to monitor the last_command channel while starting a new mission for the specific region or zone with the iRobot-App.
 
 ## Known Problems / Caveats
 
 1. Sending "pause" command during missions other than "clean" is equivalent to sending "stop"
-2. Switching to "spot" mission is possible only in "stop" state. Attempt to do it otherwise causes error: the command is rejected and error tones are played.
-3. Roomba's built-in MQTT server, used for communication, supports only a single local connection at a time. Bear this in mind when you want to do something that requires local connection from your phone, like reconfiguring the network. Disable openHAB Thing before doing this.
-4. Sometimes during intensive testing Roomba just stopped communicating over the local connection. If this happens, try rebooting it. On my robot it's done by holding "Clean" button for about 10 seconds until all the LEDs come on. Release the button and the reboot tone will be played. It looks like there are some bugs in the firmware.
+1. Switching to "spot" mission is possible only in "stop" state. Attempt to do it otherwise causes error: the command is rejected and error tones are played.
+1. Roomba's built-in MQTT server, used for communication, supports only a single local connection at a time. Bear this in mind when you want to do something that requires local connection from your phone, like reconfiguring the network. Disable openHAB Thing before doing this.
+1. Sometimes during intensive testing Roomba just stopped communicating over the local connection. If this happens, try rebooting it. On my robot it's done by holding "Clean" button for about 10 seconds until all the LEDs come on. Release the button and the reboot tone will be played. It looks like there are some bugs in the firmware.
 
+### TLS Compatibility Issue
+
+The Thing may go OFFLINE (COMMUNICATION_ERROR) with:
+
+> Required TLS cipher (TLS_RSA_WITH_AES_256_CBC_SHA) is disabled by your Java security settings.
+
+Some Roomba models use an outdated TLS configuration and require the legacy cipher `TLS_RSA_WITH_AES_256_CBC_SHA`.
+
+Starting with OpenJDK 21.0.10 (and corresponding distributions such as Eclipse Temurin 21.0.10), Java disables all `TLS_RSA_*` cipher suites by default via the `jdk.tls.disabledAlgorithms` setting.
+As a result, connections to devices relying on these ciphers (such as some Roomba models) will fail.
+
+To allow the connection, you must re-enable this cipher in Java’s TLS configuration.
+
+:::warning
+Re-enabling `TLS_RSA_WITH_AES_256_CBC_SHA` has security implications:
+
+- No forward secrecy (RSA key exchange)
+- Uses older CBC-based cipher
+- Considered deprecated in modern TLS standards
+
+Only enable this on trusted/local networks.
+:::
+
+To proceed, modify the system Java configuration by editing (for example) `/usr/lib/jvm/temurin-21-jre-arm64/conf/security/java.security` and adjust the `jdk.tls.disabledAlgorithms` setting with the following contents:
+
+```ini
+jdk.tls.disabledAlgorithms=SSLv3, TLSv1, TLSv1.1, DTLSv1.0, RC4, DES, \
+    MD5withRSA, DH keySize < 1024, EC keySize < 224, 3DES_EDE_CBC, anon, NULL, \
+    ECDH, TLS_RSA_WITH_AES_128_*, TLS_RSA_WITH_AES_256_CBC_SHA256, TLS_RSA_WITH_AES_256_GCM_SHA384, rsa_pkcs1_sha1 usage HandshakeSignature, \
+    ecdsa_sha1 usage HandshakeSignature, dsa_sha1 usage HandshakeSignature
+```
+
+:::warning
+This change affects all Java applications on the system and requires a restart of openHAB.
+:::
 
 ## Example
 
-irobot.things:
+### `irobot.things` Example
 
-```
+```java
 Thing irobot:roomba:my_roomba [ ipaddress="192.168.0.5", password="xxxxxxxx" ]
 ```
 
-irobot.items:
+### `irobot.items` Example
 
-```
+```java
 String Roomba_Command { channel="irobot:roomba:my_roomba:command" }
 String Roomba_Cycle { channel="irobot:roomba:my_roomba:cycle" }
 String Roomba_Phase { channel="irobot:roomba:my_roomba:phase" }
@@ -182,9 +224,9 @@ String Roomba_Bin { channel="irobot:roomba:my_roomba:bin" }
 String Roomba_Error { channel="irobot:roomba:my_roomba:error" }
 ```
 
-irobot.sitemap:
+### `irobot.sitemap` Example
 
-```
+```perl
 Selection item=Roomba_Command mappings=["clean"="Clean", "spot"="Spot", dock="Dock", pause="Pause", stop="Stop"]
 Text item=Roomba_Cycle label="Current cycle"
 Text item=Roomba_Phase label="Current phase"
@@ -195,8 +237,8 @@ Text item=Roomba_Error label="Error"
 
 ## Credits
 
-This code is a result of development of an abandoned draft by hkunh42 (https://github.com/hkuhn42/openhab2.roomba)
+This code is a result of development of an abandoned draft by hkunh42 (<https://github.com/hkuhn42/openhab2.roomba>)
 and heavily uses the following projects as a reference:
 
-- Roomba980-Python by Nick Waterton (https://github.com/NickWaterton/Roomba980-Python)
-- Dorita980 by Facu ZAK (https://github.com/koalazak/dorita980)
+- Roomba980-Python by Nick Waterton (<https://github.com/NickWaterton/Roomba980-Python>)
+- Dorita980 by Facu ZAK (<https://github.com/koalazak/dorita980>)

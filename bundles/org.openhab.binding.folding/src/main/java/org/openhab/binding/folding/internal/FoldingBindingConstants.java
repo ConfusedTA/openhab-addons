@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,7 +16,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ThingTypeUID;
 
 /**
- * The {@link FoldingBinding} class defines common constants, which are
+ * The {@link FoldingBindingConstants} class defines common constants, which are
  * used across the whole binding.
  *
  * @author Marius Bjoernstad - Initial contribution
@@ -33,5 +33,8 @@ public class FoldingBindingConstants {
     public static final String PARAM_SLOT_ID = "id";
 
     // List of all Channel ids
+    public static final String CHANNEL_DESCRIPTION = "description";
+    public static final String CHANNEL_FINISH = "finish";
+    public static final String CHANNEL_RUN = "run";
     public static final String CHANNEL_STATUS = "status";
 }

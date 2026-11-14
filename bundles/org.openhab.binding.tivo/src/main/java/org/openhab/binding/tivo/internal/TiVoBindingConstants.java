@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,7 +16,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ThingTypeUID;
 
 /**
- * The {@link TiVoBinding} class defines common constants that are
+ * The {@link TiVoBindingConstants} class defines common constants that are
  * used across the whole binding.
  *
  * @author Jayson Kubilis (DigitalBytes) - Initial contribution
@@ -42,8 +42,11 @@ public class TiVoBindingConstants {
     public static final String CHANNEL_TIVO_IRCMD = "irCommand";
     public static final String CHANNEL_TIVO_KBDCMD = "kbdCommand";
     public static final String CHANNEL_TIVO_STATUS = "dvrStatus";
+    public static final String CHANNEL_TIVO_SEARCH = "search";
 
     // List of all configuration Properties
     public static final String CONFIG_HOST = "host";
     public static final String CONFIG_PORT = "tcpPort";
+
+    public static final String KEYBOARD = "KEYBOARD";
 }

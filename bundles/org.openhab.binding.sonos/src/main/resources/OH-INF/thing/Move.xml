@@ -8,7 +8,7 @@
 	<thing-type id="Move" listed="false">
 		<label>Move</label>
 		<description>Represents SONOS Move speaker</description>
-
+		<semantic-equipment-tag>Speaker</semantic-equipment-tag>
 		<channels>
 			<channel id="add" typeId="add"/>
 			<channel id="alarm" typeId="alarm"/>
@@ -25,6 +25,7 @@
 			<channel id="repeat" typeId="repeat"/>
 			<channel id="favorite" typeId="favorite"/>
 			<channel id="led" typeId="led"/>
+			<channel id="buttonlock" typeId="buttonlock"/>
 			<channel id="localcoordinator" typeId="localcoordinator"/>
 			<channel id="mute" typeId="system.mute"/>
 			<channel id="notificationsound" typeId="notificationsound"/>
@@ -61,6 +62,7 @@
 		<properties>
 			<property name="vendor">SONOS</property>
 			<property name="modelId">Move</property>
+			<property name="thingTypeVersion">1</property>
 		</properties>
 
 		<representation-property>udn</representation-property>

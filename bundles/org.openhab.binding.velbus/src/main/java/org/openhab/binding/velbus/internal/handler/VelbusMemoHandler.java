@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,7 +17,6 @@ import org.openhab.binding.velbus.internal.packets.VelbusMemoTextPacket;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 
@@ -43,12 +42,12 @@ public abstract class VelbusMemoHandler extends VelbusThermostatHandler {
 
         VelbusBridgeHandler velbusBridgeHandler = getVelbusBridgeHandler();
         if (velbusBridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             return;
         }
 
-        if (channelUID.equals(memoChannel) && command instanceof StringType) {
-            String memoText = ((StringType) command).toFullString();
+        if (channelUID.equals(memoChannel) && command instanceof StringType stringCommand) {
+            String memoText = stringCommand.toFullString();
             String trucatedMemoText = memoText.substring(0, Math.min(memoText.length(), MEMO_TEXT_MAX_LENGTH));
             String[] splittedMemoText = trucatedMemoText.split("(?<=\\G.....)");
 

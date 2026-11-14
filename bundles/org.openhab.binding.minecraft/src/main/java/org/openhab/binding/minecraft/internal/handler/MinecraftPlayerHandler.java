@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -61,12 +61,16 @@ public class MinecraftPlayerHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        this.bridgeHandler = getBridgeHandler();
-        this.config = getThing().getConfiguration().as(PlayerConfig.class);
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        this.bridgeHandler = getBridgeHandler(bridge);
+        this.config = getConfigAs(PlayerConfig.class);
 
-        if (bridgeHandler == null || getThing().getBridgeUID() == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
-
+        if (bridgeHandler == null) {
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Bridge handler missing");
             return;
         }
 
@@ -77,7 +81,7 @@ public class MinecraftPlayerHandler extends BaseThingHandler {
     @Override
     public void dispose() {
         super.dispose();
-        if (!playerSubscription.isUnsubscribed()) {
+        if (playerSubscription != null && !playerSubscription.isUnsubscribed()) {
             playerSubscription.unsubscribe();
         }
     }
@@ -91,7 +95,7 @@ public class MinecraftPlayerHandler extends BaseThingHandler {
                     break;
                 }
             }
-            State onlineState = playerOnline ? OnOffType.ON : OnOffType.OFF;
+            State onlineState = OnOffType.from(playerOnline);
             updateState(MinecraftBindingConstants.CHANNEL_PLAYER_ONLINE, onlineState);
         }).flatMap(players -> Observable.from(players)).filter(player -> config.getName().equals(player.getName()))
                 .subscribe(player -> updatePlayerState(player));
@@ -127,22 +131,12 @@ public class MinecraftPlayerHandler extends BaseThingHandler {
         return config.getName();
     }
 
-    private synchronized MinecraftServerHandler getBridgeHandler() {
-        Bridge bridge = getBridge();
-        if (bridge == null) {
-            logger.debug("Required bridge not defined for device {}.", getThing().getUID());
-            return null;
-        } else {
-            return getBridgeHandler(bridge);
-        }
-    }
-
     private synchronized MinecraftServerHandler getBridgeHandler(Bridge bridge) {
         MinecraftServerHandler bridgeHandler = null;
 
         ThingHandler handler = bridge.getHandler();
-        if (handler instanceof MinecraftServerHandler) {
-            bridgeHandler = (MinecraftServerHandler) handler;
+        if (handler instanceof MinecraftServerHandler serverHandler) {
+            bridgeHandler = serverHandler;
         } else {
             logger.debug("No available bridge handler found yet. Bridge: {} .", bridge.getUID());
             bridgeHandler = null;

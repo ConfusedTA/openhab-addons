@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,6 +19,8 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.homematic.internal.converter.ConverterException;
 import org.openhab.binding.homematic.internal.converter.ConverterTypeException;
 import org.openhab.binding.homematic.internal.converter.StateInvertInfo;
@@ -37,21 +39,22 @@ import org.slf4j.LoggerFactory;
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 public abstract class AbstractTypeConverter<T extends State> implements TypeConverter<T> {
     private final Logger logger = LoggerFactory.getLogger(AbstractTypeConverter.class);
 
     /**
      * Defines all devices where the state datapoint must be inverted.
      */
-    private static final List<StateInvertInfo> stateInvertDevices = new ArrayList<>(3);
+    private static final List<StateInvertInfo> STATE_INVERT_INFO_LIST = new ArrayList<>(3);
 
     static {
-        stateInvertDevices.add(new StateInvertInfo(DEVICE_TYPE_SHUTTER_CONTACT));
-        stateInvertDevices.add(new StateInvertInfo(DEVICE_TYPE_SHUTTER_CONTACT_2));
-        stateInvertDevices.add(new StateInvertInfo(DEVICE_TYPE_INCLINATION_SENSOR));
-        stateInvertDevices.add(new StateInvertInfo(DEVICE_TYPE_WIRED_IO_MODULE, 15, 26));
-        stateInvertDevices.add(new StateInvertInfo(DEVICE_TYPE_MAX_WINDOW_SENSOR));
-        stateInvertDevices.add(new StateInvertInfo(DEVICE_TYPE_SHUTTER_CONTACT_INTERFACE));
+        STATE_INVERT_INFO_LIST.add(new StateInvertInfo(DEVICE_TYPE_SHUTTER_CONTACT));
+        STATE_INVERT_INFO_LIST.add(new StateInvertInfo(DEVICE_TYPE_SHUTTER_CONTACT_2));
+        STATE_INVERT_INFO_LIST.add(new StateInvertInfo(DEVICE_TYPE_INCLINATION_SENSOR));
+        STATE_INVERT_INFO_LIST.add(new StateInvertInfo(DEVICE_TYPE_WIRED_IO_MODULE, 15, 26));
+        STATE_INVERT_INFO_LIST.add(new StateInvertInfo(DEVICE_TYPE_MAX_WINDOW_SENSOR));
+        STATE_INVERT_INFO_LIST.add(new StateInvertInfo(DEVICE_TYPE_SHUTTER_CONTACT_INTERFACE));
     }
 
     /**
@@ -59,7 +62,7 @@ public abstract class AbstractTypeConverter<T extends State> implements TypeConv
      */
     protected boolean isStateInvertDatapoint(HmDatapoint dp) {
         if (DATAPOINT_NAME_STATE.equals(dp.getName())) {
-            for (StateInvertInfo stateInvertInfo : stateInvertDevices) {
+            for (StateInvertInfo stateInvertInfo : STATE_INVERT_INFO_LIST) {
                 if (stateInvertInfo.isToInvert(dp)) {
                     return true;
                 }
@@ -71,16 +74,17 @@ public abstract class AbstractTypeConverter<T extends State> implements TypeConv
     /**
      * Rounds a double value.
      */
-    protected BigDecimal round(Double number) {
-        BigDecimal bd = new BigDecimal(number == null ? "0" : number.toString());
-        String stringBd = bd.toPlainString();
-        int scale = stringBd.length() - (stringBd.lastIndexOf('.') + 1);
-        return bd.setScale(scale > 2 ? 6 : 2, RoundingMode.HALF_UP);
+    protected BigDecimal round(double number) {
+        BigDecimal bd = new BigDecimal(Double.toString(number));
+        int scale = bd.scale();
+        final int maxScale = 6;
+        final int minScale = 2;
+        return bd.setScale(scale > minScale ? maxScale : minScale, RoundingMode.HALF_UP);
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public Object convertToBinding(Type type, HmDatapoint dp) throws ConverterException {
+    public @Nullable Object convertToBinding(Type type, HmDatapoint dp) throws ConverterException {
         if (isLoggingRequired()) {
             logAtDefaultLevel(
                     "Converting type {} with value '{}' using {} to datapoint '{}' (dpType='{}', dpUnit='{}')",
@@ -115,9 +119,9 @@ public abstract class AbstractTypeConverter<T extends State> implements TypeConv
         if (dp.getValue() == null) {
             return (T) UnDefType.NULL;
         } else if (!fromBindingValidation(dp)) {
-            String errorMessage = String.format("Can't convert %s value '%s' with %s for '%s'", dp.getType(),
-                    dp.getValue(), this.getClass().getSimpleName(), new HmDatapointInfo(dp));
-            throw new ConverterTypeException(errorMessage);
+            logger.debug("Can't convert {} value '{}' with {} for '{}'", dp.getType(), dp.getValue(),
+                    this.getClass().getSimpleName(), new HmDatapointInfo(dp));
+            return (T) UnDefType.NULL;
         }
 
         return fromBinding(dp);
@@ -143,7 +147,7 @@ public abstract class AbstractTypeConverter<T extends State> implements TypeConv
         return true;
     }
 
-    private void logAtDefaultLevel(String format, Object... arguments) {
+    private void logAtDefaultLevel(String format, Object @Nullable... arguments) {
         switch (getDefaultLogLevelForTypeConverter()) {
             case TRACE:
                 logger.trace(format, arguments);
@@ -159,9 +163,9 @@ public abstract class AbstractTypeConverter<T extends State> implements TypeConv
     }
 
     /**
-     * Converts a openHAB command to a Homematic value.
+     * Converts an openHAB command to a Homematic value.
      */
-    protected Object commandToBinding(Command command, HmDatapoint dp) throws ConverterException {
+    protected @Nullable Object commandToBinding(Command command, HmDatapoint dp) throws ConverterException {
         throw new ConverterException("Unsupported command " + command.getClass().getSimpleName() + " for "
                 + this.getClass().getSimpleName());
     }
@@ -182,7 +186,7 @@ public abstract class AbstractTypeConverter<T extends State> implements TypeConv
     protected abstract boolean fromBindingValidation(HmDatapoint dp);
 
     /**
-     * Converts the datapoint value to a openHAB type.
+     * Converts the datapoint value to an openHAB type.
      */
     protected abstract T fromBinding(HmDatapoint dp) throws ConverterException;
 

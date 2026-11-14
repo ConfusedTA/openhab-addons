@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -79,17 +79,20 @@ public class PHCHandler extends BaseThingHandler {
             times[1] = (short) (((BigDecimal) getConfig().get(UP_DOWN_TIME_2)).shortValue() * 10);
             times[2] = (short) (((BigDecimal) getConfig().get(UP_DOWN_TIME_3)).shortValue() * 10);
             times[3] = (short) (((BigDecimal) getConfig().get(UP_DOWN_TIME_4)).shortValue() * 10);
-
         } else if (getThing().getThingTypeUID().equals(THING_TYPE_DIM)) {
             times[0] = (((BigDecimal) getConfig().get(DIM_TIME_1)).shortValue());
             times[1] = (((BigDecimal) getConfig().get(DIM_TIME_2)).shortValue());
         }
 
         Bridge bridge = getBridge();
-        if (bridge != null && bridge.getStatus() == ThingStatus.ONLINE) {
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        if (bridge.getStatus() == ThingStatus.ONLINE) {
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -151,19 +154,17 @@ public class PHCHandler extends BaseThingHandler {
         if (bridgeHandler == null) {
             Bridge bridge = getBridge();
             if (bridge == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_PENDING,
-                        "The Thing requires to select a Bridge");
+                logger.debug("Bridge unavailable for Thing {}", getThing().getUID());
                 return null;
             }
 
             ThingHandler handler = bridge.getHandler();
-            if (handler instanceof PHCBridgeHandler) {
-                bridgeHandler = (PHCBridgeHandler) handler;
+            if (handler instanceof PHCBridgeHandler phcBridgeHandler) {
+                bridgeHandler = phcBridgeHandler;
             } else {
                 logger.debug("No available bridge handler for {}.", bridge.getUID());
 
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_MISSING_ERROR,
-                        "No available bridge handler.");
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "No available bridge handler.");
 
                 return null;
             }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -132,6 +132,10 @@ public class NeeoRoomHandler extends BaseBridgeHandler {
         }
     }
 
+    public NeeoRoomConfig getBridgeConfig() {
+        return getConfigAs(NeeoRoomConfig.class);
+    }
+
     /**
      * Refresh the specified channel section, key and id using the specified protocol
      *
@@ -195,8 +199,7 @@ public class NeeoRoomHandler extends BaseBridgeHandler {
 
         final String roomKey = config.getRoomKey();
         if (roomKey == null || roomKey.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Room key (from the parent room bridge) was not found");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Room key (from the parent room bridge) was not found");
             return;
         }
 
@@ -204,7 +207,7 @@ public class NeeoRoomHandler extends BaseBridgeHandler {
             NeeoUtil.checkInterrupt();
             final NeeoBrainApi brainApi = getNeeoBrainApi();
             if (brainApi == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Cannot find the NEEO Brain API");
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "Cannot find the NEEO Brain API");
                 return;
             }
 
@@ -225,7 +228,11 @@ public class NeeoRoomHandler extends BaseBridgeHandler {
 
                 @Override
                 public void statusChanged(ThingStatus status, ThingStatusDetail detail, String msg) {
-                    updateStatus(status, detail, msg);
+                    if (detail == ThingStatusDetail.NONE) {
+                        updateStatus(status, msg);
+                    } else {
+                        updateStatus(detail, msg);
+                    }
                 }
 
                 @Override
@@ -271,12 +278,10 @@ public class NeeoRoomHandler extends BaseBridgeHandler {
             }
         } catch (IOException e) {
             logger.debug("IOException during initialization", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "Room " + config.getRoomKey() + " couldn't be found");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Room " + config.getRoomKey() + " couldn't be found");
         } catch (InterruptedException e) {
             logger.debug("Initialization was interrupted", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
-                    "Initialization was interrupted");
+            updateStatus(ThingStatus.UNKNOWN, "Initialization was interrupted");
         }
     }
 
@@ -317,8 +322,8 @@ public class NeeoRoomHandler extends BaseBridgeHandler {
         final Bridge parent = getBridge();
         if (parent != null) {
             final BridgeHandler handler = parent.getHandler();
-            if (handler instanceof NeeoBrainHandler) {
-                return ((NeeoBrainHandler) handler);
+            if (handler instanceof NeeoBrainHandler brainHandler) {
+                return brainHandler;
             }
         }
         return null;

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -59,8 +59,7 @@ public class ALD1Handler extends BaseModbusThingHandler {
         config = getConfigAs(ALD1Configuration.class);
 
         if (config.pollInterval <= 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Invalid poll interval: " + config.pollInterval);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Invalid poll interval: " + config.pollInterval);
             return;
         }
 
@@ -90,7 +89,7 @@ public class ALD1Handler extends BaseModbusThingHandler {
     }
 
     private void readError(AsyncModbusFailure<ModbusReadRequestBlueprint> error) {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                 "Failed to retrieve data: " + error.getCause().getMessage());
     }
 

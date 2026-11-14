@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,9 +12,7 @@
  */
 package org.openhab.binding.solaredge.internal.config;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.eclipse.jdt.annotation.Nullable;
 
 /**
  * Bean holding configuration data according to bridge.xml
@@ -24,18 +22,23 @@ import org.eclipse.jdt.annotation.Nullable;
 @NonNullByDefault
 public class SolarEdgeConfiguration {
 
-    private @Nullable String tokenOrApiKey;
-    private @Nullable String solarId;
+    private String tokenOrApiKey = "";
+    private String solarId = "";
 
     private boolean meterInstalled = false;
     private boolean usePrivateApi = false;
+    private PublicApiVersion publicApiVersion = PublicApiVersion.V1;
+    private PublicApiAuthentication publicApiAuthentication = PublicApiAuthentication.API_KEY;
+    private String oAuthClientId = "";
+    private String oAuthClientSecret = "";
 
     private Integer asyncTimeout = 120;
     private Integer syncTimeout = 120;
     private Integer liveDataPollingInterval = 10;
     private Integer aggregateDataPollingInterval = 60;
+    private Integer batteryCriticalLevel = 10;
 
-    public @Nullable String getTokenOrApiKey() {
+    public String getTokenOrApiKey() {
         return tokenOrApiKey;
     }
 
@@ -43,7 +46,7 @@ public class SolarEdgeConfiguration {
         this.tokenOrApiKey = tokenOrApiKey;
     }
 
-    public @Nullable String getSolarId() {
+    public String getSolarId() {
         return solarId;
     }
 
@@ -83,6 +86,14 @@ public class SolarEdgeConfiguration {
         this.aggregateDataPollingInterval = aggregateDataPollingInterval;
     }
 
+    public Integer getBatteryCriticalLevel() {
+        return batteryCriticalLevel;
+    }
+
+    public void setBatteryCriticalLevel(Integer batteryCriticalLevel) {
+        this.batteryCriticalLevel = batteryCriticalLevel;
+    }
+
     public boolean isMeterInstalled() {
         return meterInstalled;
     }
@@ -99,12 +110,51 @@ public class SolarEdgeConfiguration {
         this.usePrivateApi = usePrivateApi;
     }
 
+    public PublicApiVersion getPublicApiVersion() {
+        return publicApiVersion;
+    }
+
+    public void setPublicApiVersion(PublicApiVersion publicApiVersion) {
+        this.publicApiVersion = publicApiVersion;
+    }
+
+    public PublicApiAuthentication getPublicApiAuthentication() {
+        return publicApiAuthentication;
+    }
+
+    public void setPublicApiAuthentication(PublicApiAuthentication publicApiAuthentication) {
+        this.publicApiAuthentication = publicApiAuthentication;
+    }
+
+    public String getOAuthClientId() {
+        return oAuthClientId;
+    }
+
+    public void setOAuthClientId(String oAuthClientId) {
+        this.oAuthClientId = oAuthClientId;
+    }
+
+    public String getOAuthClientSecret() {
+        return oAuthClientSecret;
+    }
+
+    public void setOAuthClientSecret(String oAuthClientSecret) {
+        this.oAuthClientSecret = oAuthClientSecret;
+    }
+
     @Override
     public String toString() {
-        return new ToStringBuilder(this).append("tokenOrApiKey", getTokenOrApiKey()).append("solarId", getSolarId())
-                .append("meterInstalled", isMeterInstalled()).append("usePrivateApi", isUsePrivateApi())
-                .append("live data pollingInterval", getLiveDataPollingInterval())
-                .append("aggregate data pollingInterval", getAggregateDataPollingInterval())
-                .append("asyncTimeout", getAsyncTimeout()).append("syncTimeout", getSyncTimeout()).toString();
+        return getClass().getSimpleName() + "{ tokenOrApiKey=" + mask(getTokenOrApiKey()) + ", solarId=" + getSolarId()
+                + ", meterInstalled=" + isMeterInstalled() + ", usePrivateApi=" + isUsePrivateApi()
+                + ", publicApiVersion=" + getPublicApiVersion() + ", publicApiAuthentication="
+                + getPublicApiAuthentication() + ", oAuthClientId=" + mask(getOAuthClientId()) + ", oAuthClientSecret="
+                + mask(getOAuthClientSecret()) + ", live data pollingInterval=" + getLiveDataPollingInterval()
+                + ", aggregate data pollingInterval=" + getAggregateDataPollingInterval() + ", batteryCriticalLevel="
+                + getBatteryCriticalLevel() + ", asyncTimeout=" + getAsyncTimeout() + ", syncTimeout="
+                + getSyncTimeout() + "}";
+    }
+
+    private String mask(String value) {
+        return value.isBlank() ? "<empty>" : "***";
     }
 }

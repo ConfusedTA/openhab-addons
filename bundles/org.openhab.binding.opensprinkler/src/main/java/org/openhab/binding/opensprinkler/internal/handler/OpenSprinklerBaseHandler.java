@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -55,7 +55,7 @@ public abstract class OpenSprinklerBaseHandler extends BaseThingHandler {
         try {
             return localBridge.getApi();
         } catch (IllegalStateException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, e.getMessage());
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, e.getMessage());
             return null;
         }
     }
@@ -90,7 +90,7 @@ public abstract class OpenSprinklerBaseHandler extends BaseThingHandler {
     public void initialize() {
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "No HTTP Bridge thing selected");
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
         bridgeHandler = (OpenSprinklerHttpBridgeHandler) bridge.getHandler();

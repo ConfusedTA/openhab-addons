@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,29 +12,33 @@
  */
 package org.openhab.binding.shelly.internal.util;
 
-import static org.openhab.binding.shelly.internal.ShellyBindingConstants.*;
-
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.DateTimeException;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 
 import javax.measure.Unit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.shelly.internal.api.ShellyApiException;
-import org.openhab.binding.shelly.internal.api.ShellyDeviceProfile;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
@@ -79,19 +83,21 @@ public class ShellyUtils {
         if (classOfT.isInstance(json)) {
             return wrap(classOfT).cast(json);
         } else if (json.isEmpty()) { // update GSON might return null
-            throw new ShellyApiException(PRE + className + "from empty JSON");
+            throw new ShellyApiException(PRE + className + " from empty JSON");
         } else {
             try {
                 @Nullable
                 T obj = gson.fromJson(json, classOfT);
                 if ((obj == null) && exceptionOnNull) { // new in OH3: fromJson may return null
-                    throw new ShellyApiException(PRE + className + "from JSON: " + json);
+                    throw new ShellyApiException(PRE + className + " from JSON: " + json);
                 }
                 return obj;
             } catch (JsonSyntaxException e) {
-                throw new ShellyApiException(PRE + className + "from JSON (syntax/format error): " + json, e);
+                throw new ShellyApiException(
+                        PRE + className + " from JSON (syntax/format error: " + e.getMessage() + "): " + json, e);
             } catch (RuntimeException e) {
-                throw new ShellyApiException(PRE + className + "from JSON: " + json, e);
+                throw new ShellyApiException(
+                        PRE + className + " from JSON (" + getString(e.getMessage() + "), JSON=" + json), e);
             }
         }
     }
@@ -130,6 +136,14 @@ public class ShellyUtils {
 
     public static String mkChannelId(String group, String channel) {
         return group + "#" + channel;
+    }
+
+    /**
+     * Channel id matching any group starting with groupPrefix (e.g. meter, meter1, meter2, ...).
+     * Used for channel migration rules that must apply to every indexed meter group of a Thing.
+     */
+    public static String mkWildcardChannelId(String groupPrefix, String channel) {
+        return groupPrefix + "*#" + channel;
     }
 
     public static String getString(@Nullable String value) {
@@ -191,6 +205,14 @@ public class ShellyUtils {
         return "";
     }
 
+    /**
+     * A deprecated split channel (e.g. brightness$Switch/brightness$Value) carries a $-suffix that
+     * is not part of the real ChannelUID; strip it before passing the id to core APIs like isLinked().
+     */
+    public static String stripDeprecatedSuffix(String channelId) {
+        return channelId.contains("$") ? substringBefore(channelId, "$") : channelId;
+    }
+
     public static String getMessage(Exception e) {
         String message = e.getMessage();
         return message != null ? message : "";
@@ -218,8 +240,17 @@ public class ShellyUtils {
         return new StringType(value != null ? value : "");
     }
 
+    public static State toStringOrUndef(@Nullable String value) {
+        return value != null ? new StringType(value) : UnDefType.UNDEF;
+    }
+
     public static DecimalType getDecimal(@Nullable Double value) {
         return new DecimalType((value != null ? value : 0));
+    }
+
+    public static DecimalType getDecimal(@Nullable Double value, int digits) {
+        BigDecimal bd = BigDecimal.valueOf(value != null ? value : 0);
+        return new DecimalType(bd.setScale(digits, RoundingMode.HALF_UP));
     }
 
     public static DecimalType getDecimal(@Nullable Integer value) {
@@ -231,21 +262,35 @@ public class ShellyUtils {
     }
 
     public static Double getNumber(Command command) throws IllegalArgumentException {
-        if (command instanceof DecimalType) {
-            return ((DecimalType) command).doubleValue();
+        if (command instanceof QuantityType<?> quantityCommand) {
+            return quantityCommand.doubleValue();
         }
-        if (command instanceof QuantityType) {
-            return ((QuantityType<?>) command).doubleValue();
+        if (command instanceof DecimalType decimalCommand) {
+            return decimalCommand.doubleValue();
         }
-        throw new IllegalArgumentException("Unable to convert number");
+        if (command instanceof Number numberCommand) {
+            return numberCommand.doubleValue();
+        }
+        throw new IllegalArgumentException("Invalid Number type for conversion: " + command);
+    }
+
+    public static String getString(Command command) throws IllegalArgumentException {
+        if (command instanceof StringType string) {
+            return string.toString();
+        }
+        throw new IllegalArgumentException("Invalid StringType for conversion: " + command);
     }
 
     public static OnOffType getOnOff(@Nullable Boolean value) {
-        return (value != null ? value ? OnOffType.ON : OnOffType.OFF : OnOffType.OFF);
+        return OnOffType.from(value != null && value);
+    }
+
+    public static OpenClosedType getOpenClosed(@Nullable Boolean value) {
+        return (value != null && value ? OpenClosedType.OPEN : OpenClosedType.CLOSED);
     }
 
     public static OnOffType getOnOff(int value) {
-        return value == 0 ? OnOffType.OFF : OnOffType.ON;
+        return OnOffType.from(value != 0);
     }
 
     public static State toQuantityType(@Nullable Double value, int digits, Unit<?> unit) {
@@ -278,31 +323,24 @@ public class ShellyUtils {
         }
     }
 
-    public static Long now() {
-        return System.currentTimeMillis() / 1000L;
+    public static double now() {
+        return System.currentTimeMillis() / 1000.0;
     }
 
     public static DateTimeType getTimestamp() {
-        return new DateTimeType(ZonedDateTime.ofInstant(Instant.ofEpochSecond(now()), ZoneId.systemDefault()));
+        return new DateTimeType(Instant.now().truncatedTo(ChronoUnit.SECONDS));
     }
 
     public static DateTimeType getTimestamp(String zone, long timestamp) {
         try {
-            if (timestamp == 0) {
-                throw new IllegalArgumentException("Timestamp value 0 is invalid");
-            }
-            ZoneId zoneId = !zone.isEmpty() ? ZoneId.of(zone) : ZoneId.systemDefault();
-            ZonedDateTime zdt = LocalDateTime.now().atZone(zoneId);
-            int delta = zdt.getOffset().getTotalSeconds();
-            return new DateTimeType(ZonedDateTime.ofInstant(Instant.ofEpochSecond(timestamp - delta), zoneId));
+            ZoneId zoneId = zone.isEmpty() ? ZoneId.systemDefault() : ZoneId.of(zone);
+            Instant instant = Instant.ofEpochSecond(timestamp);
+            int delta = zoneId.getRules().getOffset(instant).getTotalSeconds();
+            return new DateTimeType(Instant.ofEpochSecond(timestamp - delta));
         } catch (DateTimeException e) {
             // Unable to convert device's timezone, use system one
             return getTimestamp();
         }
-    }
-
-    public static String getTimestamp(DateTimeType dt) {
-        return dt.getZonedDateTime().toString().replace('T', ' ').replace('-', '/');
     }
 
     public static String convertTimestamp(long ts) {
@@ -311,23 +349,6 @@ public class ShellyUtils {
         }
         String time = DATE_TIME.format(ZonedDateTime.ofInstant(Instant.ofEpochSecond(ts), ZoneId.systemDefault()));
         return time.replace('T', ' ').replace('-', '/');
-    }
-
-    public static Integer getLightIdFromGroup(String groupName) {
-        if (groupName.startsWith(CHANNEL_GROUP_LIGHT_CHANNEL)) {
-            return Integer.parseInt(substringAfter(groupName, CHANNEL_GROUP_LIGHT_CHANNEL)) - 1;
-        }
-        return 0; // only 1 light, e.g. bulb or rgbw2 in color mode
-    }
-
-    public static String buildControlGroupName(ShellyDeviceProfile profile, Integer channelId) {
-        return profile.isBulb || profile.isDuo || profile.inColor ? CHANNEL_GROUP_LIGHT_CONTROL
-                : CHANNEL_GROUP_LIGHT_CHANNEL + channelId.toString();
-    }
-
-    public static String buildWhiteGroupName(ShellyDeviceProfile profile, Integer channelId) {
-        return profile.isBulb || profile.isDuo ? CHANNEL_GROUP_WHITE_CONTROL
-                : CHANNEL_GROUP_LIGHT_CHANNEL + channelId.toString();
     }
 
     public static DecimalType mapSignalStrength(int dbm) {
@@ -344,5 +365,69 @@ public class ShellyUtils {
             strength = 0;
         }
         return new DecimalType(strength);
+    }
+
+    public static boolean isDigit(char c) {
+        return c >= '0' && c <= '9';
+    }
+
+    public static char lastChar(String s) {
+        return s.length() > 1 ? s.charAt(s.length() - 1) : '*';
+    }
+
+    public static String sha256(String string) throws ShellyApiException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            final byte[] hashbytes = digest.digest(string.getBytes(StandardCharsets.UTF_8));
+            return bytesToHex(hashbytes);
+        } catch (NoSuchAlgorithmException e) {
+            throw new ShellyApiException("SHA256 can't be initialzed", e);
+        }
+    }
+
+    public static String bytesToHex(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder(2 * bytes.length);
+        for (int i = 0; i < bytes.length; i++) {
+            String hex = Integer.toHexString(0xff & bytes[i]);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
+
+    /**
+     * Adds missing '=' padding to a Base64 string that may have been stripped by Shelly firmware.
+     * Java's Base64.getDecoder() is strict and requires canonical padding.
+     *
+     * @param b64 raw Base64 string, possibly unpadded
+     * @return Base64 string with correct padding appended
+     */
+    public static String fixBase64Padding(String b64) {
+        int rem = b64.length() % 4;
+        if (rem == 2) {
+            return b64 + "==";
+        } else if (rem == 3) {
+            return b64 + "=";
+        }
+        return b64;
+    }
+
+    /**
+     * Decodes a byte array as UTF-8, rejecting malformed or unmappable sequences instead of silently
+     * replacing them (as {@code new String(bytes, UTF_8)} does).
+     *
+     * @param bytes the bytes to decode
+     * @return the decoded string, or null when {@code bytes} is not valid UTF-8
+     */
+    public static @Nullable String decodeUtf8Strict(byte[] bytes) {
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            return decoder.decode(ByteBuffer.wrap(bytes)).toString();
+        } catch (CharacterCodingException e) {
+            return null;
+        }
     }
 }

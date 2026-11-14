@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -58,7 +58,6 @@ import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
-import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
@@ -205,9 +204,9 @@ public class PlugwiseRelayDeviceHandler extends AbstractPlugwiseThingHandler {
             if (deviceType == DeviceType.CIRCLE_PLUS) {
                 // The Circle+ real-time clock needs to be updated first to prevent clock sync issues
                 sendCommandMessage(new RealTimeClockSetRequestMessage(macAddress, LocalDateTime.now()));
-                scheduler.schedule(() -> {
-                    sendCommandMessage(new ClockSetRequestMessage(macAddress, LocalDateTime.now()));
-                }, 5, TimeUnit.SECONDS);
+                scheduler.schedule(
+                        () -> sendCommandMessage(new ClockSetRequestMessage(macAddress, LocalDateTime.now())), 5,
+                        TimeUnit.SECONDS);
             } else {
                 sendCommandMessage(new ClockSetRequestMessage(macAddress, LocalDateTime.now()));
             }
@@ -353,11 +352,10 @@ public class PlugwiseRelayDeviceHandler extends AbstractPlugwiseThingHandler {
     public void handleCommand(ChannelUID channelUID, Command command) {
         logger.debug("Handling command '{}' for {} ({}) channel '{}'", command, deviceType, macAddress,
                 channelUID.getId());
-        if (CHANNEL_STATE.equals(channelUID.getId()) && (command instanceof OnOffType)) {
+        if (CHANNEL_STATE.equals(channelUID.getId()) && (command instanceof OnOffType onOffCommand)) {
             if (configuration.getPowerStateChanging() == PowerStateChanging.COMMAND_SWITCHING) {
-                OnOffType onOff = (OnOffType) command;
-                pendingPowerStateChange = new PendingPowerStateChange(onOff);
-                handleOnOffCommand(onOff);
+                pendingPowerStateChange = new PendingPowerStateChange(onOffCommand);
+                handleOnOffCommand(onOffCommand);
             } else {
                 OnOffType onOff = configuration.getPowerStateChanging() == PowerStateChanging.ALWAYS_ON ? OnOffType.ON
                         : OnOffType.OFF;
@@ -369,7 +367,7 @@ public class PlugwiseRelayDeviceHandler extends AbstractPlugwiseThingHandler {
 
     private void handleInformationResponse(InformationResponseMessage message) {
         recentLogAddress = message.getLogAddress();
-        OnOffType powerState = message.getPowerState() ? OnOffType.ON : OnOffType.OFF;
+        OnOffType powerState = OnOffType.from(message.getPowerState());
 
         PendingPowerStateChange change = pendingPowerStateChange;
         if (change != null) {
@@ -468,12 +466,11 @@ public class PlugwiseRelayDeviceHandler extends AbstractPlugwiseThingHandler {
     }
 
     @Override
-    public void handleReponseMessage(Message message) {
+    public void handleResponseMessage(Message message) {
         updateLastSeen();
 
         switch (message.getType()) {
-            case ACKNOWLEDGEMENT_V1:
-            case ACKNOWLEDGEMENT_V2:
+            case ACKNOWLEDGEMENT_V1, ACKNOWLEDGEMENT_V2:
                 handleAcknowledgement((AcknowledgementMessage) message);
                 break;
             case CLOCK_GET_RESPONSE:
@@ -586,10 +583,10 @@ public class PlugwiseRelayDeviceHandler extends AbstractPlugwiseThingHandler {
     }
 
     @Override
-    protected void updateStatus(ThingStatus status, ThingStatusDetail statusDetail, @Nullable String description) {
-        super.updateStatus(status, statusDetail, description);
+    protected void statusChanged(ThingStatus oldStatus) {
+        super.statusChanged(oldStatus);
 
-        if (status == ONLINE) {
+        if (thing.getStatus() == ONLINE) {
             if (!isCalibrated()) {
                 calibrate();
             }

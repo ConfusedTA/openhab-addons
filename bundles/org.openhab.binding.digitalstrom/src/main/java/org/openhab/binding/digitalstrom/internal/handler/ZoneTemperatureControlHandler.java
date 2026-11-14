@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -30,7 +30,6 @@ import org.openhab.binding.digitalstrom.internal.lib.listener.TemperatureControl
 import org.openhab.binding.digitalstrom.internal.lib.manager.StructureManager;
 import org.openhab.binding.digitalstrom.internal.lib.manager.impl.TemperatureControlManager;
 import org.openhab.binding.digitalstrom.internal.lib.structure.devices.deviceparameters.constants.ApplicationGroup;
-import org.openhab.binding.digitalstrom.internal.lib.structure.devices.deviceparameters.constants.OutputChannelEnum;
 import org.openhab.binding.digitalstrom.internal.lib.structure.devices.deviceparameters.constants.OutputModeEnum;
 import org.openhab.binding.digitalstrom.internal.providers.DsChannelTypeProvider;
 import org.openhab.core.config.core.Configuration;
@@ -111,10 +110,10 @@ public class ZoneTemperatureControlHandler extends BaseThingHandler implements T
             } else {
                 // Set status to OFFLINE, if no bridge is available e.g. because the bridge has been removed and the
                 // Thing was reinitialized.
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Bridge is missing!");
+                updateStatus(ThingStatus.OFFLINE, "Bridge is missing!");
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "zoneID is missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "zoneID is missing");
         }
     }
 
@@ -124,7 +123,7 @@ public class ZoneTemperatureControlHandler extends BaseThingHandler implements T
      *
      * @param config the {@link Configuration} to be checked
      * @param bridge the responsible {@link BridgeHandler}
-     * @return zoneID the existing dS zoneID or a error constant
+     * @return zoneID the existing dS zoneID or an error constant
      */
     public static int getZoneID(Configuration config, BridgeHandler bridge) {
         if (config == null || config.get(DigitalSTROMBindingConstants.ZONE_ID) == null) {
@@ -166,7 +165,7 @@ public class ZoneTemperatureControlHandler extends BaseThingHandler implements T
         if (bridgeStatusInfo.getStatus().equals(ThingStatus.ONLINE)) {
             int tempZoneID = getZoneID(getConfig(), getDssBridgeHandler());
             if (tempZoneID == ZONE_ID_NOT_EXISTS) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                         "Configured zone '" + getConfig().get(DigitalSTROMBindingConstants.ZONE_ID)
                                 + "' does not exist, please check the configuration.");
             } else {
@@ -175,17 +174,16 @@ public class ZoneTemperatureControlHandler extends BaseThingHandler implements T
             if (zoneID != null) {
                 if (getDssBridgeHandler() != null && temperatureSensorTransmitter == null) {
                     dssBridgeHandler.registerTemperatureControlStatusListener(this);
-                    updateStatus(ThingStatus.ONLINE, ThingStatusDetail.CONFIGURATION_PENDING,
-                            "waiting for listener registration");
+                    updateStatus(ThingStatus.UNKNOWN);
                 } else {
                     updateStatus(ThingStatus.ONLINE);
                 }
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No zoneID is set!");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No zoneID is set!");
             }
         }
         if (bridgeStatusInfo.getStatus().equals(ThingStatus.OFFLINE)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
         logger.debug("Set status to {}", getThing().getStatusInfo());
     }
@@ -258,8 +256,8 @@ public class ZoneTemperatureControlHandler extends BaseThingHandler implements T
             }
             ThingHandler handler = bridge.getHandler();
 
-            if (handler instanceof BridgeHandler) {
-                dssBridgeHandler = (BridgeHandler) handler;
+            if (handler instanceof BridgeHandler bridgeHandler) {
+                dssBridgeHandler = bridgeHandler;
             } else {
                 return null;
             }
@@ -282,18 +280,18 @@ public class ZoneTemperatureControlHandler extends BaseThingHandler implements T
                                 || !currentChannelID.contains(DsChannelTypeProvider.TEMPERATURE_CONTROLLED))
                         && !controlState.equals(ControlStates.EMERGENCY)) {
                     currentChannelID = DsChannelTypeProvider.getOutputChannelTypeID(ApplicationGroup.Color.BLUE,
-                            OutputModeEnum.TEMPRETURE_PWM, new ArrayList<OutputChannelEnum>());
+                            OutputModeEnum.TEMPRETURE_PWM, new ArrayList<>());
                     loadChannel();
                     currentValue = tempControlStatus.getNominalValue();
                     updateState(currentChannelID, new DecimalType(currentValue.doubleValue()));
                 } else if (!controlMode.equals(ControlModes.PID_CONTROL) && !controlMode.equals(ControlModes.OFF)) {
                     currentChannelID = DsChannelTypeProvider.getOutputChannelTypeID(ApplicationGroup.Color.BLUE,
-                            OutputModeEnum.HEATING_PWM, new ArrayList<OutputChannelEnum>());
+                            OutputModeEnum.HEATING_PWM, new ArrayList<>());
                     loadChannel();
                     currentValue = tempControlStatus.getControlValue();
                     updateState(currentChannelID, new PercentType(fixPercent(currentValue.intValue())));
                     if (controlState.equals(ControlStates.EMERGENCY)) {
-                        updateStatus(ThingStatus.ONLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                                 "The communication with temperation sensor fails. Temperature control state emergency (temperature control though the control value) is active.");
                     }
                 }
@@ -304,7 +302,7 @@ public class ZoneTemperatureControlHandler extends BaseThingHandler implements T
                 updateProperties(properties);
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "digitalSTROM temperature control is for this zone not configured in.");
         }
     }

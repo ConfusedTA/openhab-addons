@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.dmx.internal;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -26,7 +27,7 @@ import org.openhab.core.types.State;
  *
  * @author Jan N. Klug - Initial contribution
  */
-
+@NonNullByDefault
 public abstract class DmxThingHandler extends BaseThingHandler {
 
     protected ThingStatusDetail dmxHandlerStatus = ThingStatusDetail.HANDLER_CONFIGURATION_PENDING;
@@ -60,10 +61,12 @@ public abstract class DmxThingHandler extends BaseThingHandler {
         if (ThingStatus.ONLINE.equals(bridgeStatusInfo.getStatus())
                 && ThingStatus.OFFLINE.equals(getThing().getStatusInfo().getStatus())
                 && ThingStatusDetail.BRIDGE_OFFLINE.equals(getThing().getStatusInfo().getStatusDetail())) {
-            if (ThingStatusDetail.NONE.equals(dmxHandlerStatus)) {
-                updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+            if (dmxHandlerStatus == ThingStatusDetail.HANDLER_CONFIGURATION_PENDING) {
+                updateStatus(ThingStatus.UNKNOWN);
+            } else if (ThingStatusDetail.NONE.equals(dmxHandlerStatus)) {
+                updateStatus(ThingStatus.ONLINE);
             } else {
-                updateStatus(ThingStatus.OFFLINE, dmxHandlerStatus);
+                updateStatus(dmxHandlerStatus);
             }
         }
     }

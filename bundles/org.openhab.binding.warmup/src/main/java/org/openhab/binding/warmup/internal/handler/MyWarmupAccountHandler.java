@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,7 +13,7 @@
 package org.openhab.binding.warmup.internal.handler;
 
 import java.util.Collection;
-import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -55,22 +55,21 @@ public class MyWarmupAccountHandler extends BaseBridgeHandler {
     public void initialize() {
         MyWarmupConfigurationDTO config = getConfigAs(MyWarmupConfigurationDTO.class);
         if (config.username.length() == 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Username not configured");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Username not configured");
         } else if (config.password.length() == 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Password not configured");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Password not configured");
         } else if (config.refreshInterval >= 10) {
             api.setConfiguration(config);
             refreshJob = scheduler.scheduleWithFixedDelay(this::refreshFromServer, 0, config.refreshInterval,
                     TimeUnit.SECONDS);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Refresh interval misconfigured (minimum 10s)");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Refresh interval misconfigured (minimum 10s)");
         }
     }
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(WarmupDiscoveryService.class);
+        return Set.of(WarmupDiscoveryService.class);
     }
 
     @Override
@@ -95,7 +94,7 @@ public class MyWarmupAccountHandler extends BaseBridgeHandler {
             updateStatus(ThingStatus.ONLINE);
         } catch (MyWarmupApiException e) {
             queryResponse = null;
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
         refreshFromCache();
     }

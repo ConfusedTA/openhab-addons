@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,13 +14,17 @@ package org.openhab.binding.evohome.internal;
 
 import java.util.concurrent.TimeoutException;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.evohome.internal.api.EvohomeApiClientException;
+
 /**
  * Provides an interface for a delegate that can throw a timeout
  *
  * @author Jasper van Zuijlen - Initial contribution
  *
  */
+@NonNullByDefault
 public interface RunnableWithTimeout {
 
-    public abstract void run() throws TimeoutException;
+    void run() throws TimeoutException, EvohomeApiClientException;
 }

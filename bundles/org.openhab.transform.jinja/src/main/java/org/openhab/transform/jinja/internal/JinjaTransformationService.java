@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,7 +15,6 @@ package org.openhab.transform.jinja.internal;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -31,7 +30,6 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hubspot.jinjava.Jinjava;
-import com.hubspot.jinjava.JinjavaConfig;
 import com.hubspot.jinjava.interpret.FatalTemplateErrorsException;
 
 /**
@@ -47,8 +45,7 @@ public class JinjaTransformationService implements TransformationService {
 
     private final Logger logger = LoggerFactory.getLogger(JinjaTransformationService.class);
 
-    private final JinjavaConfig config = JinjavaConfig.newBuilder().withFailOnUnknownTokens(true).build();
-    private final Jinjava jinjava = new Jinjava(config);
+    private final Jinjava jinjava = new Jinjava();
 
     /**
      * Transforms the input <code>value</code> by Jinja template.
@@ -97,9 +94,7 @@ public class JinjaTransformationService implements TransformationService {
                 return node.decimalValue();
             case OBJECT: {
                 Map<String, @Nullable Object> result = new HashMap<>();
-                Iterator<Entry<String, JsonNode>> it = node.fields();
-                while (it.hasNext()) {
-                    Entry<String, JsonNode> field = it.next();
+                for (Entry<String, JsonNode> field : node.properties()) {
                     result.put(field.getKey(), toObject(field.getValue()));
                 }
                 return result;

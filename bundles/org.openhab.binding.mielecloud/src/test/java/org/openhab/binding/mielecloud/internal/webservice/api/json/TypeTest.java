@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -52,5 +52,20 @@ public class TypeTest {
         assertEquals("Devicetype", type.getKeyLocalized().get());
         assertEquals(DeviceType.WASHING_MACHINE, type.getValueRaw());
         assertEquals("Washing Machine", type.getValueLocalized().get());
+    }
+
+    @Test
+    public void testParseTypeWithHobWithVaporExtractionRawValue() {
+        // given:
+        String json = "{ \"key_localized\": \"Devicetype\", \"value_raw\": 74, \"value_localized\": \"Hob with vapour extraction\" }";
+
+        // when:
+        Type type = new Gson().fromJson(json, Type.class);
+
+        // then:
+        assertNotNull(type);
+        assertEquals("Devicetype", type.getKeyLocalized().get());
+        assertEquals(DeviceType.HOB_WITH_VAPOR_EXTRACTION, type.getValueRaw());
+        assertEquals("Hob with vapour extraction", type.getValueLocalized().get());
     }
 }

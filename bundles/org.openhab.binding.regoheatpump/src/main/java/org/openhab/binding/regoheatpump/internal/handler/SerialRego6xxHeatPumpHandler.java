@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,13 +12,16 @@
  */
 package org.openhab.binding.regoheatpump.internal.handler;
 
+import java.io.IOException;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.regoheatpump.internal.RegoHeatPumpBindingConstants;
 import org.openhab.binding.regoheatpump.internal.protocol.RegoConnection;
 import org.openhab.binding.regoheatpump.internal.protocol.SerialRegoConnection;
 import org.openhab.core.io.transport.serial.SerialPortIdentifier;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 
 /**
@@ -27,9 +30,10 @@ import org.openhab.core.thing.ThingStatusDetail;
  *
  * @author Boris Krivonog - Initial contribution
  */
+@NonNullByDefault
 public class SerialRego6xxHeatPumpHandler extends Rego6xxHeatPumpHandler {
     private final SerialPortManager serialPortManager;
-    private SerialPortIdentifier serialPortIdentifier;
+    private @Nullable SerialPortIdentifier serialPortIdentifier;
 
     public SerialRego6xxHeatPumpHandler(Thing thing, SerialPortManager serialPortManager) {
         super(thing);
@@ -41,15 +45,18 @@ public class SerialRego6xxHeatPumpHandler extends Rego6xxHeatPumpHandler {
         String portName = (String) getConfig().get(RegoHeatPumpBindingConstants.PORT_NAME);
         serialPortIdentifier = serialPortManager.getIdentifier(portName);
         if (serialPortIdentifier == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Serial port does not exist: " + portName);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Serial port does not exist: " + portName);
         } else {
             super.initialize();
         }
     }
 
     @Override
-    protected RegoConnection createConnection() {
+    protected RegoConnection createConnection() throws IOException {
+        SerialPortIdentifier serialPortIdentifier = this.serialPortIdentifier;
+        if (serialPortIdentifier == null) {
+            throw new IOException("Serial port does not exist");
+        }
         return new SerialRegoConnection(serialPortIdentifier, 19200);
     }
 }

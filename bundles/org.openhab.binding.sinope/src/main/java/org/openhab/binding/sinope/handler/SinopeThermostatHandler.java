@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -67,12 +67,12 @@ public class SinopeThermostatHandler extends BaseThingHandler {
         if (getSinopeGatewayHandler() != null) {
             try {
                 if (SinopeBindingConstants.CHANNEL_SETTEMP.equals(channelUID.getId())
-                        && command instanceof QuantityType) {
-                    setSetpointTemp(((QuantityType<?>) command).floatValue());
+                        && command instanceof QuantityType quantityCommand) {
+                    setSetpointTemp(quantityCommand.floatValue());
                 }
                 if (SinopeBindingConstants.CHANNEL_SETMODE.equals(channelUID.getId())
-                        && command instanceof DecimalType) {
-                    setSetpointMode(((DecimalType) command).intValue());
+                        && command instanceof DecimalType decimalCommand) {
+                    setSetpointMode(decimalCommand.intValue());
                 }
             } catch (IOException e) {
                 logger.debug("Cannot handle command for channel {} because of {}", channelUID.getId(),
@@ -103,7 +103,7 @@ public class SinopeThermostatHandler extends BaseThingHandler {
                 }
             } else {
                 logger.debug("Could not connect to bridge to update Setpoint Temp");
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Cannot connect to bridge");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Cannot connect to bridge");
             }
         } finally {
             getSinopeGatewayHandler().schedulePoll();
@@ -129,7 +129,7 @@ public class SinopeThermostatHandler extends BaseThingHandler {
                 }
             } else {
                 logger.debug("Could not connect to bridge to update Setpoint Temp");
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Cannot connect to bridge");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Cannot connect to bridge");
             }
         } finally {
             getSinopeGatewayHandler().schedulePoll();
@@ -193,7 +193,7 @@ public class SinopeThermostatHandler extends BaseThingHandler {
             }
         } else {
             logger.error("Device id is null for Thing UID: {}", getThing().getUID());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR);
         }
     }
 
@@ -252,13 +252,13 @@ public class SinopeThermostatHandler extends BaseThingHandler {
         this.deviceId = SinopeConfig.convert(sDeviceId);
         if (this.deviceId.length == 0) {
             logger.debug("Invalid Device id, cannot convert id: {}", sDeviceId);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Invalid Device id");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Invalid Device id");
             return;
         }
 
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
         SinopeGatewayHandler handler = getSinopeGatewayHandler();

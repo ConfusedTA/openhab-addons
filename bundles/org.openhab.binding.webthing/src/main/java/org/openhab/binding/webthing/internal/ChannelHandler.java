@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,7 +14,6 @@ package org.openhab.binding.webthing.internal;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ChannelUID;
-import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
 
 /**
@@ -38,12 +37,12 @@ public interface ChannelHandler {
      * updates an Item state of a dedicated channel
      *
      * @param channelUID the channel identifier
-     * @param command the state update command
+     * @param state the new channel state
      */
-    void updateItemState(ChannelUID channelUID, Command command);
+    void updateItemState(ChannelUID channelUID, State state);
 
     /**
-     * Listener that will be notified, if a Item state is changed
+     * Listener that will be notified, if an Item state is changed
      */
     interface ItemChangedListener {
 

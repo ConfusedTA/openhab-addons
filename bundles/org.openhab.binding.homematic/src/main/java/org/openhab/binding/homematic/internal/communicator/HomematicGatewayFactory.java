@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,27 +14,32 @@ package org.openhab.binding.homematic.internal.communicator;
 
 import java.io.IOException;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
 import org.openhab.binding.homematic.internal.common.HomematicConfig;
 import org.openhab.binding.homematic.internal.communicator.client.RpcClient;
 import org.openhab.binding.homematic.internal.communicator.client.XmlRpcClient;
+import org.openhab.binding.homematic.internal.model.HmGatewayInfo;
+import org.openhab.core.i18n.ConfigurationException;
 
 /**
  * Factory which evaluates the type of the Homematic gateway and instantiates the appropriate class.
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 public class HomematicGatewayFactory {
 
     /**
      * Creates the HomematicGateway.
      */
     public static HomematicGateway createGateway(String id, HomematicConfig config,
-            HomematicGatewayAdapter gatewayAdapter, HttpClient httpClient) throws IOException {
+            HomematicGatewayAdapter gatewayAdapter, HttpClient httpClient) throws IOException, ConfigurationException {
         loadGatewayInfo(config, id, httpClient);
-        if (config.getGatewayInfo().isCCU()) {
+        HmGatewayInfo gwInfo = config.getGatewayInfo();
+        if (gwInfo.isCCU()) {
             return new CcuGateway(id, config, gatewayAdapter, httpClient);
-        } else if (config.getGatewayInfo().isHomegear()) {
+        } else if (gwInfo.isHomegear()) {
             return new HomegearGateway(id, config, gatewayAdapter, httpClient);
         } else {
             return new DefaultGateway(id, config, gatewayAdapter, httpClient);

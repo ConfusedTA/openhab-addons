@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -10,7 +10,6 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-
 package org.openhab.binding.shelly.internal.util;
 
 import static org.openhab.binding.shelly.internal.util.ShellyUtils.mkChannelId;
@@ -19,14 +18,23 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.shelly.internal.handler.ShellyBaseHandler;
+import org.openhab.binding.shelly.internal.handler.ShellyThingInterface;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link ShellyChannelCache} implements a caching layer for channel updates.
+ * {@link ShellyChannelCache} prevents redundant updateState() calls by storing the last
+ * published state per channel:
+ *
+ * The cache starts disabled (all updates pass through). After N full update cycles
+ * it is enabled, and subsequent calls are filtered. This ensures all channels are
+ * published to openHAB at least once during initialization.
+ *
+ * updateChannel() returns true only if the new value differs from the cached one
+ *
+ * getValue() last known state (returns UnDefType.NULL if not yet published)
  *
  * @author Markus Michels - Initial contribution
  */
@@ -34,14 +42,14 @@ import org.slf4j.LoggerFactory;
 public class ShellyChannelCache {
     private final Logger logger = LoggerFactory.getLogger(ShellyChannelCache.class);
 
-    private final ShellyBaseHandler thingHandler;
+    private final ShellyThingInterface thingHandler;
     private final Map<String, State> channelData = new ConcurrentHashMap<>();
     private String thingName = "";
-    private boolean enabled = false;
+    private boolean enabled;
 
-    public ShellyChannelCache(ShellyBaseHandler thingHandler) {
+    public ShellyChannelCache(ShellyThingInterface thingHandler) {
         this.thingHandler = thingHandler;
-        setThingName(thingHandler.thingName);
+        setThingName(thingHandler.getThingName());
     }
 
     public void setThingName(String thingName) {
@@ -66,7 +74,7 @@ public class ShellyChannelCache {
      * messing up the log with those updates)
      *
      * @param channelId Channel id
-     * @param value Value (State)
+     * @param newValue Value (State)
      * @param forceUpdate true: ignore cached data, force update; false check cache of changed data
      * @return true, if successful
      */
@@ -77,8 +85,8 @@ public class ShellyChannelCache {
                 current = channelData.get(channelId);
             }
             if (!enabled || forceUpdate || (current == null) || !current.equals(newValue)) {
-                if ((current != null) && current.getClass().isEnum() && (current.equals(newValue))) {
-                    return false; // special case for OnOffType
+                if (!forceUpdate && (current != null) && current.getClass().isEnum() && (current.equals(newValue))) {
+                    return false; // special case for OnOffType, unless the caller explicitly forces a republish
                 }
                 // For channels that support multiple types (like brightness) a suffix is added
                 // this gets removed to get the channelId for updateState
@@ -88,8 +96,6 @@ public class ShellyChannelCache {
                 } else {
                     channelData.replace(channelId, newValue);
                 }
-                logger.debug("{}: Channel {} updated with {} (type {}).", thingName, channelId, newValue,
-                        newValue.getClass());
                 return true;
             }
         } catch (IllegalArgumentException e) {

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -81,7 +81,7 @@ public class HPPrinterHandler extends BaseThingHandler {
             localBinder.retrieveProperties();
             localBinder.open();
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "You must set an IP Address");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "You must set an IP Address");
         }
     }
 
@@ -109,6 +109,16 @@ public class HPPrinterHandler extends BaseThingHandler {
     }
 
     @Override
+    protected void updateStatus(final ThingStatus status, @Nullable final String message) {
+        super.updateStatus(status, message);
+    }
+
+    @Override
+    protected void updateStatus(final ThingStatusDetail statusDetail, @Nullable final String message) {
+        super.updateStatus(statusDetail, message);
+    }
+
+    @Override
     public void channelLinked(ChannelUID channelUID) {
         final HPPrinterBinder localBinder = binder;
         if (localBinder != null) {
@@ -122,12 +132,6 @@ public class HPPrinterHandler extends BaseThingHandler {
         if (localBinder != null) {
             localBinder.channelsChanged();
         }
-    }
-
-    @Override
-    protected void updateStatus(final ThingStatus status, final ThingStatusDetail thingStatusDetail,
-            @Nullable final String message) {
-        super.updateStatus(status, thingStatusDetail, message);
     }
 
     public void updateState(final String group, final String channel, final State state) {
@@ -155,7 +159,7 @@ public class HPPrinterHandler extends BaseThingHandler {
     }
 
     @Override
-    protected void updateProperties(final Map<String, String> properties) {
+    protected void updateProperties(final @Nullable Map<String, String> properties) {
         super.updateProperties(properties);
     }
 

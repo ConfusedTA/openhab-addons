@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -94,8 +94,7 @@ public class QbusCO2Handler extends QbusGlobalHandler {
                 if (qBridgeHandler.getStatus() == ThingStatus.ONLINE) {
                     updateStatus(ThingStatus.ONLINE);
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
-                            "Bridge offline for CO2 ID " + this.co2Id);
+                    updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "Bridge offline for CO2 ID " + this.co2Id);
                 }
             }
         });

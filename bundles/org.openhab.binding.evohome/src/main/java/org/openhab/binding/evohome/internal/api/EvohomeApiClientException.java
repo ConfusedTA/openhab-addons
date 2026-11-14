@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,22 +12,42 @@
  */
 package org.openhab.binding.evohome.internal.api;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+
 /**
  * Exception for errors from the API Client.
  *
  * @author Jasper van Zuijlen - Initial contribution
+ * @author Kovacs Istvan - HTTP failure and retry information
  *
  */
+@NonNullByDefault
 public class EvohomeApiClientException extends Exception {
-
-    public EvohomeApiClientException() {
-    }
+    private static final long serialVersionUID = 1L;
+    private final int statusCode;
+    private final long retryAfterSeconds;
 
     public EvohomeApiClientException(String message) {
-        super(message);
+        this(message, 0, 0);
     }
 
     public EvohomeApiClientException(String message, Throwable cause) {
         super(message, cause);
+        statusCode = 0;
+        retryAfterSeconds = 0;
+    }
+
+    public EvohomeApiClientException(String message, int statusCode, long retryAfterSeconds) {
+        super(message);
+        this.statusCode = statusCode;
+        this.retryAfterSeconds = retryAfterSeconds;
+    }
+
+    public int getStatusCode() {
+        return statusCode;
+    }
+
+    public long getRetryAfterSeconds() {
+        return retryAfterSeconds;
     }
 }

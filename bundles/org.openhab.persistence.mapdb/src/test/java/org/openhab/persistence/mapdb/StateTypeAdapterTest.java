@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,6 +14,7 @@ package org.openhab.persistence.mapdb;
 
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -22,8 +23,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.HSBType;
 import org.openhab.core.library.types.OnOffType;
@@ -45,7 +48,8 @@ import com.google.gson.GsonBuilder;
  */
 @NonNullByDefault
 public class StateTypeAdapterTest {
-    private Gson mapper = new GsonBuilder().registerTypeHierarchyAdapter(State.class, new StateTypeAdapter()).create();
+    private Gson mapper = new GsonBuilder().setDateFormat(DateTimeType.DATE_PATTERN_JSON_COMPAT)
+            .registerTypeHierarchyAdapter(State.class, new StateTypeAdapter()).create();
 
     private static final List<DecimalType> DECIMAL_TYPE_VALUES = List.of(DecimalType.ZERO, new DecimalType(1.123),
             new DecimalType(10000000));
@@ -81,5 +85,34 @@ public class StateTypeAdapterTest {
 
     public static Stream<State> readWriteRoundtripShouldRecreateTheWrittenState() {
         return VALUES.stream();
+    }
+
+    @Test
+    void readReturnsNullForJsonNull() {
+        assertNull(mapper.fromJson("null", State.class));
+    }
+
+    @Test
+    void readReturnsNullForJsonObject() {
+        assertNull(mapper.fromJson("{\"field\": 1}", State.class));
+    }
+
+    @Test
+    void readReturnsNullWhenTypeSeparatorMissing() {
+        // Simulates a corrupted or otherwise malformed record with no "@@@" separator.
+        assertNull(mapper.fromJson("\"not-a-valid-encoded-state\"", State.class));
+    }
+
+    @Test
+    void readReturnsNullForUnresolvableStateClass() {
+        // Simulates disk corruption in the class-name bytes, or a class renamed/removed
+        // since the record was written by an older openHAB version.
+        assertNull(mapper.fromJson("\"org.openhab.core.library.types.NoSuchType@@@23.5\"", State.class));
+    }
+
+    @Test
+    void readReturnsNullWhenValueCannotBeParsedIntoResolvedType() {
+        // Class resolves fine, but the value string is not parsable into it.
+        assertNull(mapper.fromJson("\"org.openhab.core.library.types.DecimalType@@@not-a-number\"", State.class));
     }
 }

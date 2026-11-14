@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -34,6 +34,7 @@ import org.openhab.binding.bticinosmarther.internal.config.SmartherModuleConfigu
 import org.openhab.binding.bticinosmarther.internal.model.ModuleSettings;
 import org.openhab.binding.bticinosmarther.internal.util.StringUtil;
 import org.openhab.core.cache.ExpiringCache;
+import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.QuantityType;
@@ -52,6 +53,7 @@ import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
+import org.openhab.core.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,6 +76,7 @@ public class SmartherModuleHandler extends BaseThingHandler {
     private final SmartherDynamicStateDescriptionProvider dynamicStateDescriptionProvider;
     private final ChannelUID programChannelUID;
     private final ChannelUID endDateChannelUID;
+    private final TimeZoneProvider timeZoneProvider;
 
     // Module configuration
     private SmartherModuleConfiguration config;
@@ -98,11 +101,12 @@ public class SmartherModuleHandler extends BaseThingHandler {
      * @param provider
      *            the {@link SmartherDynamicStateDescriptionProvider} dynamic state description provider to be used
      */
-    public SmartherModuleHandler(Thing thing, CronScheduler scheduler,
-            SmartherDynamicStateDescriptionProvider provider) {
+    public SmartherModuleHandler(Thing thing, CronScheduler scheduler, SmartherDynamicStateDescriptionProvider provider,
+            final TimeZoneProvider timeZoneProvider) {
         super(thing);
         this.cronScheduler = scheduler;
         this.dynamicStateDescriptionProvider = provider;
+        this.timeZoneProvider = timeZoneProvider;
         this.programChannelUID = new ChannelUID(thing.getUID(), CHANNEL_SETTINGS_PROGRAM);
         this.endDateChannelUID = new ChannelUID(thing.getUID(), CHANNEL_SETTINGS_ENDDATE);
         this.config = new SmartherModuleConfiguration();
@@ -118,39 +122,32 @@ public class SmartherModuleHandler extends BaseThingHandler {
     public void initialize() {
         logger.debug("Module[{}] Initialize handler", thing.getUID());
 
-        final Bridge localBridge = getBridge();
-        if (localBridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+        if (!(getBridge() instanceof Bridge bridge
+                && bridge.getHandler() instanceof SmartherBridgeHandler bridgeHandler)) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
 
-        final SmartherBridgeHandler localBridgeHandler = (SmartherBridgeHandler) localBridge.getHandler();
-        this.bridgeHandler = localBridgeHandler;
-        if (localBridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, String.format(
-                    "Missing configuration from the Smarther Bridge (UID:%s). Fix configuration or report if this problem remains.",
-                    localBridge.getBridgeUID()));
-            return;
-        }
+        this.bridgeHandler = bridgeHandler;
 
         this.config = getConfigAs(SmartherModuleConfiguration.class);
         if (StringUtil.isBlank(config.getPlantId())) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The 'Plant Id' property is not set or empty. If you have an older thing please recreate it.");
             return;
         }
         if (StringUtil.isBlank(config.getModuleId())) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The 'Module Id' property is not set or empty. If you have an older thing please recreate it.");
             return;
         }
         if (config.getProgramsRefreshPeriod() <= 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The 'Programs Refresh Period' must be > 0. If you have an older thing please recreate it.");
             return;
         }
         if (config.getStatusRefreshPeriod() <= 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The 'Module Status Refresh Period' must be > 0. If you have an older thing please recreate it.");
             return;
         }
@@ -182,7 +179,7 @@ public class SmartherModuleHandler extends BaseThingHandler {
                     e.getMessage(), channelUID.getId());
         } catch (SmartherGatewayException e) {
             // catch exceptions and handle it in your binding
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -219,14 +216,14 @@ public class SmartherModuleHandler extends BaseThingHandler {
                 }
                 break;
             case CHANNEL_SETTINGS_PROGRAM:
-                if (command instanceof DecimalType) {
-                    localModuleSettings.setProgram(((DecimalType) command).intValue());
+                if (command instanceof DecimalType decimalCommand) {
+                    localModuleSettings.setProgram(decimalCommand.intValue());
                     return;
                 }
                 break;
             case CHANNEL_SETTINGS_BOOSTTIME:
-                if (command instanceof DecimalType) {
-                    localModuleSettings.setBoostTime(BoostTime.fromValue(((DecimalType) command).intValue()));
+                if (command instanceof DecimalType decimalCommand) {
+                    localModuleSettings.setBoostTime(BoostTime.fromValue(decimalCommand.intValue()));
                     return;
                 }
                 break;
@@ -321,8 +318,8 @@ public class SmartherModuleHandler extends BaseThingHandler {
      * @return {@code true} if the change succeeded, {@code false} otherwise
      */
     private boolean changeTimeHour(Command command, final ModuleSettings settings) {
-        if (command instanceof DecimalType) {
-            int endHour = ((DecimalType) command).intValue();
+        if (command instanceof DecimalType decimalCommand) {
+            int endHour = decimalCommand.intValue();
             if (endHour >= 0 && endHour <= 23) {
                 settings.setEndHour(endHour);
                 return true;
@@ -341,8 +338,8 @@ public class SmartherModuleHandler extends BaseThingHandler {
      * @return {@code true} if the change succeeded, {@code false} otherwise
      */
     private boolean changeTimeMinute(Command command, final ModuleSettings settings) {
-        if (command instanceof DecimalType) {
-            int endMinute = ((DecimalType) command).intValue();
+        if (command instanceof DecimalType decimalCommand) {
+            int endMinute = decimalCommand.intValue();
             if (endMinute >= 0 && endMinute <= 59) {
                 // Only 15 min increments are allowed
                 endMinute = Math.round(endMinute / 15) * 15;
@@ -382,7 +379,7 @@ public class SmartherModuleHandler extends BaseThingHandler {
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
         if (bridgeStatusInfo.getStatus() != ThingStatus.ONLINE) {
             // Put module offline when the parent bridge goes offline
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Smarther Bridge Offline");
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "Smarther Bridge Offline");
             logger.debug("Module[{}] Bridge switched {}", thing.getUID(), bridgeStatusInfo.getStatus());
         } else {
             // Update the module status when the parent bridge return online
@@ -583,24 +580,24 @@ public class SmartherModuleHandler extends BaseThingHandler {
                 } else if (thing.getStatus() != ThingStatus.OFFLINE) {
                     logger.debug("Module[{}] Switched {} as Bridge is not online", thing.getUID(),
                             bridgeStatusInfo.getStatus());
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Smarther Bridge Offline");
+                    updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "Smarther Bridge Offline");
                 }
             }
             return false;
         } catch (SmartherIllegalPropertyValueException e) {
             logger.debug("Module[{}] Illegal property value error during polling: {}", thing.getUID(), e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, e.getMessage());
         } catch (SmartherSubscriptionAlreadyExistsException e) {
             logger.debug("Module[{}] Subscription error during polling: {}", thing.getUID(), e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, e.getMessage());
         } catch (SmartherGatewayException e) {
             logger.warn("Module[{}] API Gateway error during polling: {}", thing.getUID(), e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         } catch (RuntimeException e) {
             // All other exceptions apart from Subscription and Gateway issues
             logger.warn("Module[{}] Unexpected error during polling, please report if this keeps occurring: ",
                     thing.getUID(), e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, e.getMessage());
         }
         schedulePoll();
         return false;
@@ -704,13 +701,14 @@ public class SmartherModuleHandler extends BaseThingHandler {
             updateChannelState(CHANNEL_MEASURES_TEMPERATURE, localChrono.getThermometer().toState());
             updateChannelState(CHANNEL_MEASURES_HUMIDITY, localChrono.getHygrometer().toState());
             // Update the Status channels
-            updateChannelState(CHANNEL_STATUS_STATE, (localChrono.isActive() ? OnOffType.ON : OnOffType.OFF));
+            updateChannelState(CHANNEL_STATUS_STATE, OnOffType.from((localChrono.isActive())));
             updateChannelState(CHANNEL_STATUS_FUNCTION,
-                    new StringType(StringUtil.capitalize(localChrono.getFunction().toLowerCase())));
+                    new StringType(StringUtils.capitalize(localChrono.getFunction().toLowerCase())));
             updateChannelState(CHANNEL_STATUS_MODE,
-                    new StringType(StringUtil.capitalize(localChrono.getMode().toLowerCase())));
+                    new StringType(StringUtils.capitalize(localChrono.getMode().toLowerCase())));
             updateChannelState(CHANNEL_STATUS_TEMPERATURE, localChrono.getSetPointTemperature().toState());
-            updateChannelState(CHANNEL_STATUS_ENDTIME, new StringType(localChrono.getActivationTimeLabel()));
+            updateChannelState(CHANNEL_STATUS_ENDTIME,
+                    new StringType(localChrono.getActivationTimeLabel(timeZoneProvider)));
             updateChannelState(CHANNEL_STATUS_TEMP_FORMAT, new StringType(localChrono.getTemperatureFormat()));
             final Program localProgram = localChrono.getProgram();
             if (localProgram != null) {

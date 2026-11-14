@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -60,8 +60,8 @@ import org.slf4j.LoggerFactory;
  * The {@link PlugwiseStickHandler} handles channel updates and commands for a Plugwise Stick device.
  * </p>
  * <p>
- * The Stick is an USB ZigBee controller that communicates with the Circle+. It is a {@link Bridge} to the devices on a
- * Plugwise ZigBee mesh network.
+ * The Stick is an USB Zigbee controller that communicates with the Circle+. It is a {@link Bridge} to the devices on a
+ * Plugwise Zigbee mesh network.
  * </p>
  *
  * @author Wouter Born, Karel Goderis - Initial contribution
@@ -177,10 +177,9 @@ public class PlugwiseStickHandler extends BaseBridgeHandler implements PlugwiseM
     }
 
     @Override
-    public void handleReponseMessage(Message message) {
+    public void handleResponseMessage(Message message) {
         switch (message.getType()) {
-            case ACKNOWLEDGEMENT_V1:
-            case ACKNOWLEDGEMENT_V2:
+            case ACKNOWLEDGEMENT_V1, ACKNOWLEDGEMENT_V2:
                 handleAcknowledgement((AcknowledgementMessage) message);
                 break;
             case DEVICE_INFORMATION_RESPONSE:
@@ -206,7 +205,7 @@ public class PlugwiseStickHandler extends BaseBridgeHandler implements PlugwiseM
         } catch (PlugwiseInitializationException e) {
             communicationHandler.stop();
             communicationHandler.removeMessageListener(this);
-            updateStatus(OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -232,7 +231,7 @@ public class PlugwiseStickHandler extends BaseBridgeHandler implements PlugwiseM
         } catch (IOException e) {
             communicationHandler.stop();
             communicationHandler.removeMessageListener(this);
-            updateStatus(OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -249,12 +248,37 @@ public class PlugwiseStickHandler extends BaseBridgeHandler implements PlugwiseM
     protected void updateStatus(ThingStatus status, ThingStatusDetail detail, @Nullable String comment) {
         ThingStatus oldStatus = thing.getStatus();
         super.updateStatus(status, detail, comment);
+        statusChanged(oldStatus);
+    }
+
+    @Override
+    protected void updateStatus(ThingStatus status) {
+        ThingStatus oldStatus = thing.getStatus();
+        super.updateStatus(status);
+        statusChanged(oldStatus);
+    }
+
+    @Override
+    protected void updateStatus(ThingStatus status, @Nullable String description) {
+        ThingStatus oldStatus = thing.getStatus();
+        super.updateStatus(status, description);
+        statusChanged(oldStatus);
+    }
+
+    @Override
+    protected void updateStatus(ThingStatusDetail detail, @Nullable String description) {
+        ThingStatus oldStatus = thing.getStatus();
+        super.updateStatus(detail, description);
+        statusChanged(oldStatus);
+    }
+
+    private void statusChanged(ThingStatus oldStatus) {
         ThingStatus newStatus = thing.getStatus();
 
         if (!oldStatus.equals(newStatus)) {
-            logger.debug("Updating listeners with status {}", status);
+            logger.debug("Updating listeners with status {}", newStatus);
             for (PlugwiseStickStatusListener listener : statusListeners) {
-                listener.stickStatusChanged(status);
+                listener.stickStatusChanged(newStatus);
             }
             updateTask(onlineStateUpdateTask);
         }

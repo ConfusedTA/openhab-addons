@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,6 +22,8 @@ import java.util.Arrays;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.doorbird.internal.DoorbirdBindingConstants;
+import org.openhab.binding.doorbird.internal.api.DoorbirdSession;
 import org.openhab.binding.doorbird.internal.handler.DoorbellHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,13 +52,14 @@ public class DoorbirdUdpListener extends Thread {
     private final DoorbellHandler thingHandler;
 
     // UDP socket used to receive status events from doorbell
-    private @Nullable DatagramSocket socket;
+    private volatile @Nullable DatagramSocket socket;
 
     private byte @Nullable [] lastData;
     private int lastDataLength;
     private long lastDataTime;
 
     public DoorbirdUdpListener(DoorbellHandler thingHandler) {
+        super(String.format("OH-binding-%s-%s", DoorbirdBindingConstants.BINDING_ID, "UdpListener"));
         this.thingHandler = thingHandler;
     }
 
@@ -66,10 +69,11 @@ public class DoorbirdUdpListener extends Thread {
     }
 
     public void shutdown() {
+        DatagramSocket socket = this.socket;
         if (socket != null) {
             socket.close();
             logger.debug("Listener closing listener socket");
-            socket = null;
+            this.socket = null;
         }
     }
 
@@ -89,15 +93,20 @@ public class DoorbirdUdpListener extends Thread {
         }
 
         DatagramPacket packet = new DatagramPacket(new byte[BUFFER_SIZE], BUFFER_SIZE);
-        while (socket != null) {
+        while (true) {
+            DatagramSocket socket = this.socket;
+            if (socket == null) {
+                break;
+            }
             try {
                 socket.receive(packet);
                 processPacket(packet);
             } catch (SocketTimeoutException e) {
                 // Nothing to do on socket timeout
             } catch (IOException e) {
-                logger.debug("Listener got IOException waiting for datagram: {}", e.getMessage());
-                socket = null;
+                logger.debug("Listener got IOException waiting for datagram: {}", e.getMessage(), e);
+                socket.close();
+                this.socket = null;
             }
         }
         logger.debug("Listener exiting");
@@ -112,6 +121,8 @@ public class DoorbirdUdpListener extends Thread {
             return;
         }
 
+        DoorbirdSession session = thingHandler.getSession();
+        String v2DecryptionKey = (session != null ? session.getDecryptionKey() : null);
         String userId = thingHandler.getUserId();
         String userPassword = thingHandler.getUserPassword();
         if (userId == null || userPassword == null) {
@@ -119,7 +130,7 @@ public class DoorbirdUdpListener extends Thread {
             return;
         }
         try {
-            event.decrypt(packet, userPassword);
+            event.decrypt(packet, userPassword, v2DecryptionKey);
         } catch (RuntimeException e) {
             // The libsodium library might generate a runtime exception if the packet is malformed
             logger.info("DoorbirdEvent got unhandled exception: {}", e.getMessage(), e);

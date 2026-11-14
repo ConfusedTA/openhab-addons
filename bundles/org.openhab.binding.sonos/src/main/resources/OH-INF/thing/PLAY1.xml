@@ -6,10 +6,10 @@
 
 	<!-- Player PLAY:1 Thing Type -->
 	<thing-type id="PLAY1" listed="false">
-		<!-- Label without column (:) because of device pairing name restrictions -->
+		<!-- Label without colon (:) because of device pairing name restrictions -->
 		<label>PLAY 1</label>
 		<description>Represents SONOS PLAY:1 speaker</description>
-
+		<semantic-equipment-tag>Speaker</semantic-equipment-tag>
 		<channels>
 			<channel id="add" typeId="add"/>
 			<channel id="alarm" typeId="alarm"/>
@@ -27,6 +27,7 @@
 			<channel id="repeat" typeId="repeat"/>
 			<channel id="favorite" typeId="favorite"/>
 			<channel id="led" typeId="led"/>
+			<channel id="buttonlock" typeId="buttonlock"/>
 			<channel id="localcoordinator" typeId="localcoordinator"/>
 			<channel id="loudness" typeId="loudness"/>
 			<channel id="mute" typeId="system.mute"/>
@@ -61,6 +62,7 @@
 		<properties>
 			<property name="vendor">SONOS</property>
 			<property name="modelId">PLAY:1</property>
+			<property name="thingTypeVersion">1</property>
 		</properties>
 
 		<representation-property>udn</representation-property>

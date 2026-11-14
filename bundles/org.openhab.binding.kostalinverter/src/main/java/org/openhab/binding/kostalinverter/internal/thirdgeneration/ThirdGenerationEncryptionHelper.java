@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,6 +17,7 @@ import static org.openhab.binding.kostalinverter.internal.thirdgeneration.ThirdG
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Base64;
 import java.util.Random;
@@ -26,12 +27,15 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+
 /**
  * The {@link ThirdGenerationEncryptionHelper} is responsible for handling the encryption for the authentication
  * handlers.
  *
  * @author René Stakemeier - Initial contribution
  */
+@NonNullByDefault
 final class ThirdGenerationEncryptionHelper {
 
     private ThirdGenerationEncryptionHelper() {
@@ -105,7 +109,7 @@ final class ThirdGenerationEncryptionHelper {
      * @return nonce
      */
     static String createClientNonce() {
-        Random generator = new Random();
+        Random generator = new SecureRandom();
 
         // Randomize the random generator
         byte[] randomizeArray = new byte[1024];

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,6 +13,7 @@
 package org.openhab.binding.lutron.internal.grxprg;
 
 import java.io.IOException;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.GregorianCalendar;
 import java.util.concurrent.ScheduledFuture;
@@ -81,7 +82,11 @@ public class PrgBridgeHandler extends BaseBridgeHandler {
 
             @Override
             public void statusChanged(ThingStatus status, ThingStatusDetail detail, String msg) {
-                updateStatus(status, detail, msg);
+                if (detail == ThingStatusDetail.NONE) {
+                    updateStatus(status, msg);
+                } else {
+                    updateStatus(detail, msg);
+                }
 
                 if (status != ThingStatus.ONLINE) {
                     disconnect(true);
@@ -162,33 +167,28 @@ public class PrgBridgeHandler extends BaseBridgeHandler {
 
         if (id.equals(PrgConstants.CHANNEL_ZONELOWERSTOP)) {
             protocolHandler.setZoneLowerStop();
-
         } else if (id.equals(PrgConstants.CHANNEL_ZONERAISESTOP)) {
             protocolHandler.setZoneRaiseStop();
-
         } else if (id.equals(PrgConstants.CHANNEL_TIMECLOCK)) {
-            if (command instanceof DateTimeType) {
-                final ZonedDateTime zdt = ((DateTimeType) command).getZonedDateTime();
+            if (command instanceof DateTimeType dateTimeCommand) {
+                final ZonedDateTime zdt = dateTimeCommand.getZonedDateTime(ZoneId.systemDefault());
                 protocolHandler.setTime(GregorianCalendar.from(zdt));
             } else {
                 logger.error("Received a TIMECLOCK channel command with a non DateTimeType: {}", command);
             }
         } else if (id.startsWith(PrgConstants.CHANNEL_SCHEDULE)) {
-            if (command instanceof DecimalType) {
-                final int schedule = ((DecimalType) command).intValue();
+            if (command instanceof DecimalType scheduleCommand) {
+                final int schedule = scheduleCommand.intValue();
                 protocolHandler.selectSchedule(schedule);
             } else {
                 logger.error("Received a SCHEDULE channel command with a non DecimalType: {}", command);
             }
-
         } else if (id.startsWith(PrgConstants.CHANNEL_SUPERSEQUENCESTART)) {
             protocolHandler.startSuperSequence();
-
         } else if (id.startsWith(PrgConstants.CHANNEL_SUPERSEQUENCEPAUSE)) {
             protocolHandler.pauseSuperSequence();
         } else if (id.startsWith(PrgConstants.CHANNEL_SUPERSEQUENCERESUME)) {
             protocolHandler.resumeSuperSequence();
-
         } else {
             logger.error("Unknown/Unsupported Channel id: {}", id);
         }
@@ -207,16 +207,12 @@ public class PrgBridgeHandler extends BaseBridgeHandler {
 
         if (id.equals(PrgConstants.CHANNEL_TIMECLOCK)) {
             protocolHandler.refreshTime();
-
         } else if (id.equals(PrgConstants.CHANNEL_SCHEDULE)) {
             protocolHandler.refreshSchedule();
-
         } else if (id.equals(PrgConstants.CHANNEL_SUNRISE)) {
             protocolHandler.refreshSunriseSunset();
-
         } else if (id.equals(PrgConstants.CHANNEL_SUNSET)) {
             protocolHandler.refreshSunriseSunset();
-
         } else if (id.equals(PrgConstants.CHANNEL_SUPERSEQUENCESTATUS)) {
             protocolHandler.reportSuperSequenceStatus();
         } else if (id.equals(PrgConstants.CHANNEL_SUPERSEQUENCENEXTSTEP)) {
@@ -243,7 +239,7 @@ public class PrgBridgeHandler extends BaseBridgeHandler {
         }
 
         if (config.getIpAddress() == null || config.getIpAddress().trim().length() == 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "IP Address/Host Name of GRX-PRG/GRX-CI-PRG is missing from configuration");
             return;
         }
@@ -277,12 +273,11 @@ public class PrgBridgeHandler extends BaseBridgeHandler {
                     return;
                 }
             }
-
         } catch (Exception e) {
             logger.error("Exception during connection attempt", e);
         }
 
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, response);
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, response);
         retryConnect();
     }
 
@@ -332,10 +327,10 @@ public class PrgBridgeHandler extends BaseBridgeHandler {
      * @return a possible null {@link PrgBridgeConfig}
      */
     private PrgBridgeConfig getPrgBridgeConfig() {
-        final PrgBridgeConfig config = getThing().getConfiguration().as(PrgBridgeConfig.class);
+        final PrgBridgeConfig config = getConfigAs(PrgBridgeConfig.class);
 
         if (config == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
         }
 
         return config;

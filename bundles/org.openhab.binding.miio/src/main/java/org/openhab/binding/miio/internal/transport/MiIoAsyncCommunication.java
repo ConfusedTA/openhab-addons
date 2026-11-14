@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -180,18 +180,21 @@ public class MiIoAsyncCommunication {
                             miIoSendCommand.getCloudServer(), miIoSendCommand);
                     logger.debug("Command {} send via cloudserver {}", miIoSendCommand.getCommandString(),
                             miIoSendCommand.getCloudServer());
-                    updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+                    updateStatus(ThingStatus.ONLINE);
                 } else {
-                    String data = miIoSendCommand.getParams().isJsonArray()
-                            && miIoSendCommand.getParams().getAsJsonArray().size() > 0
-                                    ? miIoSendCommand.getParams().getAsJsonArray().get(0).toString()
-                                    : "";
+                    String data = miIoSendCommand.getParams().toString();
                     logger.debug("Custom cloud request send to url '{}' with data '{}'", miIoSendCommand.getMethod(),
                             data);
                     decryptedResponse = cloudConnector.sendCloudCommand(miIoSendCommand.getMethod(),
                             miIoSendCommand.getCloudServer(), data);
-                    miIoSendCommand.setResponse(JsonParser.parseString(decryptedResponse).getAsJsonObject());
-                    return miIoSendCommand;
+                    JsonElement cloudResponse = JsonParser.parseString(decryptedResponse);
+                    if (cloudResponse.isJsonObject()) {
+                        miIoSendCommand.setResponse(cloudResponse.getAsJsonObject());
+                        return miIoSendCommand;
+                    }
+                    errorMsg = "Received message is not a JSON object";
+                    logger.debug("{}: {}", errorMsg, decryptedResponse);
+                    return setErrorResponse(miIoSendCommand, errorMsg);
                 }
             }
             // hack due to avoid invalid json errors from some misbehaving device firmwares
@@ -202,7 +205,9 @@ public class MiIoAsyncCommunication {
                 errorMsg = "Received message is not a JSON object ";
             } else {
                 needPing = false;
-                logger.trace("Received  JSON message {}", response.toString());
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Received  JSON message {}", Utils.maskSecrets(response.toString()));
+                }
                 JsonObject resJson = response.getAsJsonObject();
                 if (resJson.has("id")) {
                     int id = resJson.get("id").getAsInt();
@@ -224,21 +229,29 @@ public class MiIoAsyncCommunication {
                 }
 
             }
-            logger.debug("{}: {}", errorMsg, decryptedResponse);
+            logger.debug("{}: {}", errorMsg, Utils.sanitizeForLog(decryptedResponse));
         } catch (MiIoCryptoException | IOException e) {
             logger.debug("Send command '{}'  -> {} (Device: {}) gave error {}", miIoSendCommand.getCommandString(), ip,
                     deviceId, e.getMessage());
             errorMsg = e.getMessage();
         } catch (JsonSyntaxException e) {
-            logger.warn("Could not parse '{}' <- {} (Device: {}) gave error {}", decryptedResponse,
-                    miIoSendCommand.getCommandString(), deviceId, e.getMessage());
+            logger.warn("Could not parse '{}' <- {} (Device: {}) gave error {}",
+                    Utils.sanitizeForLog(decryptedResponse), miIoSendCommand.getCommandString(), deviceId,
+                    e.getMessage());
             errorMsg = "Received message is invalid JSON";
         } catch (MiCloudException e) {
             logger.debug("Send command '{}'  -> cloudserver '{}' (Device: {}) gave error {}",
                     miIoSendCommand.getCommandString(), miIoSendCommand.getCloudServer(), deviceId, e.getMessage());
             errorMsg = e.getMessage();
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            // a failing custom cloud request (e.g. no cloud login) says nothing about the device connection
+            if (!miIoSendCommand.getMethod().startsWith("/")) {
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
+            }
         }
+        return setErrorResponse(miIoSendCommand, errorMsg);
+    }
+
+    private MiIoSendCommand setErrorResponse(MiIoSendCommand miIoSendCommand, @Nullable String errorMsg) {
         JsonObject erroResp = new JsonObject();
         erroResp.addProperty("error", errorMsg);
         miIoSendCommand.setResponse(erroResp);
@@ -263,7 +276,7 @@ public class MiIoAsyncCommunication {
         private final String deviceId;
 
         public MessageSenderThread(String deviceId) {
-            super("OH-binding-miio-MessageSenderThread-" + deviceId);
+            super(String.format("OH-binding-%s-%s-%s", MiIoBindingConstants.BINDING_ID, "Sender", deviceId));
             setDaemon(true);
             this.deviceId = deviceId;
         }
@@ -332,13 +345,15 @@ public class MiIoAsyncCommunication {
         if (errorCounter > 0) {
             errorCounter = 0;
             status = ThingStatusDetail.NONE;
-            updateStatus(ThingStatus.ONLINE, status);
+            updateStatus(ThingStatus.ONLINE);
         }
         if (!connected) {
             pingSuccess();
         }
         String decryptedResponse = new String(MiIoCrypto.decrypt(miIoResponseMsg.getData(), token), "UTF-8").trim();
-        logger.trace("Received response from {}: {}", ip, decryptedResponse);
+        if (logger.isTraceEnabled()) {
+            logger.trace("Received response from {}: {}", ip, Utils.maskSecrets(decryptedResponse));
+        }
         return decryptedResponse;
     }
 
@@ -359,7 +374,7 @@ public class MiIoAsyncCommunication {
         logger.debug("Ping to device '{}' ({}) failed", deviceId, ip);
         connected = false;
         status = ThingStatusDetail.COMMUNICATION_ERROR;
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
     }
 
     private void pingSuccess() {
@@ -367,22 +382,33 @@ public class MiIoAsyncCommunication {
         if (!connected) {
             connected = true;
             status = ThingStatusDetail.NONE;
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE);
+            updateStatus(ThingStatus.OFFLINE);
         } else {
             if (ThingStatusDetail.CONFIGURATION_ERROR.equals(status)) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR);
             } else {
                 status = ThingStatusDetail.NONE;
-                updateStatus(ThingStatus.ONLINE, status);
+                updateStatus(ThingStatus.ONLINE);
             }
         }
     }
 
-    private void updateStatus(ThingStatus status, ThingStatusDetail statusDetail) {
+    private void updateStatus(ThingStatus status) {
         for (MiIoMessageListener listener : listeners) {
-            logger.trace("inform listener {}, data {} from {}", listener, status, statusDetail);
+            logger.trace("inform listener {}, status {}", listener, status);
             try {
-                listener.onStatusUpdated(status, statusDetail);
+                listener.onStatusUpdated(status);
+            } catch (Exception e) {
+                logger.debug("Could not inform listener {}: {}", listener, e.getMessage(), e);
+            }
+        }
+    }
+
+    private void updateStatus(ThingStatusDetail statusDetail) {
+        for (MiIoMessageListener listener : listeners) {
+            logger.trace("inform listener {}, status detail {}", listener, statusDetail);
+            try {
+                listener.onStatusUpdated(statusDetail);
             } catch (Exception e) {
                 logger.debug("Could not inform listener {}: {}", listener, e.getMessage(), e);
             }
@@ -418,9 +444,8 @@ public class MiIoAsyncCommunication {
                 sendPacket.setData(new byte[MSG_BUFFER_SIZE]);
             }
             clientSocket.receive(receivePacket);
-            byte[] response = Arrays.copyOfRange(receivePacket.getData(), receivePacket.getOffset(),
+            return Arrays.copyOfRange(receivePacket.getData(), receivePacket.getOffset(),
                     receivePacket.getOffset() + receivePacket.getLength());
-            return response;
         } catch (SocketTimeoutException e) {
             logger.debug("Communication error for Mi device at {}: {}", ip, e.getMessage());
             needPing = true;

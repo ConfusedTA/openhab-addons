@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -27,22 +27,19 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpResponseException;
 import org.openhab.binding.openweathermap.internal.config.OpenWeatherMapWeatherAndForecastConfiguration;
-import org.openhab.binding.openweathermap.internal.connection.OpenWeatherMapCommunicationException;
-import org.openhab.binding.openweathermap.internal.connection.OpenWeatherMapConfigurationException;
 import org.openhab.binding.openweathermap.internal.connection.OpenWeatherMapConnection;
 import org.openhab.binding.openweathermap.internal.dto.OpenWeatherMapJsonDailyForecastData;
 import org.openhab.binding.openweathermap.internal.dto.OpenWeatherMapJsonHourlyForecastData;
 import org.openhab.binding.openweathermap.internal.dto.OpenWeatherMapJsonWeatherData;
-import org.openhab.binding.openweathermap.internal.dto.base.Rain;
-import org.openhab.binding.openweathermap.internal.dto.base.Snow;
+import org.openhab.binding.openweathermap.internal.dto.base.Precipitation;
 import org.openhab.binding.openweathermap.internal.dto.forecast.daily.FeelsLikeTemp;
 import org.openhab.core.config.core.Configuration;
-import org.openhab.core.i18n.TimeZoneProvider;
+import org.openhab.core.i18n.CommunicationException;
+import org.openhab.core.i18n.ConfigurationException;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.types.State;
@@ -78,8 +75,8 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
     private @Nullable OpenWeatherMapJsonHourlyForecastData hourlyForecastData;
     private @Nullable OpenWeatherMapJsonDailyForecastData dailyForecastData;
 
-    public OpenWeatherMapWeatherAndForecastHandler(Thing thing, final TimeZoneProvider timeZoneProvider) {
-        super(thing, timeZoneProvider);
+    public OpenWeatherMapWeatherAndForecastHandler(Thing thing) {
+        super(thing);
     }
 
     @Override
@@ -92,13 +89,13 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
         boolean configValid = true;
         int newForecastHours = config.forecastHours;
         if (newForecastHours < 0 || newForecastHours > 120 || newForecastHours % 3 != 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "@text/offline.conf-error-not-supported-number-of-hours");
             configValid = false;
         }
         int newForecastDays = config.forecastDays;
         if (newForecastDays < 0 || newForecastDays > 16) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "@text/offline.conf-error-not-supported-number-of-days");
             configValid = false;
         }
@@ -163,7 +160,7 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
 
     @Override
     protected boolean requestData(OpenWeatherMapConnection connection)
-            throws OpenWeatherMapCommunicationException, OpenWeatherMapConfigurationException {
+            throws CommunicationException, ConfigurationException {
         logger.debug("Update weather and forecast data of thing '{}'.", getThing().getUID());
         try {
             weatherData = connection.getWeatherData(location);
@@ -173,18 +170,19 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
             if (forecastDays > 0) {
                 try {
                     dailyForecastData = connection.getDailyForecastData(location, forecastDays);
-                } catch (OpenWeatherMapConfigurationException e) {
+                } catch (ConfigurationException e) {
                     if (e.getCause() instanceof HttpResponseException) {
                         forecastDays = 0;
                         Configuration editConfig = editConfiguration();
                         editConfig.put(CONFIG_FORECAST_DAYS, 0);
                         updateConfiguration(editConfig);
                         logger.debug("Removing daily forecast channel groups.");
-                        List<Channel> channels = getThing().getChannels().stream()
-                                .filter(c -> CHANNEL_GROUP_FORECAST_TODAY.equals(c.getUID().getGroupId())
-                                        || CHANNEL_GROUP_FORECAST_TOMORROW.equals(c.getUID().getGroupId())
-                                        || c.getUID().getGroupId().startsWith(CHANNEL_GROUP_DAILY_FORECAST_PREFIX))
-                                .collect(Collectors.toList());
+                        List<Channel> channels = getThing().getChannels().stream().filter(c -> {
+                            String groupId = c.getUID().getGroupId();
+                            return CHANNEL_GROUP_FORECAST_TODAY.equals(groupId)
+                                    || CHANNEL_GROUP_FORECAST_TOMORROW.equals(groupId)
+                                    || (groupId != null && groupId.startsWith(CHANNEL_GROUP_DAILY_FORECAST_PREFIX));
+                        }).collect(Collectors.toList());
                         updateThing(editThing().withoutChannels(channels).build());
                     } else {
                         throw e;
@@ -193,7 +191,7 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
             }
             return true;
         } catch (JsonSyntaxException e) {
-            logger.debug("JsonSyntaxException occurred during execution: {}", e.getLocalizedMessage(), e);
+            logger.debug("JsonSyntaxException occurred during execution: {}", e.getMessage(), e);
             return false;
         }
     }
@@ -201,6 +199,10 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
     @Override
     protected void updateChannel(ChannelUID channelUID) {
         String channelGroupId = channelUID.getGroupId();
+        if (channelGroupId == null) {
+            logger.debug("Cannot update {} as it has no GroupId", channelUID);
+            return;
+        }
         switch (channelGroupId) {
             case CHANNEL_GROUP_STATION:
             case CHANNEL_GROUP_CURRENT_WEATHER:
@@ -301,11 +303,11 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
                     state = getQuantityTypeState(localWeatherData.getClouds().getAll(), PERCENT);
                     break;
                 case CHANNEL_RAIN:
-                    Rain rain = localWeatherData.getRain();
+                    Precipitation rain = localWeatherData.getRain();
                     state = getQuantityTypeState(rain == null ? 0 : rain.getVolume(), MILLI(METRE));
                     break;
                 case CHANNEL_SNOW:
-                    Snow snow = localWeatherData.getSnow();
+                    Precipitation snow = localWeatherData.getSnow();
                     state = getQuantityTypeState(snow == null ? 0 : snow.getVolume(), MILLI(METRE));
                     break;
                 case CHANNEL_VISIBILITY:
@@ -395,11 +397,11 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
                     state = getQuantityTypeState(forecastData.getClouds().getAll(), PERCENT);
                     break;
                 case CHANNEL_RAIN:
-                    Rain rain = forecastData.getRain();
+                    Precipitation rain = forecastData.getRain();
                     state = getQuantityTypeState(rain == null ? 0 : rain.getVolume(), MILLI(METRE));
                     break;
                 case CHANNEL_SNOW:
-                    Snow snow = forecastData.getSnow();
+                    Precipitation snow = forecastData.getSnow();
                     state = getQuantityTypeState(snow == null ? 0 : snow.getVolume(), MILLI(METRE));
                     break;
             }
@@ -462,7 +464,7 @@ public class OpenWeatherMapWeatherAndForecastHandler extends AbstractOpenWeather
                     state = getQuantityTypeState(forecastData.getTemp().getMax(), CELSIUS);
                     break;
                 case CHANNEL_APPARENT_TEMPERATURE:
-                    FeelsLikeTemp feelsLikeTemp = forecastData.getFeelsLikeTemp();
+                    FeelsLikeTemp feelsLikeTemp = forecastData.getFeelsLike();
                     if (feelsLikeTemp != null) {
                         state = getQuantityTypeState(feelsLikeTemp.getDay(), CELSIUS);
                     }

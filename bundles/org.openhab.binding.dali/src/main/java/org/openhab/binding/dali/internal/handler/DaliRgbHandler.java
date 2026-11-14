@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -38,6 +38,7 @@ import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.thing.binding.BridgeHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.util.ColorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,13 +58,12 @@ public class DaliRgbHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        Bridge bridge = getBridge();
-
-        if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
-        } else {
-            updateStatus(ThingStatus.ONLINE);
+        if (getBridge() == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
         }
+
+        updateStatus(ThingStatus.ONLINE);
 
         outputs = List.of(((BigDecimal) this.thing.getConfiguration().get(TARGET_ID_R)).intValueExact(),
                 ((BigDecimal) this.thing.getConfiguration().get(TARGET_ID_G)).intValueExact(),
@@ -76,16 +76,16 @@ public class DaliRgbHandler extends BaseThingHandler {
             if (CHANNEL_COLOR.equals(channelUID.getId())) {
                 boolean queryDeviceState = false;
 
-                if (command instanceof HSBType) {
-                    PercentType[] rgb = ((HSBType) command).toRGB();
+                if (command instanceof HSBType hsbCommand) {
+                    PercentType[] rgb = ColorUtil.hsbToRgbPercent(hsbCommand);
 
                     for (int i = 0; i < 3; i++) {
                         byte dimmValue = (byte) ((rgb[i].floatValue() * DALI_SWITCH_100_PERCENT) / 100);
                         getBridgeHandler().sendCommand(
                                 new DaliDAPCCommand(DaliAddress.createShortAddress(outputs.get(i)), dimmValue));
                     }
-                } else if (command instanceof OnOffType) {
-                    if ((OnOffType) command == OnOffType.ON) {
+                } else if (command instanceof OnOffType onOffCommand) {
+                    if (onOffCommand == OnOffType.ON) {
                         for (Integer output : outputs) {
                             getBridgeHandler().sendCommand(new DaliDAPCCommand(DaliAddress.createShortAddress(output),
                                     (byte) DALI_SWITCH_100_PERCENT));
@@ -96,8 +96,8 @@ public class DaliRgbHandler extends BaseThingHandler {
                                     DaliStandardCommand.createOffCommand(DaliAddress.createShortAddress(output)));
                         }
                     }
-                } else if (command instanceof IncreaseDecreaseType) {
-                    if ((IncreaseDecreaseType) command == IncreaseDecreaseType.INCREASE) {
+                } else if (command instanceof IncreaseDecreaseType increaseDecreaseCommand) {
+                    if (increaseDecreaseCommand == IncreaseDecreaseType.INCREASE) {
                         for (Integer output : outputs) {
                             getBridgeHandler().sendCommand(
                                     DaliStandardCommand.createUpCommand(DaliAddress.createShortAddress(output)));
@@ -150,7 +150,7 @@ public class DaliRgbHandler extends BaseThingHandler {
                 }
             }
         } catch (DaliException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 

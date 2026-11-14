@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -51,7 +51,7 @@ public abstract class TradfriThingHandler extends BaseThingHandler implements Co
     // used to check whether we have already been disposed when receiving data asynchronously
     protected volatile boolean active;
 
-    protected @NonNullByDefault({}) TradfriCoapClient coapClient;
+    protected @Nullable TradfriCoapClient coapClient;
 
     private @Nullable CoapObserveRelation observeRelation;
 
@@ -63,6 +63,10 @@ public abstract class TradfriThingHandler extends BaseThingHandler implements Co
     @SuppressWarnings("null")
     public synchronized void initialize() {
         Bridge tradfriGateway = getBridge();
+        if (tradfriGateway == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
         this.id = getConfigAs(TradfriDeviceConfig.class).id;
         TradfriGatewayHandler handler = (TradfriGatewayHandler) tradfriGateway.getHandler();
 
@@ -77,7 +81,7 @@ public abstract class TradfriThingHandler extends BaseThingHandler implements Co
                     coapClient.setEndpoint(handler.getEndpoint());
                 } catch (URISyntaxException e) {
                     logger.debug("Illegal device URI `{}`: {}", uriString, e.getMessage());
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
                     return;
                 }
 
@@ -87,7 +91,7 @@ public abstract class TradfriThingHandler extends BaseThingHandler implements Co
                 break;
             case OFFLINE:
             default:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE,
                         String.format("Gateway offline '%s'", tradfriGateway.getStatusInfo()));
                 break;
         }
@@ -107,10 +111,14 @@ public abstract class TradfriThingHandler extends BaseThingHandler implements Co
     }
 
     @Override
-    @SuppressWarnings("null")
     public void setStatus(ThingStatus status, ThingStatusDetail statusDetail) {
-        if (active && getBridge().getStatus() != ThingStatus.OFFLINE && status != ThingStatus.ONLINE) {
-            updateStatus(status, statusDetail);
+        Bridge bridge = getBridge();
+        if (active && bridge != null && bridge.getStatus() != ThingStatus.OFFLINE && status != ThingStatus.ONLINE) {
+            if (statusDetail == ThingStatusDetail.NONE) {
+                updateStatus(status);
+            } else {
+                updateStatus(statusDetail);
+            }
             // we are offline and lost our observe relation - let's try to establish the connection in 10 seconds again
             scheduler.schedule(() -> {
                 if (observeRelation != null) {
@@ -135,8 +143,13 @@ public abstract class TradfriThingHandler extends BaseThingHandler implements Co
     }
 
     protected void set(String payload) {
-        logger.debug("Sending payload: {}", payload);
-        coapClient.asyncPut(payload, this, scheduler);
+        TradfriCoapClient coapClient = this.coapClient;
+        if (coapClient != null) {
+            logger.debug("Sending payload: {}", payload);
+            coapClient.asyncPut(payload, this, scheduler);
+        } else {
+            logger.debug("coapClient is null!");
+        }
     }
 
     protected void updateDeviceProperties(TradfriDeviceData state) {

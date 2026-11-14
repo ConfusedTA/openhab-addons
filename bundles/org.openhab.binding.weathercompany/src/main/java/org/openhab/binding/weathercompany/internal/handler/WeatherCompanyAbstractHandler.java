@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -100,7 +100,7 @@ public abstract class WeatherCompanyAbstractHandler extends BaseThingHandler {
         if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE) {
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -263,7 +263,7 @@ public abstract class WeatherCompanyAbstractHandler extends BaseThingHandler {
         } catch (InterruptedException e) {
             errorMsg = String.format("InterruptedException: %s", e.getMessage());
         }
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, errorMsg);
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, errorMsg);
         return null;
     }
 
@@ -273,8 +273,7 @@ public abstract class WeatherCompanyAbstractHandler extends BaseThingHandler {
     protected DateTimeType getLocalDateTimeType(long epochSeconds) {
         Instant instant = Instant.ofEpochSecond(epochSeconds);
         ZonedDateTime localDateTime = instant.atZone(getZoneId());
-        DateTimeType dateTimeType = new DateTimeType(localDateTime);
-        return dateTimeType;
+        return new DateTimeType(localDateTime);
     }
 
     /*

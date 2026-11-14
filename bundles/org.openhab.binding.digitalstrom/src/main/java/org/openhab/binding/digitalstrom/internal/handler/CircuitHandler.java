@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -47,8 +47,8 @@ import org.slf4j.LoggerFactory;
  * For that it uses the {@link BridgeHandler} to register this class as a {@link DeviceStatusListener} to get informed
  * about changes from the accompanying {@link Circuit}.
  *
- * @author Michael Ochel
- * @author Matthias Siegele
+ * @author Michael Ochel - Initial contribution
+ * @author Matthias Siegele - Initial contribution
  */
 public class CircuitHandler extends BaseThingHandler implements DeviceStatusListener {
 
@@ -84,10 +84,10 @@ public class CircuitHandler extends BaseThingHandler implements DeviceStatusList
             } else {
                 // Set status to OFFLINE if no bridge is available e.g. because the bridge has been removed and the
                 // Thing was reinitialized.
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Bridge is missing!");
+                updateStatus(ThingStatus.OFFLINE, "Bridge is missing!");
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "dSID is missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "dSID is missing");
         }
     }
 
@@ -111,8 +111,8 @@ public class CircuitHandler extends BaseThingHandler implements DeviceStatusList
             }
             ThingHandler handler = bridge.getHandler();
 
-            if (handler instanceof BridgeHandler) {
-                dssBridgeHandler = (BridgeHandler) handler;
+            if (handler instanceof BridgeHandler bridgeHandler) {
+                dssBridgeHandler = bridgeHandler;
             } else {
                 return null;
             }
@@ -134,8 +134,7 @@ public class CircuitHandler extends BaseThingHandler implements DeviceStatusList
             if (dSID != null) {
                 if (getDssBridgeHandler() != null) {
                     if (circuit == null) {
-                        updateStatus(ThingStatus.ONLINE, ThingStatusDetail.CONFIGURATION_PENDING,
-                                "waiting for listener registration");
+                        updateStatus(ThingStatus.UNKNOWN);
                         dssBridgeHandler.registerDeviceStatusListener(this);
                     } else {
                         updateStatus(ThingStatus.ONLINE);
@@ -144,11 +143,11 @@ public class CircuitHandler extends BaseThingHandler implements DeviceStatusList
                     updateStatus(ThingStatus.OFFLINE);
                 }
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No dSID is set!");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No dSID is set!");
             }
         }
         if (bridgeStatusInfo.getStatus().equals(ThingStatus.OFFLINE)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
         logger.debug("Set status to {}", getThing().getStatusInfo());
     }
@@ -179,15 +178,13 @@ public class CircuitHandler extends BaseThingHandler implements DeviceStatusList
 
     @Override
     public void onDeviceRemoved(GeneralDeviceInformation device) {
-        if (device instanceof Circuit) {
-            this.circuit = (Circuit) device;
+        if (device instanceof Circuit circ) {
+            this.circuit = circ;
             if (getThing().getStatus().equals(ThingStatus.ONLINE)) {
                 if (!circuit.isPresent()) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE,
-                            "Circuit is not present in the digitalSTROM-System.");
+                    updateStatus(ThingStatus.OFFLINE, "Circuit is not present in the digitalSTROM-System.");
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE,
-                            "Circuit is not available in the digitalSTROM-System.");
+                    updateStatus(ThingStatus.OFFLINE, "Circuit is not available in the digitalSTROM-System.");
                 }
 
             }
@@ -197,11 +194,17 @@ public class CircuitHandler extends BaseThingHandler implements DeviceStatusList
 
     @Override
     public void onDeviceAdded(GeneralDeviceInformation device) {
-        if (device instanceof Circuit) {
-            this.circuit = (Circuit) device;
+        if (device instanceof Circuit circ) {
+            this.circuit = circ;
             if (this.circuit.isPresent()) {
                 ThingStatusInfo statusInfo = this.dssBridgeHandler.getThing().getStatusInfo();
-                updateStatus(statusInfo.getStatus(), statusInfo.getStatusDetail(), statusInfo.getDescription());
+                if (statusInfo.getStatus() != ThingStatus.ONLINE && statusInfo.getStatus() != ThingStatus.OFFLINE) {
+                    updateStatus(ThingStatus.UNKNOWN);
+                } else if (statusInfo.getStatusDetail() == ThingStatusDetail.NONE) {
+                    updateStatus(statusInfo.getStatus(), statusInfo.getDescription());
+                } else {
+                    updateStatus(statusInfo.getStatusDetail(), statusInfo.getDescription());
+                }
                 logger.debug("Set status to {}", getThing().getStatus());
 
                 checkCircuitInfoProperties(this.circuit);

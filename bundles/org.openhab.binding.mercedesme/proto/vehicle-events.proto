@@ -1,0 +1,2687 @@
+syntax = "proto3";
+package proto;
+import "service-activation.proto";
+import "user-events.proto";
+import "vehicle-commands.proto";
+import "protos.proto";
+import "vehicleapi.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option java_package = "com.daimler.mbcarkit.proto";
+
+// Sending direction: App <- BFF <- AppTwin
+message VEPUpdate {
+
+  int32 sequence_number = 1;
+
+  string vin = 2;
+
+  // indicates whether this is a full update of VEP-attributes.
+  // All attributes cached in the FE should be erased and completely
+  // replaced by this push.
+  bool full_update = 15;
+
+  // when was the event emitted? This is the time of the update (unix timestamp in seconds), (deprecated)
+  // not when the attributes where changed. To compare attribute changes, you need to look into each attribute timestamp
+  int64 emit_timestamp = 10;
+
+  // when was the event emitted? This is the time of the update (unix timestamp in milliseconds),
+  int64 emit_timestamp_in_ms = 14;
+
+  // the attribute changes are a list of changed attributes
+  map<string, VehicleAttributeStatus> attributes = 11;
+
+}
+
+// Part of a VEPUpdate
+// Sending direction: App <- BFF <- AppTwin
+message VehicleAttributeStatus {
+  // time of the attribute change in the car as unix timestamp in seconds with UTC timezone (deprecated)
+  int64 timestamp = 1 [ deprecated = true ];
+  // time of the attribute change in the car as unix timestamp in milliseconds with UTC timezone
+  int64 timestamp_in_ms = 10;
+  bool changed    = 2;
+  int32 status    = 3;
+
+  enum CombustionConsumptionUnit {
+    UNSPECIFIED_COMBUSTION_CONSUMPTION_UNIT = 0;
+    // Liter per 100 km
+    LITER_PER_100KM = 1;
+    // Kilometers per liter
+    KM_PER_LITER = 2;
+    // Miles Per imperial gallon
+    MPG_UK = 3;
+    // Miles Per US gallon
+    MPG_US = 4;
+  }
+
+  enum ElectricityConsumptionUnit {
+    UNSPECIFIED_ELECTRICITY_CONSUMPTION_UNIT = 0;
+    // kWh per 100 km
+    KWH_PER_100KM = 1;
+    // Kilometers per kWh
+    KM_PER_KWH = 2;
+    // kWh per 100 miles
+    KWH_PER_100MI = 3;
+    // miles per kWh
+    M_PER_KWH = 4;
+    // Miles per gallon gasoline equivalent
+    MPGE = 5;
+  }
+
+  enum GasConsumptionUnit {
+    UNSPECIFIED_GAS_CONSUMPTION_UNIT = 0;
+    // kG per 100 km
+    KG_PER_100KM = 1;
+    // km per kg
+    KM_PER_KG = 2;
+    // miles per kg
+    M_PER_KG = 3;
+  }
+
+  enum SpeedDistanceUnit {
+    option deprecated = true; // use speed unit / length unit instead
+
+    UNSPECIFIED_SPEED_DISTANCE_UNIT = 0;
+    // km/h, distance unit: km
+    KM_PER_H = 1;
+    // mph, distance unit: miles
+    M_PER_H = 2;
+  }
+
+  enum SpeedUnit {
+    UNSPECIFIED_SPEED_UNIT = 0;
+    // kilometers per hour
+    KM_PER_HOUR = 1;
+    // miles per hour
+    M_PER_HOUR = 2;
+  }
+
+  enum DistanceUnit {
+    UNSPECIFIED_DISTANCE_UNIT = 0;
+    KILOMETERS = 1;
+    MILES = 2;
+  }
+
+  enum TemperatureUnit {
+    UNSPECIFIED_TEMPERATURE_UNIT = 0;
+    CELSIUS = 1;
+    FAHRENHEIT = 2;
+  }
+
+  enum PressureUnit {
+    UNSPECIFIED_PRESSURE_UNIT = 0;
+    KPA = 1 ;
+    BAR = 2;
+    // Pounds per square inch
+    PSI = 3;
+  }
+
+  enum RatioUnit {
+    UNSPECIFIED_RATIO_UNIT = 0;
+    PERCENT = 1;
+  }
+
+  enum ClockHourUnit {
+    UNSPECIFIED_CLOCK_HOUR_UNIT = 0;
+    // 12h (AM/PM)
+    T12H = 1;
+    // 24h
+    T24H = 2;
+  }
+
+  enum TcuConnectionStateLowChannelStatus {
+    UNKNOWN_TCU_CONNECTION_STATE = 0;
+    INITIALLY_CONNECTED = 1;
+    RECONNECTED = 2;
+    DISCONNECTED = 3;
+    UNPLANNED_DISCONNECTED = 4;
+  }
+  
+  enum ChargingCouplerErrorDetails {
+    CHARING_COUPLER_ERROR_DETAILS_NO_INFO_OR_ERROR_MESSAGE = 0;
+    CHARING_COUPLER_ERROR_DETAILS_RELIEVE_CHARGE_COUPLER_AND_RETRY = 1;
+    CHARING_COUPLER_ERROR_DETAILS_CONTACT_SERVICE_HOTLINE_FOR_EMERGENCY_UNLOCK = 2;
+    CHARING_COUPLER_ERROR_DETAILS_UNPLUG_AND_REPLUG_CHARGE_COUPLER = 3;
+    CHARING_COUPLER_ERROR_DETAILS_CHARGE_COUPLER_LOCK_DEFECT = 4;
+  }
+
+  enum ChargingErrorImpossibleChangeTo400V {
+    CHARGING_ERROR_IMPOSSIBLE_CHANGE_TO_400V_NO_INFO = 0;
+    CHARGING_ERROR_IMPOSSIBLE_CHANGE_TO_400V_400V_IMPOSSIBLE_STUCK_TO_800V = 1;
+  }
+
+  enum ChargingErrorImpossibleChangeTo800V {
+    CHARGING_ERROR_IMPOSSIBLE_CHANGE_TO_800V_NO_INFO = 0;
+    CHARGING_ERROR_IMPOSSIBLE_CHANGE_TO_800V_800V_IMPOSSIBLE_STUCK_TO_400V = 1;
+  }
+
+  enum ChargingErrorVehicleNoSupport400V {
+    CHARGING_ERROR_VEHICLE_NO_SUPPORT_400V_NO_INFO = 0;
+    CHARGING_ERROR_VEHICLE_NO_SUPPORT_400V_400V_CHARGING_NOT_POSSIBLE = 1;
+  }
+
+
+  //   tag 15 = SpeedDistanceUnit speed_distance_unit (was deprecated, replaced by speed_unit/distance_unit)
+  //   tag 21 = WeekdayTariffValue weekday_tariff_value
+  //   tag 22 = WeekendTariffValue weekend_tariff_value
+  //   tag 28 = EcoHistogramValue eco_histogram_value
+  //   tag 30 = repeated int32 service_ids (was backend-internal only)
+  //   tag 33 = ChargingPowerControl charging_power_control
+  reserved 15, 21, 22, 28, 30, 33;
+
+  string display_value = 11;
+  oneof display_unit {
+    CombustionConsumptionUnit combustion_consumption_unit = 12;
+    GasConsumptionUnit gas_consumption_unit = 13;
+    ElectricityConsumptionUnit electricity_consumption_unit = 14;
+    SpeedUnit speed_unit = 25;
+    DistanceUnit distance_unit = 26;
+    TemperatureUnit temperature_unit = 16;
+    PressureUnit pressure_unit = 17;
+    RatioUnit ratio_unit = 18;
+    ClockHourUnit clock_hour_unit = 19;
+  }
+
+  oneof attribute_type {
+    int64 int_value = 4;
+    bool bool_value = 5;
+    string string_value = 6;
+    double double_value = 7;
+    bool nil_value = 8;
+    string unsupported_value = 9;
+    TemperaturePointsValue temperature_points_value = 20;
+    StateOfChargeProfileValue state_of_charge_profile_value = 23;
+    WeeklySettingsHeadUnitValue weekly_settings_head_unit_value = 24;
+    SpeedAlertConfigurationValue speed_alert_configuration_value = 27;
+    WeeklyProfileValue weekly_profile_value = 29;
+    ChargeProgramsValue charge_programs_value = 31;
+    ChargingBreakClockTimerValue chargingbreak_clocktimer_value = 32;
+    KeylineActivationStateValue keyline_activation_state_value = 36;
+    NextDepartureTimeValue next_departure_time_value = 37;
+    TcuConnectionStateLowChannelStatus tcu_connection_state_low_channel = 38;
+    TurnOffEnginePreWarning turn_off_engine_pre_warning = 39;
+    ChildPresenceDetectionWarningLastEvent child_presence_detection_warning_last_event = 40;
+    ChildPresenceDetectionWarningLevel child_presence_detection_warning_level = 41;
+    PerformanceLimitationModeStatus performance_limitation_mode_status = 42;
+    BatteryHealth battery_health = 43;
+    PrecondState precond_state = 44;
+    ExteriorMonitoringStatus exterior_monitoring_status = 45;
+    InteriorMonitoringStatus interior_monitoring_status = 46;
+    RemoteUpdateStartStatus remote_update_start_status = 47;
+    SohCalibrationRequired soh_calibration_required = 48;
+    SocCalibrationRequest soc_calibration_request = 49;
+    SohCalibrationRequest soh_calibration_request = 50;
+    SohCalibrationState soh_calibration_state = 51;
+    SohCalibrationPlanned soh_calibration_planned = 52;
+    SohFavorableConditions soh_favorable_conditions = 53;
+    SohCalibrationNotifications soh_calibration_notifications = 54;
+    ChargingPowerRestrictions charging_power_restrictions = 55;
+    ChargingCouplerErrorDetails charging_coupler_error_details = 56;
+    ChargingStopErrorDetails charging_stop_error_details = 57;
+    ChargingErrorVehicleNoSupport400V charging_error_vehicle_no_support_400v = 58;
+    ChargingErrorImpossibleChangeTo400V charging_error_impossible_change_to_400v = 59;
+    ChargingErrorImpossibleChangeTo800V charging_error_impossible_change_to_800v = 60;
+    PrecondOperabilityState precond_operability_state = 61;
+    PictureRecordingStatus picture_recording_status = 62;
+    ParkEventPictureSelectionStatus park_event_picture_selection_status = 63;
+    PanicAlarmActive panic_alarm_active = 64;
+    InteriorProtectionSelectionStatus interior_protection_selection_status = 65;
+    InteriorProtectionActivationStatus interior_protection_activation_status = 66;
+    TowProtectionSelectionStatus tow_protection_selection_status = 67;
+    TowProtectionActivationStatus tow_protection_activation_status = 68;
+    VehicleTheftAlarmInactiveReason vehicle_theft_alarm_inactive_reason = 69;
+    ParkCollisionSelectionStatus park_collision_selection_status = 70;
+    ParkCollisionActivationStatus park_collision_activation_status = 71;
+    ParkCollisionInactiveReason park_collision_inactive_reason = 72;
+    ParkCollisionPictureTransferStatus park_collision_picture_transfer_status = 73;
+    EmergencyPowerSupply emergency_power_supply = 78;
+    EvsePairingState evse_pairing_state = 79;
+    ChargingPredictionSoc charging_prediction_soc = 80;
+    ChargingPredictionDepartureTime charging_prediction_departure_time = 81;
+    ChargingScheduleActive charging_schedule_active = 82;
+    DcChargingProfile dc_charging_profile = 83;
+    ChargeFlaps charge_flaps = 84;
+    ChargeInlets charge_inlets = 85;
+    ChargingTimer charging_timer = 86;
+    ParkEventPictureTransmissionStatus park_event_picture_transmission_status = 87;
+    ChargingScheduleRequested charging_schedule_requested = 88;
+    ChargingFlapErrorDetails charging_flap_error_details = 89;
+    ChargingCompatibilityError charging_compatibility_error = 90;
+    HvBatteryPrecondAvailability hv_battery_precond_availability = 91;
+    HvBatteryPrecondRequestState hv_battery_precond_request_state = 92;
+    HvBatteryPrecondState hv_battery_precond_state = 93;
+    AmgStageModeState amg_stage_mode_state = 94;
+    AmgStageModeError amg_stage_mode_error = 95;
+  }
+}
+
+message AmgStageModeError {
+  bool rear_spoiler = 1;
+  bool bow_wave = 2;
+  bool diffuser = 3;
+  bool light = 4;
+  bool mirror = 5;
+  bool sound = 6;
+  bool air_control_system = 7;
+  bool venturi = 8;
+}
+
+enum AmgStageModeState {
+  AMG_STAGE_MODE_STATE_STAGING_NOT_ACTIVE = 0;
+  AMG_STAGE_MODE_STATE_REVERTING_IN_PROGRESS = 1;
+  AMG_STAGE_MODE_STATE_TRANSFORMING_FINISHED_TRANSFORMED_POS = 2;
+  AMG_STAGE_MODE_STATE_TRANSFORMING_FINISHED_DEFAULT_POS = 3;
+  AMG_STAGE_MODE_STATE_TRANSFORMATION_ABORTED = 4;
+}
+
+// Child presence detection warning level
+enum ChildPresenceDetectionWarningLevel {
+  NO_WARNING = 0;
+  INITIAL = 1;
+  ESCALATION = 2;
+  SILENT_ESCALATION = 3;
+  WARNING_LEVEL_DEACTIVATED_ERROR = 4;
+  WARNING_LEVEL_ACTIVE_ECALL_SOON = 5;
+  WARNING_LEVEL_ACTIVE_ECALL_TRANSMITTED = 6;
+  WARNING_LEVEL_ACTIVE_ECALL_NOT_AVAILABLE = 7;
+  WARNING_LEVEL_DELAYED = 8;
+  WARNING_LEVEL_ACTIVE_NO_ECALL_SIL_ESC = 9;
+  WARNING_LEVEL_ACTIVE_NO_ECALL_ESC = 10;
+  WARNING_LEVEL_ACTIVE_ECALL_NOT_AVAILABLE_SECOND_STAGE = 11;
+}
+
+// Child presence detection warning last event
+enum ChildPresenceDetectionWarningLastEvent {
+  NO_WARNING_INITIAL = 0;
+  WARNING_ACTIVE_TEMPERATURE_DECREASE = 1;
+  WARNING_ACTIVE_TEMPERATURE_INCREASE = 2;
+  WARNING_ACTIVE_BATTERY_LOW = 3;
+  WARNING_ACTIVE_ECALL_SOON = 4;
+  WARNING_ACTIVE_ECALL_TRANSMITTED = 5;
+  WARNING_DEACTIVATED = 6;
+  NO_WARNING_NO_EVENT = 7;
+  WARNING_DELAYED = 8;
+  WARNING_DEACTIVATED_BATTERY = 9;
+  WARNING_DEACTIVATED_ERROR = 10;
+  WARNING_DEACTIVATED_UNLOCK = 11;
+  WARNING_ACTIVE_ECALL_NOT_AVAILABLE = 12;
+  WARNING_ACTIVE_ECALL_NOT_AVAILABLE_PUSH_NOTIFICATION = 13;
+  CAMERA_NOT_AVAILABLE = 14;
+}
+
+// Keyline activation states for vehicle keys
+enum KeylineActivationStates {
+  UNKNOWN_KEYLINE_ACTIVATION_STATE = 0;
+  ALL_ACTIVE = 1;
+  SELECTIVE_DEACTIVATED = 2;
+  ALL_DEACTIVATED = 3;
+}
+
+// Keyline activation state value with active keylines
+message KeylineActivationStateValue {
+  KeylineActivationStates state = 1;
+  repeated int64 active_keylines = 2;
+}
+
+// Next departure time value
+message NextDepartureTimeValue {
+  int64 hour = 1;
+  int64 minute = 2;
+}
+
+// Performance limitation mode status
+enum PerformanceLimitationModeStatus {
+  PLM_NO_WARNING = 0;
+  SVH_EVENT_MANAGED = 1;
+  PLM_REQUESTED = 2;
+  PLM_SUCCESSFUL_REQUESTED = 3;
+  PLM_NOT_AUTHORIZED = 4;
+  PLM_ERROR = 5;
+  PLM_INCAPABLE = 6;
+}
+
+// Exterior monitoring status
+enum ExteriorMonitoringStatus {
+  EXM_IDLE = 0;
+  EXM_WAKE_UP = 1;
+  EXM_REQUEST_SUBMITTED = 2;
+  EXM_RECORDING = 3;
+  EXM_ANNOUNCE = 4;
+  EXM_UPLOADING = 5;
+  EXM_COMPLETED = 6;
+  EXM_AE_REQUEST_DENIED = 101;
+  EXM_AE_INCAPABLE = 106;
+  EXM_AE_OVERRULED = 108;
+  EXM_AE_PLAY_PROTECTION_ACTIVE = 110;
+  EXM_AE_PRECONDITION_MISSING = 111;
+}
+
+// Interior monitoring status
+enum InteriorMonitoringStatus {
+  INM_IDLE = 0;
+  INM_WAKE_UP = 1;
+  INM_RECORDING = 2;
+  INM_PICTURE_TAKEN = 3;
+  INM_ANNOUNCE = 4;
+  INM_UPLOADING = 5;
+  INM_COMPLETED = 6;
+  INM_CAMERA_BROKEN = 101;
+  INM_MEMORY_FULL = 103;
+  INM_PRIVACY_MODE_ACTIVE = 105;
+  INM_PICTURE_TAKING_DISABLED = 106;
+  INM_ACTIVE_BURSTMODE = 108;
+  INM_PICTURE_TAKING_INTERRUPTED = 110;
+}
+
+// Update status for remote updates
+enum UpdateStatus {
+  UPDATE_STATUS_UNKNOWN = 0;
+  AWAIT_REPROGRAMMING = 1;
+  AWAIT_REPROGRAMMING_STARTABLE = 2;
+  REPROG_ACTIVE = 3;
+  POSTPONED = 4;
+  SUCCESSFUL = 5;
+  FAILURE = 6;
+  PANIC = 7;
+  ERROR = 8;
+  CONFIRMED_STARTED = 9;
+}
+
+// Remote update start status message
+message RemoteUpdateStartStatus {
+  int32 duration_after_runtime = 1;
+  string package_id = 2;
+  UpdateStatus update_status = 3;
+  string release_id = 4;
+}
+
+// SOH calibration planned status
+enum SohCalibrationPlanned {
+  SOH_CALIBRATION_NOT_PLANNED = 0;
+  SOH_CALIBRATION_PLANNED = 1;
+}
+
+// DC charging profile
+enum DcChargingProfile {
+  DC_CHARGING_PROFILE_UNKNOWN = 0;
+  DC_CHARGING_PROFILE_STANDARD = 1;
+  DC_CHARGING_PROFILE_SILENT_OR_ECO = 2;
+  DC_CHARGING_PROFILE_ULTRAFAST = 3;
+  DC_CHARGING_PROFILE_PITSTOP = 4;
+  DC_CHARGING_PROFILE_FAST_ECO_1 = 5;
+  DC_CHARGING_PROFILE_FAST_ECO_2 = 6;
+}
+
+// Park event picture transmission status
+enum ParkEventPictureTransmissionStatus {
+  PARK_EVENT_PICTURE_TRANSMISSION_STATUS_IDLE = 0;
+  PARK_EVENT_PICTURE_TRANSMISSION_STATUS_WAKE_UP = 1;
+  PARK_EVENT_PICTURE_TRANSMISSION_STATUS_REQUEST_SUBMITTED = 2;
+  PARK_EVENT_PICTURE_TRANSMISSION_STATUS_RECORDING = 3;
+  PARK_EVENT_PICTURE_TRANSMISSION_STATUS_ANNOUNCE = 4;
+  PARK_EVENT_PICTURE_TRANSMISSION_STATUS_UPLOADING = 5;
+  PARK_EVENT_PICTURE_TRANSMISSION_STATUS_COMPLETED = 6;
+}
+
+// Charging schedule use case ID (non-deprecated version)
+enum ChargingScheduleUseCaseId {
+  CHARGING_SCHEDULE_USE_CASE_ID_SMART_CHARGING = 0;
+  CHARGING_SCHEDULE_USE_CASE_ID_MERCEDES_INTELLIGENT_CHARGING = 1;
+  CHARGING_SCHEDULE_USE_CASE_ID_BETA_COMMUNITY_CHARGING = 2;
+  CHARGING_SCHEDULE_USE_CASE_ID_SOLAR_CHARGING = 10;
+  CHARGING_SCHEDULE_USE_CASE_ID_GREEN_CHARGING = 11;
+  CHARGING_SCHEDULE_USE_CASE_ID_EFFICIENT_CHARGING = 12;
+  CHARGING_SCHEDULE_USE_CASE_ID_ECO_FRIENDLY_CHARGING = 13;
+  CHARGING_SCHEDULE_USE_CASE_ID_SUSTAINABLE_CHARGING = 14;
+  CHARGING_SCHEDULE_USE_CASE_ID_INTELLIGENT_CHARGING = 15;
+  CHARGING_SCHEDULE_USE_CASE_ID_WORKPLACE_CHARGING_PLAN = 16;
+  CHARGING_SCHEDULE_USE_CASE_ID_HOME_CHARGING_PLAN = 17;
+  CHARGING_SCHEDULE_USE_CASE_ID_FLEET_MANAGED_CHARGING = 18;
+  CHARGING_SCHEDULE_USE_CASE_ID_PRICE_OPTIMIZED_CHARGING = 19;
+  CHARGING_SCHEDULE_USE_CASE_ID_BATTERY_FRIENDLY_CHARGING = 20;
+  CHARGING_SCHEDULE_USE_CASE_ID_EXTERNAL_NOISE_OPTIMIZED_CHARGING = 21;
+  CHARGING_SCHEDULE_USE_CASE_ID_VIDEO_WATCHING_OPTIMIZED_CHARGING = 22;
+  CHARGING_SCHEDULE_USE_CASE_ID_TIME_CONTROLLED_CHARGING = 23;
+  CHARGING_SCHEDULE_USE_CASE_ID_PEAK_SHAVING_CHARGING = 24;
+  CHARGING_SCHEDULE_USE_CASE_ID_DYNAMIC_LOAD_BALANCED_CHARGING = 25;
+  CHARGING_SCHEDULE_USE_CASE_ID_BUSINESS_SPECIFIC_CHARGING = 26;
+  CHARGING_SCHEDULE_USE_CASE_ID_PREFERRED_CHARGING_TIMES = 27;
+  CHARGING_SCHEDULE_USE_CASE_ID_ENPAL = 100;
+  CHARGING_SCHEDULE_USE_CASE_ID_TIBBER = 101;
+  CHARGING_SCHEDULE_USE_CASE_ID_THE_MOBILITY_HOUSE = 102;
+  CHARGING_SCHEDULE_USE_CASE_ID_AWATTAR = 103;
+  CHARGING_SCHEDULE_USE_CASE_ID_TRONITY = 104;
+  CHARGING_SCHEDULE_USE_CASE_ID_DPD = 200;
+  CHARGING_SCHEDULE_USE_CASE_ID_DEUTSCHE_POST = 201;
+  CHARGING_SCHEDULE_USE_CASE_ID_HACKATHON = 250;
+  CHARGING_SCHEDULE_USE_CASE_ID_SANDBOX_MODE = 251;
+  CHARGING_SCHEDULE_USE_CASE_ID_DEVELOPER_MODE = 252;
+  CHARGING_SCHEDULE_USE_CASE_ID_TEST_MODE = 253;
+  CHARGING_SCHEDULE_USE_CASE_ID_DEBUG_MODE = 254;
+}
+
+// Schedule ID status
+enum ScheduleIdStatus {
+  SCHEDULE_ID_STATUS_INITIAL = 0;
+  SCHEDULE_ID_STATUS_DELETED = 210;
+}
+
+// Charging schedule active message
+message ChargingScheduleActive {
+  int64 schedule_id_deprecated = 1 [deprecated = true];
+  ChargingScheduleActiveUseCaseId use_case_id_deprecated = 2 [deprecated = true];
+  google.protobuf.Timestamp start_time = 3;
+  ChargingScheduleActiveOfflineMode offline_mode = 4;
+  repeated ChargingScheduleActiveSchedule schedule = 5;
+  ChargingScheduleUseCaseId use_case_id = 6;
+  ScheduleIdStatus schedule_id_status = 7;
+
+  // Nested enum for use case id (deprecated)
+  enum ChargingScheduleActiveUseCaseId {
+    option deprecated = true;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_SMART_CHARGING = 0;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_MERCEDES_INTELLIGENT_CHARGING = 1;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_BETA_COMMUNITY_CHARGING = 2;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_SOLAR_CHARGING = 10;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_GREEN_CHARGING = 11;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_EFFICIENT_CHARGING = 12;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_ECO_FRIENDLY_CHARGING = 13;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_SUSTAINABLE_CHARGING = 14;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_INTELLIGENT_CHARGING = 15;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_WORKPLACE_CHARGING_PLAN = 16;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_HOME_CHARGING_PLAN = 17;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_FLEET_MANAGED_CHARGING = 18;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_PRICE_OPTIMIZED_CHARGING = 19;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_BATTERY_FRIENDLY_CHARGING = 20;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_EXTERNAL_NOISE_OPTIMIZED_CHARGING = 21;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_VIDEO_WATCHING_OPTIMIZED_CHARGING = 22;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_TIME_CONTROLLED_CHARGING = 23;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_PEAK_SHAVING_CHARGING = 24;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_DYNAMIC_LOAD_BALANCED_CHARGING = 25;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_BUSINESS_SPECIFIC_CHARGING = 26;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_PREFERRED_CHARGING_TIMES = 27;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_ENPAL = 100;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_TIBBER = 101;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_THE_MOBILITY_HOUSE = 102;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_AWATTAR = 103;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_TRONITY = 104;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_DPD = 200;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_DEUTSCHE_POST = 201;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_HACKATHON = 250;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_SANDBOX_MODE = 251;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_DEVELOPER_MODE = 252;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_TEST_MODE = 253;
+    CHARGING_SCHEDULE_ACTIVE_USE_CASE_ID_DEBUG_MODE = 254;
+  }
+
+  // Nested enum for offline mode
+  enum ChargingScheduleActiveOfflineMode {
+    CHARGING_SCHEDULE_ACTIVE_OFFLINE_MODE_UNKNOWN = 0;
+    CHARGING_SCHEDULE_ACTIVE_OFFLINE_MODE_OFF = 1;
+    CHARGING_SCHEDULE_ACTIVE_OFFLINE_MODE_ON = 2;
+  }
+
+  // Nested message for schedule entry
+  message ChargingScheduleActiveSchedule {
+    double power_values = 1;
+    int64 duration_values = 2;
+  }
+}
+
+enum SocCalibrationRequest {
+  SOC_CALIBRATION_REQUEST_NO_REQUEST = 0;
+  SOC_CALIBRATION_REQUEST_LOW_REQUEST = 1;
+  SOC_CALIBRATION_REQUEST_HIGH_REQUEST = 2;
+}
+
+enum SohFavorableConditions {
+  SOH_FAVORABLE_CONDITIONS_NOT_FAVORABLE = 0;
+  SOH_FAVORABLE_CONDITIONS_FAVOURABLE_LEVEL_1 = 1;
+  SOH_FAVORABLE_CONDITIONS_FAVOURABLE_LEVEL_2 = 2;
+}
+
+enum ChargingStopErrorDetails {
+  CHARGING_STOP_ERROR_DETAILS_NO_INFO_OR_ERROR_MESSAGE = 0;
+  CHARGING_STOP_ERROR_DETAILS_CHARGE_STOP_BUTTON_DEFECT = 1;
+}
+
+enum SohCalibrationState {
+  SOH_CALIBRATION_STATE_NOT_ACTIVE = 0;
+  SOH_CALIBRATION_STATE_ACTIVE = 1;
+  SOH_CALIBRATION_STATE_SUCCESSFUL = 2;
+  SOH_CALIBRATION_STATE_BMS_UNDEFINED_ERROR = 3;
+  SOH_CALIBRATION_STATE_BMS_TEMPERATURE_ERROR = 4;
+  SOH_CALIBRATION_STATE_NO_CUSTOMER_PERMISSION_ERROR = 5;
+  SOH_CALIBRATION_STATE_NOT_ENOUGH_TIME_UNTIL_DEPARTURE_ERROR = 6;
+  SOH_CALIBRATION_STATE_USER_CANCELLED_ERROR = 7;
+  SOH_CALIBRATION_STATE_CHARGING_PROCESS_CANCELLED_ERROR = 8;
+  SOH_CALIBRATION_STATE_CHARGING_INFRASTRUCTURE_PROTOCOL_ERROR = 9;
+  SOH_CALIBRATION_STATE_CHARGING_INFRASTRUCTURE_POWER_REDUCTION_ERROR = 10;
+  SOH_CALIBRATION_STATE_UNDEFINED_ERROR = 11;
+}
+
+enum SohCalibrationRequired {
+  SOH_CALIBRATION_NOT_REQUIRED = 0;
+  SOH_CALIBRATION_REQUIRED = 1;
+}
+
+enum SohCalibrationRequest {
+  SOH_CALIBRATION_REQUEST_NO_REQUEST = 0;
+  SOH_CALIBRATION_REQUEST_LOW_REQUEST = 1;
+  SOH_CALIBRATION_REQUEST_HIGH_REQUEST = 2;
+}
+
+enum TurnOffEnginePreWarning {
+  NO_MESSAGE_ACTIVE = 0;
+  VEHICLE_READY_AUTOMATIC_SHUTDOWN_ON_LOCK = 1;
+  VEHICLE_READY_AUTOMATIC_SHUTDOWN_ON_TIMEOUT = 2;
+}
+
+enum SohCalibrationNotifications {
+  SOH_CALIBRATION_NOTIFICATIONS_NO_SOH_CALIBRATION_NECESSARY = 0;
+  SOH_CALIBRATION_NOTIFICATIONS_SEND_NOTIFICATION_LEVEL_1 = 1;
+  SOH_CALIBRATION_NOTIFICATIONS_SEND_NOTIFICATION_LEVEL_2 = 2;
+  SOH_CALIBRATION_NOTIFICATIONS_SEND_NOTIFICATION_LEVEL_3 = 3;
+  SOH_CALIBRATION_NOTIFICATIONS_SEND_NOTIFICATION_LEVEL_4 = 4;
+}
+
+enum HvBatteryPrecondStatesDischarging {
+  DISCHARGING_INACTIVE = 0;
+  DISCHARGING_HEATING_ACTIVE = 1;
+  DISCHARGING_HEATING_SUCCESSFUL = 2;
+  DISCHARGING_HEATING_NOT_SUFFICIENT = 3;
+  DISCHARGING_HEATING_RECOMMENDATION = 4;
+  DISCHARGING_COOLING_ACTIVE = 5;
+  DISCHARGING_COOLING_SUCCESSFUL = 6;
+  DISCHARGING_COOLING_NOT_SUFFICIENT = 7;
+  DISCHARGING_COOLING_RECOMMENDATION = 8;
+}
+
+enum HvBatteryPrecondStatesCharging {
+  CHARGING_HEATING_INACTIVE = 0;
+  CHARGING_HEATING_ACTIVE = 1;
+  CHARGING_HEATING_SUCCESSFUL = 2;
+  CHARGING_HEATING_NOT_SUFFICIENT = 3;
+  CHARGING_HEATING_RECOMMENDATION = 4;
+  CHARGING_COOLING_ACTIVE = 5;
+  CHARGING_COOLING_SUCCESSFUL = 6;
+  CHARGING_COOLING_NOT_SUFFICIENT = 7;
+  CHARGING_COOLING_RECOMMENDATION = 8;
+}
+
+message HvBatteryPrecondState {
+  HvBatteryPrecondStatesCharging charging = 1;
+  HvBatteryPrecondStatesDischarging discharging = 2;
+}
+
+enum MainCategory {
+  MAIN_CATEGORY_SERVER = 0;
+  MAIN_CATEGORY_HMI = 1;
+  MAIN_CATEGORY_VEHICLE_SYSTEM = 2;
+  MAIN_CATEGORY_DIAGNOSTICS = 3;
+  MAIN_CATEGORY_REMOTE = 4;
+  MAIN_CATEGORY_CONTAINER_APPLICATION = 5;
+}
+
+enum SubCategory {
+  SUB_CATEGORY_UNKNOWN = 0;
+  SUB_CATEGORY_BATTERY_CONDITIONING = 1;
+}
+
+enum SpecificCategory {
+  SPECIFIC_CATEGORY_UNKNOWN = 0;
+  SPECIFIC_CATEGORY_PRECONDITIONING_BUTTON = 1;
+}
+
+enum Method {
+  METHOD_COND_REQ_TO_REACH_TARGET_TEMP = 0;
+  METHOD_COND_REQ_TO_REACH_TARGET_POWER = 1;
+  METHOD_OMIT_CONDITIONING_REQUEST = 2;
+  METHOD_SET_CONFIGURATION = 3;
+}
+
+enum Status {
+  STATE_OK = 0;
+  STATE_UNSPECIFIED_ERROR = 1;
+  STATE_CONDITIONING_NOT_NECESSARY = 2;
+  STATE_TIME_NOT_SUFFICIENT = 3;
+  STATE_BATTERY_LEVEL_LOW= 4;
+}
+
+message HvBatteryPrecondRequestState {
+  MainCategory main_category = 1;
+  SubCategory sub_category = 2;
+  SpecificCategory specific_category = 3;
+  Method method = 4;
+  Status status = 5;
+}
+
+enum HvBatteryPrecondAvailability {
+  HV_BATTERY_PRECOND_AVAILABILITY_NOT_AVAILABLE = 0;  
+  HV_BATTERY_PRECOND_AVAILABILITY_FULLY_AVAILABLE = 1;  
+  HV_BATTERY_PRECOND_AVAILABILITY_TEMPORARILY_NOT_AVAILABLE_LOW_SOC = 2;  
+  HV_BATTERY_PRECOND_AVAILABILITY_TEMPORARILY_NOT_AVAILABLE_MECHATRONICS = 3;  
+  HV_BATTERY_PRECOND_AVAILABILITY_TEMPORARILY_NOT_AVAILABLE_BATTERY_TEMPERATURE = 4;  
+  HV_BATTERY_PRECOND_AVAILABILITY_LIMITED_AVAILABLE_LOW_SOC = 5;  
+  HV_BATTERY_PRECOND_AVAILABILITY_LIMITED_AVAILABLE_MECHATRONICS = 6;  
+  HV_BATTERY_PRECOND_AVAILABILITY_LIMITED_AVAILABLE_BATTERY_TEMPERATURE = 7;
+}
+
+enum EvsePairingState {
+  EVSE_PAIRING_STATE_IDLE = 0;
+  EVSE_PAIRING_STATE_FINISHED = 1;
+  EVSE_PAIRING_STATE_FAILED_TLS_ERROR = 2;
+  EVSE_PAIRING_STATE_FAILED_TIMEOUT = 3;
+  EVSE_PAIRING_STATE_FAILED_NO_INDEX_AVAILABLE = 4;
+  EVSE_PAIRING_STATE_PROCESS_ONGOING = 5;
+  EVSE_PAIRING_STATE_PROCESS_STOPPED = 6;
+  EVSE_PAIRING_STATE_CERTIFICATE_NOT_INSTALLED = 7;
+  EVSE_PAIRING_STATE_PAIRING_SERVICE_NOT_OFFERED_BY_EVSE = 8;
+  EVSE_PAIRING_STATE_BIDIRECTIONAL_POWER_TRANSFER_SERVICE_NOT_OFFERED_BY_EVSE = 9;
+}
+
+enum EmergencyPowerSupply {
+  EMERGENCY_POWER_SUPPLY_OFF = 0;
+  EMERGENCY_POWER_SUPPLY_ON = 1;
+}
+
+enum ParkCollisionPictureTransferStatus {
+  PARK_COLLISION_PICTURE_TRANSFER_STATUS_DESELETED = 0;
+  PARK_COLLISION_PICTURE_TRANSFER_STATUS_SELECTED = 1;
+}
+
+enum PictureRecordingStatus {
+  PICTURE_RECORDING_STATUS_NOT_ACTIVE = 0;
+  PICTURE_RECORDING_STATUS_ACTIVE = 1;
+}
+
+enum ParkCollisionInactiveReason {
+  PARK_COLLISION_INACTIVE_REASON_DISABLED = 0;
+  PARK_COLLISION_INACTIVE_REASON_WAIT_FOR_SYSTEM_ACTIVATION = 1;
+  PARK_COLLISION_INACTIVE_REASON_SYSTEM_ACTIVE = 2;
+  PARK_COLLISION_INACTIVE_REASON_TRUNK_OR_DOOR_OPEN = 3;
+  PARK_COLLISION_INACTIVE_REASON_DESELECTED = 4;
+  PARK_COLLISION_INACTIVE_REASON_COLLISION_LIMIT = 5;
+  PARK_COLLISION_INACTIVE_REASON_MONITORING_TIME = 6;
+  PARK_COLLISION_INACTIVE_REASON_CONVERTIBLE_TOP_OPEN = 7;
+  PARK_COLLISION_INACTIVE_REASON_TEST1 = 8;
+  PARK_COLLISION_INACTIVE_REASON_TEST2 = 9;
+}
+
+
+enum ParkCollisionSelectionStatus {
+  PARK_COLLISION_SELECTION_STATUS_DESELETED = 0;
+  PARK_COLLISION_SELECTION_STATUS_SELECTED = 1;
+}
+
+enum VehicleTheftAlarmInactiveReason {
+  VEHICLE_THEFT_ALARM_INACTIVE_REASON_NO_ERROR = 0;
+  VEHICLE_THEFT_ALARM_INACTIVE_REASON_SIREN_COM = 1;
+  VEHICLE_THEFT_ALARM_INACTIVE_REASON_SIREN_BAT = 2;
+  VEHICLE_THEFT_ALARM_INACTIVE_REASON_SENSOR = 3;
+}
+
+enum TowProtectionActivationStatus {
+  TOW_PROTECTION_ACTIVATION_STATUS_OFF = 0;
+  TOW_PROTECTION_ACTIVATION_STATUS_ON = 1;
+  TOW_PROTECTION_ACTIVATION_STATUS_INIT = 2;
+}
+
+enum TowProtectionSelectionStatus {
+  TOW_PROTECTION_SELECTION_STATUS_DESELETED = 0;
+  TOW_PROTECTION_SELECTION_STATUS_SELECTED = 1;
+}
+
+enum InteriorProtectionActivationStatus {
+  INTERIOR_PROTECTION_ACTIVATION_STATUS_OFF = 0;
+  INTERIOR_PROTECTION_ACTIVATION_STATUS_ON = 1;
+  INTERIOR_PROTECTION_ACTIVATION_STATUS_INIT = 2;
+}
+
+enum InteriorProtectionSelectionStatus {
+  INTERIOR_PROTECTION_SELECTION_STATUS_DESELETED = 0;
+  INTERIOR_PROTECTION_SELECTION_STATUS_SELECTED = 1;
+}
+
+enum PanicAlarmActive {
+  PANIC_ALARM_ACTIVE_CONFIRMED = 0;
+  PANIC_ALARM_ACTIVE_NOT_YET_CONFIRMED = 1;
+}
+
+enum ParkEventPictureSelectionStatus {
+  PARK_EVENT_PICTURE_SELECTION_STATUS_NOT_SELECTED = 0;
+  PARK_EVENT_PICTURE_SELECTION_STATUS_SELECTED = 1;
+}
+
+enum ParkCollisionActivationStatus {
+  PARK_COLLISION_ACTIVATION_STATUS_OFF = 0;
+  PARK_COLLISION_ACTIVATION_STATUS_ON = 1;
+  PARK_COLLISION_ACTIVATION_STATUS_INIT = 2;
+}
+
+message PrecondOperabilityState {
+
+  enum PrecondErrorState {
+    PRECOND_ERROR_STATE_NO_ERROR = 0;
+    PRECOND_ERROR_STATE_PLAY_PROTECTION = 1;
+    PRECOND_ERROR_STATE_NO_ENERGY_BUDGET_AVAILABLE = 2;
+    PRECOND_ERROR_STATE_LOW_BUDGET = 3;
+    PRECOND_ERROR_STATE_SYSTEM_NOT_AVAILABLE = 4;
+    PRECOND_ERROR_STATE_PRECONDITIONING_ABORTED = 5;
+    PRECOND_ERROR_STATE_REGULAR_CLIMATIZATION_ACTIVE = 6;
+  }
+
+  bool precond_available = 1;
+  PrecondErrorState precond_error_state = 2;
+}
+
+enum ChargingCompatibilityError {
+  CHARGING_COMPATIBILITY_ERROR_DEFAULT = 0;
+  CHARGING_COMPATIBILITY_ERROR_FULL_COMPATIBILITY = 1;
+  CHARGING_COMPATIBILITY_ERROR_FULL_COMPATIBILITY_WITH_ADDITIONAL_HARDWARE = 2;
+  CHARGING_COMPATIBILITY_PARTIAL_COMPATIBILITY = 3;
+  CHARGING_COMPATIBILITY_PARTIAL_COMPATIBILITY_WITH_ADDITIONAL_DEVICE = 4;
+  CHARGING_COMPATIBILITY_ERROR_NO_COMPATIBILITY = 5;
+  CHARGING_COMPATIBILITY_ERROR_BIDI_DISCHARGING_NOT_COMPATIBLE = 6;
+  CHARGING_COMPATIBILITY_ERROR_EVSE_MINIMUM_CURRENT = 7;
+}
+
+enum ChargingFlapErrorDetails {
+  CHARGING_FLAP_ERROR_DETAILS_NO_INFO_OR_ERROR_MESSAGE = 0;
+  CHARGING_FLAP_ERROR_DETAILS_OPENING_DEFECT_SEARCH_WORKSHOP = 1;
+  CHARGING_FLAP_ERROR_DETAILS_BLOCKED = 2;
+  reserved 3;
+  CHARGING_FLAP_ERROR_DETAILS_DRIVING_POSITION_NOT_PARKING = 4;
+  CHARGING_FLAP_ERROR_DETAILS_STATE_UNKNOWN = 5;
+  CHARGING_FLAP_ERROR_DETAILS_PRESSED_DETECTION_DEFECT = 6;
+  CHARGING_FLAP_ERROR_DETAILS_CLOSING_OF_AUTOMATED_FLAP_DEFECT = 7;
+}
+
+message ChargingScheduleRequested {
+
+  enum ScheduleIdStatus {
+    SCHEDULE_ID_STATUS_DELETED = 0;
+    SCHEDULE_ID_STATUS_INITIAL = 1; //210?
+  }
+
+  enum ChargingScheduleUseCaseId {
+    CHARGING_SCHEDULE_USE_CASE_ID_SMART_CHARGING = 0;
+    CHARGING_SCHEDULE_USE_CASE_ID_MERCEDES_INTELLIGENT_CHARGING = 1;
+    CHARGING_SCHEDULE_USE_CASE_ID_BETA_COMMUNITY_CHARGING = 2;
+    CHARGING_SCHEDULE_USE_CASE_ID_SOLAR_CHARGING = 3;
+    CHARGING_SCHEDULE_USE_CASE_ID_GREEN_CHARGING = 4;
+    CHARGING_SCHEDULE_USE_CASE_ID_EFFICIENT_CHARGING = 5;
+    CHARGING_SCHEDULE_USE_CASE_ID_ECO_FRIENDLY_CHARGING = 6;
+    CHARGING_SCHEDULE_USE_CASE_ID_SUSTAINABLE_CHARGING = 7;
+    CHARGING_SCHEDULE_USE_CASE_ID_INTELLIGENT_CHARGING = 8;
+    CHARGING_SCHEDULE_USE_CASE_ID_WORKPLACE_CHARGING_PLAN = 9;
+    CHARGING_SCHEDULE_USE_CASE_ID_HOME_CHARGING_PLAN = 10;
+    CHARGING_SCHEDULE_USE_CASE_ID_FLEET_MANAGED_CHARGING = 11;
+    CHARGING_SCHEDULE_USE_CASE_ID_PRICE_OPTIMIZED_CHARGING = 12;
+    CHARGING_SCHEDULE_USE_CASE_ID_BATTERY_FRIENDLY_CHARGING = 13;
+    CHARGING_SCHEDULE_USE_CASE_ID_EXTERNAL_NOISE_OPTIMIZED_CHARGING = 14;
+    CHARGING_SCHEDULE_USE_CASE_ID_VIDEO_WATCHING_OPTIMIZED_CHARGING = 15;
+    CHARGING_SCHEDULE_USE_CASE_ID_TIME_CONTROLLED_CHARGING = 16;
+    CHARGING_SCHEDULE_USE_CASE_ID_PEAK_SHAVING_CHARGING = 17;
+    CHARGING_SCHEDULE_USE_CASE_ID_DYNAMIC_LOAD_BALANCED_CHARGING = 18;
+    CHARGING_SCHEDULE_USE_CASE_ID_BUSINESS_SPECIFIC_CHARGING = 19;
+    CHARGING_SCHEDULE_USE_CASE_ID_PREFERRED_CHARGING_TIMES = 20;
+    CHARGING_SCHEDULE_USE_CASE_ID_ENPAL = 21;
+    CHARGING_SCHEDULE_USE_CASE_ID_TIBBER = 22;
+    CHARGING_SCHEDULE_USE_CASE_ID_THE_MOBILITY_HOUSE = 23;
+    CHARGING_SCHEDULE_USE_CASE_ID_AWATTAR = 24;
+    CHARGING_SCHEDULE_USE_CASE_ID_TRONITY = 25;
+    CHARGING_SCHEDULE_USE_CASE_ID_DPD = 26;
+    CHARGING_SCHEDULE_USE_CASE_ID_DEUTSCHE_POST = 27;
+    CHARGING_SCHEDULE_USE_CASE_ID_HACKATHON = 28;
+    CHARGING_SCHEDULE_USE_CASE_ID_SANDBOX_MODE = 29;
+    CHARGING_SCHEDULE_USE_CASE_ID_DEVELOPER_MODE = 30;
+    CHARGING_SCHEDULE_USE_CASE_ID_TEST_MODE = 31;
+    CHARGING_SCHEDULE_USE_CASE_ID_DEBUG_MODE = 32;    
+  }
+
+  ScheduleIdStatus schedule_id_status = 1;
+  ChargingScheduleUseCaseId use_case_id = 2;
+}
+
+
+
+message ChargingTimer {
+  repeated ChargingTimerEntry entries = 1;
+}
+
+message ChargingTimerEntry {
+  enum ChargingTimerAction {
+    CHARGING_TIMER_ACTION_UNKNOWN = 0;
+    CHARGING_TIMER_ACTION_DEACTIVATED = 1;
+    CHARGING_TIMER_ACTION_ACTIVE = 2;
+    CHARGING_TIMER_ACTION_DELETED = 3;
+  }
+
+  int64 timerId = 1;
+  ChargingTimerAction action = 2;
+  int32 start_time_hour = 3;
+  int32 start_time_min = 4;
+  int32 end_time_hour = 5;
+  int32 end_time_min = 6;
+  repeated TimeProfileDay day = 7;
+}
+
+message ChargingPredictionSoc {
+  google.protobuf.Timestamp predicted_end_time = 1;
+  int64 predicted_electrical_energy_range = 2;
+}
+
+message ChargingPredictionDepartureTime {
+  // Backend (MBMobileSDK 1.68) deprecated the int32 field on tag 1 and added a
+  // wrapper-typed predicted_soc on tag 3.
+  int32 deprecated_predicted_soc = 1 [deprecated = true];
+  int64 predicted_electrical_energy_range = 2;
+  google.protobuf.Int32Value predicted_soc = 3;
+}
+
+
+message ChargeInletsEntry {
+  enum ChargeInletsCouplerState {
+    CHARGE_INLETS_COUPLER_STATE_UNKNOWN = 0;
+    CHARGE_INLETS_COUPLER_STATE_PLUGGED = 1;
+    CHARGE_INLETS_COUPLER_STATE_VEHICLE_PLUGGED = 2;
+    CHARGE_INLETS_COUPLER_STATE_VEHICLE_NOT_PLUGGED = 3;
+    CHARGE_INLETS_COUPLER_STATE_DEFECT = 4;
+  }
+
+  enum ChargeInletsLockState {
+    CHARGE_INLETS_LOCK_STATE_UNKNOWN = 0;
+    CHARGE_INLETS_LOCK_STATE_UNLOCKED = 1;
+    CHARGE_INLETS_LOCK_STATE_LOCKED = 2;
+    CHARGE_INLETS_LOCK_STATE_LOCK_STATE_NOT_CLEAR = 3;
+    CHARGE_INLETS_LOCK_STATE_NOT_AVAILABLE = 4;
+  }
+
+  int64 id = 1;
+  ChargeInletsCouplerState coupler_state = 2;
+  ChargeInletsLockState lock_state = 3;
+}
+
+message ChargeInlets {
+  repeated ChargeInletsEntry entries = 1;
+}
+
+enum ChargeFlapsPositionState {
+  CHARGE_FLAPS_POSITION_STATE_DEFAULT = 0;
+  CHARGE_FLAPS_POSITION_STATE_OPEN = 1;
+  CHARGE_FLAPS_POSITION_STATE_CLOSED = 2;
+  CHARGE_FLAPS_POSITION_STATE_FLAP_PRESSED = 3;
+  CHARGE_FLAPS_POSITION_STATE_UNKNOWN = 4;
+}
+
+message ChargeFlapsEntry {
+  int64 id = 1;
+  ChargeFlapsPositionState position_state = 2;
+}
+
+message ChargeFlaps {
+  repeated ChargeFlapsEntry entries= 1;
+}
+
+enum ChargingPowerRestriction {
+  CHARGING_POWER_RESTRICTION_NO_RESTRICTION = 0;
+  CHARGING_POWER_RESTRICTION_ECO_CHARGING_ACTIVE = 1;
+  CHARGING_POWER_RESTRICTION_REDUCED_DUE_TO_CUSTOMER_SETTING = 2;
+  CHARGING_POWER_RESTRICTION_REDUCED_DUE_TO_VEHICLE_CHARGING_SYSTEM = 3;
+  CHARGING_POWER_RESTRICTION_REDUCED_DUE_TO_REMOTE_CONTROL = 4;
+  CHARGING_POWER_RESTRICTION_REDUCED_DUE_TO_CHARGING_INFRASTRUCTURE = 5;
+  CHARGING_POWER_RESTRICTION_REDUCED_DUE_TO_CHARGING_STRATEGY = 6;
+  CHARGING_POWER_RESTRICTION_STATE_OF_CHARGE_TOO_LOW = 7;
+  CHARGING_POWER_RESTRICTION_STATE_OF_CHARGE_TOO_HIGH = 8;
+  CHARGING_POWER_RESTRICTION_BATTERY_TEMPERATURE_TOO_LOW = 9;
+  CHARGING_POWER_RESTRICTION_BATTERY_TEMPERATURE_TOO_HIGH = 10;
+}
+
+message ChargingPowerRestrictions {
+  repeated ChargingPowerRestriction charging_power_restriction = 1;
+}
+
+message ChargingBreakClockTimerValue {
+  repeated ChargingBreakClockTimerEntry chargingbreak_clocktimer_entry = 1;
+}
+
+enum BatteryHealth {
+  BATTERY_GREEN_STATE = 0;
+  BATTERY_YELLOW_STATE = 1;
+  BATTERY_RED_STATE = 2;
+  ISSUE_WITH_DATA_EVALUATION = 3;
+  NO_EVALUATION_POSSIBLE = 4;
+  BATTERY_CHANGED = 5;
+  BATTERY_HEALTH_CANNOT_BE_CALCULATED = 6;
+  NO_MB_ORIGINAL_BATTERY = 7;
+  TECHNICAL_LIMITATION_FROM_VEHICLE = 8;
+  GENERAL_TECHNICAL_ERROR = 9;
+  GENERAL_PROCESS_ERROR = 10;
+}
+
+enum PrecondStateType {
+  PRECOND_STATE_TYPE_ON_UNLOCK = 0;
+  PRECOND_STATE_TYPE_AT_DEPARTURE_TIME = 1;
+  PRECOND_STATE_TYPE_IMMEDIATE = 2;
+  PRECOND_STATE_TYPE_CHILD_PRESENCE_DETECTION = 3;
+}
+
+message PrecondState {
+  bool activation_state = 1;
+  // NOTE: tags 2 and 3 were swapped vs. the backend (MBMobileSDK 1.68). Aligned to Android:
+  //   tag 2 = precond_state_types (repeated), tag 3 = precond_immediate_support (bool).
+  repeated PrecondStateType precond_state_types = 2;
+  bool precond_immediate_support = 3;
+}
+
+message ChargingPowerControl {
+  enum ChargingStatusForPowerControl {
+    NOT_DEFINED = 0;
+    DEACTIVATED = 1;
+    ACTIVATED = 2;
+  }
+  
+  ChargingStatusForPowerControl charge_status = 1;
+  int32 ctrl_duration = 2;
+  int32 ctrl_info = 3;
+  int32 charge_power = 4;
+  int32 serv_stat = 5;
+  int32 serv_avail = 6;
+  int32 use_case = 7;
+}
+
+message ChargingBreakClockTimerEntry {
+  ChargingBreakClockTimerEntryStatus status = 1;
+  int32 endTimeHour = 2;
+  int32 endTimeMinute = 3;
+  int32 startTimeHour = 4;
+  int32 startTimeMinute = 5;
+  int32 timerId = 6;
+}
+
+message ChargeProgramsValue {
+  repeated ChargeProgramParameters charge_program_parameters = 1;
+}
+
+enum ChargeProgram {
+  DEFAULT_CHARGE_PROGRAM = 0;
+  INSTANT_CHARGE_PROGRAM = 1;
+  HOME_CHARGE_PROGRAM = 2;
+  WORK_CHARGE_PROGRAM = 3;
+}
+
+message ChargeProgramParameters {
+  ChargeProgram charge_program = 1 [ json_name = "chargeprogram" ];
+
+  // Values need to be between 50 and 100 and divisible by ten
+  // Maximum value for the state of charge of the HV battery [in %].
+  // Valid value range = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+  int32 max_soc = 2 [ json_name = "maxSoc" ];
+
+  // unlock the plug after charging is finished
+  // Denotes whether the charge cable should be unlocked automatically if the HV battery is fully charged resp. charged til Max. SoC value.
+  // true - unlock automatically, false - do not unlock automatically
+  // can only be used if chargeprogram is set to home or work. Otherwise it will be ignored.
+  bool auto_unlock = 3 [ json_name = "autounlock" ];
+
+  // automatically switch between home and work program, based on the location of the car
+  // Denotes whether location based charging should be used.
+  // true - use location based charging, false - do not use location based charging
+  // can only be used if chargeprogram is set to home or work. Otherwise it will be ignored.
+  bool location_based_charging = 4 [ json_name = "locationbasedcharging" ];
+
+  // enable or disable week-profile
+  // Denotes whether weekly profile (aka. weekprofile) should be used.
+  // true - use weekly profile, false - do not use weekly profile
+
+  bool weekly_profile = 5 [ json_name = "weeklyprofile" ];
+  bool clockTimer = 6 [ json_name = "clockTimer" ];
+  int32 max_charging_current = 7 [ json_name = "MaxChargingCurrent" ];
+  bool eco_charging = 8 [ json_name = "EcoCharging" ];
+  reserved 9;
+}
+
+// Same as VehicleAPI.AttributeStatus but with slightly different names. The VehicleAPI.AttributeStatus enum values
+// can't be changed because they are used to automatically parse the vehicleAPI responses. Adding type aliases would
+// confuse the contributions developers, so we added another attribute status enum
+enum AttributeStatus {
+  // Value is set and valid
+  VALUE_VALID = 0;
+  // Value has not yet been received from the vehicle (but sensor etc. should be available)
+  VALUE_NOT_RECEIVED = 1;
+  // Value has been retrieved from vehicle but is invalid (marked as invalid by DaiVB backend)
+  VALUE_INVALID = 3;
+  // Vehicle does not support this attribute (e.g. does not have the sensor etc.)
+  VALUE_NOT_AVAILABLE = 4;
+}
+
+message WeeklyProfileValue {
+  bool single_time_profile_entries_activatable = 1 [ json_name = "singleTimeProfileEntriesActivatable" ];
+
+  int32 max_number_of_weekly_time_profile_slots = 2 [ json_name = "maxNumberOfWeeklyTimeProfileSlots" ];
+
+  int32 max_number_of_time_profiles = 3 [ json_name = "maxNumberOfTimeProfiles" ];
+
+  int32 current_number_of_time_profile_slots = 4 [ json_name = "currentNumberOfTimeProfileSlots" ];
+
+  int32 current_number_of_time_profiles = 5 [ json_name = "currentNumberOfTimeProfiles" ];
+
+  repeated VVRTimeProfile time_profiles = 6 [ json_name = "timeProfiles" ];
+
+  // Tag 7 vacant to match the legacy/VEP flat layout. VSU pushes use the
+  // separate WeeklyProfile message (defined below) with a different tag map.
+  int32 max_number_of_time_profiles_user = 8 [ json_name = "maxNumberOfTimeProfilesUser" ];
+}
+
+// VSU-side layout, distinct from the flat WeeklyProfileValue used by VEP.
+// The backend pushes this via WeeklyProfileObjectAttribute. Tag numbering
+// matches the Android SDK; tags 4/5/6 are shifted vs. WeeklyProfileValue and
+// tag 7 carries the repeated TimeProfile list (not present in the flat form).
+message WeeklyProfile {
+  bool  single_time_profile_entries_activatable = 1 [ json_name = "singleTimeProfileEntriesActivatable" ];
+  int32 max_number_of_weekly_time_profile_slots = 2 [ json_name = "maxNumberOfWeeklyTimeProfileSlots" ];
+  int32 max_number_of_time_profiles             = 3 [ json_name = "maxNumberOfTimeProfiles" ];
+  int32 max_number_of_time_profiles_user        = 4 [ json_name = "maxNumberOfTimeProfilesUser" ];
+  int32 current_number_of_time_profile_slots    = 5 [ json_name = "currentNumberOfTimeProfileSlots" ];
+  int32 current_number_of_time_profiles         = 6 [ json_name = "currentNumberOfTimeProfiles" ];
+  repeated TimeProfile time_profiles            = 7 [ json_name = "timeProfiles" ];
+
+  message TimeProfile {
+    int32  id                     = 1 [ json_name = "id" ];
+    int32  hour                   = 2 [ json_name = "hour" ];
+    int32  minute                 = 3 [ json_name = "min" ];
+    repeated Weekday days         = 4 [ json_name = "day", packed = true ];
+    bool   active                 = 5 [ json_name = "active" ];
+    int32  application_identifier = 6 [ json_name = "applicationId" ];
+    repeated ActionListEntry action_list = 7 [ json_name = "actionList" ];
+    ScheduleType schedule_type    = 8 [ json_name = "scheduleType" ];
+    bool   is_learned_time        = 9 [ json_name = "isLearnedTime" ];
+
+    message ActionListEntry {
+      bool charging        = 1 [ json_name = "charging" ];
+      bool precond         = 2 [ json_name = "precond" ];
+      bool battery_precond = 3 [ json_name = "batteryPrecond" ];
+    }
+
+    enum Weekday {
+      MONDAY = 0;
+      TUESDAY = 1;
+      WEDNESDAY = 2;
+      THURSDAY = 3;
+      FRIDAY = 4;
+      SATURDAY = 5;
+      SUNDAY = 6;
+    }
+
+    enum ScheduleType {
+      WEEKLY_PROFILE_SCHEDULE_TYPE_NON_RECURRING = 0;
+      WEEKLY_PROFILE_SCHEDULE_TYPE_RECURRING = 1;
+      WEEKLY_PROFILE_SCHEDULE_TYPE_NON_RECURRING_AUTO_DELETE = 2;
+    }
+  }
+}
+
+// VVRTimeProfile is almost identical to the "TimeProfile" message with the exception that the identifier is not optional.
+message VVRTimeProfile {
+  // unique id of this time profile entry
+  int32 identifier = 1 [ json_name = "id" ];
+
+  // Backend (MBMobileSDK 1.68) migrated hour/minute/active to wrapper types on tags 7/8/9.
+  // The old scalar tags 2 (int32 hour), 3 (int32 minute) and 5 (bool active) are reserved.
+  reserved 2, 3, 5;
+
+  // Days for which the above time should be applied
+  repeated TimeProfileDay days = 4 [json_name = "day" ];
+
+  // If a timeProfile is changed or added the respective applicationId must be provided by SDK
+  //   11 = Internal Apps
+  //   12 = External Apps
+  int32 application_identifier = 6 [ json_name = "applicationId" ];
+
+  // Hour after midnight range [0, 23]
+  google.protobuf.Int32Value hour = 7 [ json_name = "hour" ];
+
+  // Minute after full hour range [0, 59]
+  google.protobuf.Int32Value minute = 8 [ json_name = "min" ];
+
+  // Whether this profile entry is active or not
+  google.protobuf.BoolValue active = 9 [ json_name = "active" ];
+
+  // Whether this profile entry was learned automatically
+  bool is_learned_time = 10 [ json_name = "isLearnedTime" ];
+
+  repeated ActionList action_list = 11 [ json_name = "actionList" ];
+
+  WeeklyProfileScheduleType schedule_type = 12 [ json_name = "scheduleType" ];
+
+  message ActionList {
+    bool charging = 1 [ json_name = "charging" ];
+    bool precond = 2 [ json_name = "precond" ];
+    bool battery_precond = 3 [ json_name = "batteryPrecond" ];
+  }
+
+  enum WeeklyProfileScheduleType {
+    WEEKLY_PROFILE_SCHEDULE_TYPE_NON_RECURRING = 0;
+    WEEKLY_PROFILE_SCHEDULE_TYPE_RECURRING = 1;
+    WEEKLY_PROFILE_SCHEDULE_TYPE_NON_RECURRING_AUTO_DELETE = 2;
+  }
+}
+
+message EcoHistogramValue {
+  repeated EcoHistogramBin eco_histogram_bins = 1;
+}
+
+message EcoHistogramBin {
+  double interval = 1;
+  double value = 2;
+}
+
+message SpeedAlertConfigurationValue {
+  repeated SpeedAlertConfiguration speed_alert_configurations = 1;
+}
+
+message SpeedAlertConfiguration {
+  // Unix timestamp in seconds
+  int64 end_timestamp_in_s = 1;
+  // Speed in kilometers per hour
+  int32 threshold_in_kph = 2;
+  // threshold value in the users preferred unit
+  string threshold_display_value = 3;
+}
+
+message WeeklySettingsHeadUnitValue {
+  // Array with 0 to 21 tupels of day (0..6, 0 = Monday, 1= Tuesday, ..) and departure time in min since midnight (0..1439)
+  repeated WeeklySetting weekly_settings = 1;
+}
+
+message WeeklySetting {
+  int32 day = 1;
+  int32 minutes_since_midnight = 2;
+}
+
+message TemperaturePointsValue {
+  // Array with 1 to 5 tupels of zone (frontLeft, frontRight, frontCenter, rearRight, rearLeft, rearCenter, rear2center)
+  // and temperature in °C where 0 means maximum cooling (LOW) and 30 means maximum heating (HIGH)
+  repeated TemperaturePoint temperature_points = 1;
+}
+
+message TemperaturePoint {
+  string zone = 1;
+  double temperature = 2;
+  string temperature_display_value = 3;
+  google.protobuf.BoolValue active = 4 [ json_name = "active" ];
+}
+
+message WeekdayTariffValue {
+  // List of sampling points. Hint: Array will be empty in initial state. I. e.: rate and time will not be existent in initial state.
+  repeated Tariff tariffs = 1;
+}
+
+message WeekendTariffValue {
+  // List of sampling points. Hint: Array will be empty in initial state. I. e.: rate and time will not be existent in initial state.
+  repeated Tariff tariffs = 1;
+}
+
+message Tariff {
+  // 33 - off-peak, 44 - mid-peak, 66 - on-peak
+  int32 rate = 1;
+  // Seconds from midnight
+  int32 time = 2;
+}
+
+message StateOfChargeProfileValue {
+  // Array with tupels of state of charge and time offset related to the timestamp of the attribute,
+  // e.g. [{t, soc}, {t, soc}, .., {t, soc}] (every soc with value range 0..100, every timestamp in seconds, UTC)
+  repeated StateOfCharge states_of_charge = 1;
+}
+
+message StateOfCharge {
+  // timestamp in seconds, UTC
+  int64 timestamp_in_s = 1;
+
+  // soc with value range 0..100
+  int32 state_of_charge = 2;
+}
+
+// Sending direction: App <- BFF <- AppTwin
+message VEPUpdatesByVIN {
+
+  int32 sequence_number = 2;
+
+  // VIN -> Update
+  map<string, VEPUpdate> updates = 1;
+}
+
+// Sending direction: App <- BFF
+message DebugMessage {
+  string message = 1;
+}
+
+// Represents a status response from the
+// VVA backend for a given VIN and CIAM ID.
+message VehicleStatus {
+  string vin = 1;
+  map<string, VehicleAttributeStatus> attributes = 2;
+}
+
+// message that is pushed from the vep status service
+// Sending direction: App <- BFF
+message PushMessage {
+  reserved 7,8;
+  string tracking_id = 5;
+  oneof msg {
+    VEPUpdate vepUpdate = 1;
+    VEPUpdatesByVIN vepUpdates = 2;
+    DebugMessage debugMessage = 3;
+    ServiceStatusUpdatesByVIN service_status_updates = 9;
+    ServiceStatusUpdate service_status_update = 13;
+    UserDataUpdate user_data_update = 10;
+    UserVehicleAuthChangedUpdate user_vehicle_auth_changed_update = 14;
+    UserPictureUpdate user_picture_update = 11;
+    UserPINUpdate user_pin_update = 12;
+    VehicleUpdated vehicle_updated = 15;
+    PreferredDealerChange preferred_dealer_change = 16;
+    AppTwinCommandStatusUpdatesByVIN apptwin_command_status_updates_by_vin = 17;
+    AppTwinPendingCommandsRequest apptwin_pending_command_request = 18;
+    AssignedVehicles assigned_vehicles = 19;
+    DataChangeEvent data_change_event = 21;
+    VehicleStatusUpdates vehicle_status_updates = 24;
+  }
+}
+
+// message type to track an event, e.g. a user interaction with content
+// Sending direction: App -> BFF
+message TrackingEvent {
+
+  // a unique id associated with this event
+  string tracking_id = 1;
+
+  // the unix epoch time in nanoseconds when the event occurred
+  int64 timestamp = 2;
+
+  // a unique identifier describing a single interaction or event
+  string event_type = 3;
+
+  // additional meta data describing the event
+  map<string, PayloadValue> payload = 4;
+}
+
+message PayloadValue {
+  oneof msg {
+    string string_value = 1;
+    int32 int_value = 2;
+    bool bool_value = 3;
+    double double_value = 4;
+  }
+}
+
+// acknowledge that the VEP updates of up to `sequenceNumber` have been received
+// Sending direction: App -> BFF -> AppTwin
+message AcknowledgeVEPRequest {
+  // This message will be replaced by AcknowledgeVEPUpdatesByVIN
+  option deprecated = true;
+
+  int32 sequence_number = 1;
+}
+
+// acknowledge that the VEP updates by vin of up to `sequenceNumber` have been received
+// Sending direction: App -> BFF -> AppTwin
+// This message should replace the AcknowledgeVEPRequest
+message AcknowledgeVEPUpdatesByVIN {
+  int32 sequence_number = 1;
+}
+
+// the client can optionally send this message to reconfigure the ping interval
+// Sending direction: App -> BFF
+message ConfigurePingInterval {
+  int32 ping_time_millis = 1;
+}
+
+message AcknowledgeVehicleUpdated {
+  int32 sequence_number = 1;
+}
+
+message AcknowledgePreferredDealerChange {
+  int32 sequence_number = 1;
+}
+
+message VehicleUpdated {
+  int32 sequence_number = 1;
+
+  string ciam_id = 2;
+
+  string vin = 3;
+
+  // When was the event emitted (milliseconds in Unix time)
+  int64 emit_timestamp_in_ms = 10;
+}
+
+message PreferredDealerChange {
+  int32 sequence_number = 1;
+
+  string ciam_id = 2;
+
+  string vin = 3;
+
+  // When was the event emitted (milliseconds in Unix time)
+  int64 emit_timestamp_in_ms = 10;
+}
+
+message AcknowledgeDataChangeEvent {
+  int32 sequence_number = 1;
+}
+
+enum Scope {
+  USER = 0;
+  ONBOARD_FENCES = 1;
+  USER_PIN = 3;
+  SERVICE_PREREQUISITE = 4;
+  USER_PROFILE_PICTURE = 5;
+}
+
+message Scopes {
+  Scope scope = 1;
+  string ciamId = 2;
+  string vin = 3;
+  map<string, string> additional_resources = 4;
+  string resource_ciam_id = 5;
+  string resource_vin = 6;
+}
+
+message DataChangeEvent {
+  repeated Scopes scopes = 1;
+  string tracking_id = 2;  
+  int32 sequence_number = 3;
+}
+// ===================================================================
+// Vehicle Status Update (typed alternative to VEPUpdate)
+// Added in app version 165-1
+// ===================================================================
+
+// Container for typed vehicle status updates (PushMessage field 24)
+message VehicleStatusUpdates {
+  int64 sequence_number = 1;
+  map<string, VehicleStatusUpdate> vehicle_status_updates = 2;
+}
+
+// Acknowledge receipt of vehicle status updates (ClientMessage field 28)
+message AcknowledgeVehicleStatusUpdates {
+  int64 sequence_number = 1;
+}
+
+// --- Metadata for typed attributes ---
+
+message VSUMetadata {
+  google.protobuf.Timestamp timestamp = 1;
+  AttributeStatus status = 2;
+}
+
+// --- Base Attribute Types ---
+
+message BoolAttribute {
+  bool value = 1;
+  VSUMetadata metadata = 2;
+}
+
+message Int64Attribute {
+  int64 value = 1;
+  VSUMetadata metadata = 2;
+}
+
+message DoubleAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+}
+
+message TimestampAttribute {
+  int64 value = 1;
+  VSUMetadata metadata = 2;
+}
+
+// --- Unit Attribute Types ---
+// Unit enums reference VehicleAttributeStatus nested enums
+
+message Int64DistanceAttribute {
+  int64 value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.DistanceUnit unit = 3;
+  string display_value = 4;
+}
+
+message DoubleDistanceAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.DistanceUnit unit = 3;
+  string display_value = 4;
+}
+
+message DoublePressureAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.PressureUnit unit = 3;
+  string display_value = 4;
+}
+
+message DoubleSpeedAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.SpeedUnit unit = 3;
+  string display_value = 4;
+}
+
+message Int64SpeedAttribute {
+  int64 value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.SpeedUnit unit = 3;
+  string display_value = 4;
+}
+
+message SpeedAlertConf {
+  google.protobuf.Timestamp end_timestamp = 1;
+  Int64SpeedAttribute threshold = 2;
+}
+
+message DoubleCombustionConsumptionAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.CombustionConsumptionUnit unit = 3;
+  string display_value = 4;
+}
+
+message DoubleElectricityConsumptionAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.ElectricityConsumptionUnit unit = 3;
+  string display_value = 4;
+}
+
+message DoubleGasConsumptionAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.GasConsumptionUnit unit = 3;
+  string display_value = 4;
+}
+
+message Int64RatioAttribute {
+  int64 value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.RatioUnit unit = 3;
+  string display_value = 4;
+}
+
+message DoubleRatioAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.RatioUnit unit = 3;
+  string display_value = 4;
+}
+
+message DoubleTemperatureAttribute {
+  double value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.TemperatureUnit unit = 3;
+  string display_value = 4;
+}
+
+message Int64ClockHourAttribute {
+  int64 value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.ClockHourUnit unit = 3;
+  string display_value = 4;
+}
+
+message TimestampClockHourAttribute {
+  int64 value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.ClockHourUnit unit = 3;
+  string display_value = 4;
+}
+
+// ===================================================================
+// New Enums for VehicleStatusUpdate
+// ===================================================================
+
+// --- Door/Lock ---
+
+enum Doorstatus {
+  DOORSTATUS_CLOSED = 0;
+  DOORSTATUS_OPEN = 1;
+}
+
+enum Doorlockstatus {
+  DOORLOCKSTATUS_LOCKED = 0;
+  DOORLOCKSTATUS_UNLOCKED = 1;
+}
+
+enum Doorlockstatusvehicle {
+  DOORLOCKSTATUSVEHICLE_UNLOCKED = 0;
+  DOORLOCKSTATUSVEHICLE_INTERNAL_LOCKED = 1;
+  DOORLOCKSTATUSVEHICLE_EXTERNAL_LOCKED = 2;
+  DOORLOCKSTATUSVEHICLE_SELECTIVE_UNLOCKED = 3;
+}
+
+enum DoorStatusOverall {
+  DOOR_STATUS_OVERALL_ANY_DOOR_OPEN = 0;
+  DOOR_STATUS_OVERALL_ALL_DOORS_CLOSED = 1;
+  // value 2 not defined
+  DOOR_STATUS_OVERALL_UNKNOWN = 3;
+}
+
+enum Doorstatusgas {
+  DOORSTATUSGAS_CLOSED = 0;
+  DOORSTATUSGAS_OPEN = 1;
+  DOORSTATUSGAS_ERROR = 2;
+}
+
+// --- Charging ---
+
+enum Chargingstatus {
+  CHARGINGSTATUS_CHARGING = 0;
+  CHARGINGSTATUS_END_OF_CHARGE = 1;
+  CHARGINGSTATUS_CHARGE_BREAK = 2;
+  CHARGINGSTATUS_CHARGE_CABLE_UNPLUGGED = 3;
+  CHARGINGSTATUS_CHARGING_ERROR = 4;
+  CHARGINGSTATUS_SLOW_CHARGING = 5;
+  CHARGINGSTATUS_FAST_CHARGING = 6;
+  CHARGINGSTATUS_DISCHARGING = 7;
+  CHARGINGSTATUS_NO_CHARGING = 8;
+  CHARGINGSTATUS_SLOW_CHARGING_AFTER_REACHING_TRIP_TARGET = 9;
+  CHARGINGSTATUS_CHARGING_AFTER_REACHING_TRIP_TARGET = 10;
+  CHARGINGSTATUS_FAST_CHARGING_AFTER_REACHING_TRIP_TARGET = 11;
+  CHARGINGSTATUS_COMMUNICATION_WITH_EVSE_ACTIVE_NO_ENERGY_FLOW = 12;
+  CHARGINGSTATUS_AC_CHARGING_ACTIVE = 13;
+  CHARGINGSTATUS_DC_CHARGING_ACTIVE = 14;
+  CHARGINGSTATUS_SOH_BATTERY_CALIBRATION_ACTIVE = 15;
+  CHARGINGSTATUS_UNKNOWN = 16;
+}
+
+enum ChargingMode {
+  CHARGING_MODE_NONE = 0;
+  CHARGING_MODE_CONDUCTIVE_AC = 1;
+  CHARGING_MODE_INDUCTIVE = 2;
+  CHARGING_MODE_CONDUCTIVE_AC_AND_INDUCTIVE = 3;
+  CHARGING_MODE_CONDUCTIVE_DC = 4;
+  CHARGING_MODE_CONDUCTIVE_DC_AND_INDUCTIVE = 5;
+}
+
+enum SelectedChargeProgram {
+  SELECTED_CHARGE_PROGRAM_DEFAULT = 0;
+  SELECTED_CHARGE_PROGRAM_INSTANT = 1;
+  SELECTED_CHARGE_PROGRAM_HOME = 2;
+  SELECTED_CHARGE_PROGRAM_WORK = 3;
+  SELECTED_CHARGE_PROGRAM_AC_DC_STANDARD = 4;
+  SELECTED_CHARGE_PROGRAM_AC_DC_STANDARD_V1X_RANGE_ASSIST_MODE = 5;
+  SELECTED_CHARGE_PROGRAM_DC_CP_V2X_CHADEMO = 6;
+  SELECTED_CHARGE_PROGRAM_DC_CP_V2X_ISO_15118_20_DYNAMIC = 7;
+  SELECTED_CHARGE_PROGRAM_DC_CP_V2X_ISO_15118_20_SCHEDULED = 8;
+  SELECTED_CHARGE_PROGRAM_AC_DC_OPPORTUNITY_V1X = 9;
+  SELECTED_CHARGE_PROGRAM_AC_EV_TIMER = 10;
+  SELECTED_CHARGE_PROGRAM_AC_DC_DIN_ISO_15118_2_SCHEDULED = 11;
+  SELECTED_CHARGE_PROGRAM_AC_API_REMOTE_SCHEDULE = 12;
+  SELECTED_CHARGE_PROGRAM_AC_DC_BATTERY_CALIBRATION = 13;
+}
+
+enum SmartCharging {
+  SMART_CHARGING_WALLBOX_ACTIVE = 0;
+  SMART_CHARGING_COMMUNICATION_ACTIVE = 1;
+  SMART_CHARGING_ON_OFF_PEAK_SETTING_ACTIVE = 2;
+}
+
+enum SmartChargingAtDeparture {
+  SMART_CHARGING_AT_DEPARTURE_NOT_ACTIVE = 0;
+  SMART_CHARGING_AT_DEPARTURE_ACTIVE = 1;
+}
+
+enum ChargeCouplerStatus {
+  CHARGE_COUPLER_STATUS_PLUGGED_BOTH_SIDES = 0;
+  CHARGE_COUPLER_STATUS_PLUGGED_VEHICLE_SIDE = 1;
+  CHARGE_COUPLER_STATUS_NOT_PLUGGED_VEHICLE_SIDE = 2;
+  CHARGE_COUPLER_STATUS_UNKNOWN = 3;
+  CHARGE_COUPLER_STATUS_UNKNOWN_DUE_DEFECT = 4;
+}
+
+enum ChargeCouplerLockStatus {
+  CHARGE_COUPLER_LOCK_STATUS_LOCKED = 0;
+  CHARGE_COUPLER_LOCK_STATUS_UNLOCKED = 1;
+  CHARGE_COUPLER_LOCK_STATUS_NOT_CLEAR = 2;
+}
+
+enum ChargeFlapStatus {
+  CHARGE_FLAP_STATUS_OPEN = 0;
+  CHARGE_FLAP_STATUS_CLOSED = 1;
+  CHARGE_FLAP_STATUS_FLAP_PRESSED = 2;
+}
+
+enum ChargingErrorDetails {
+  CHARGING_ERROR_DETAILS_NO_ERROR = 0;
+  CHARGING_ERROR_DETAILS_INLET_UNLOCK_ERROR = 1;
+  CHARGING_ERROR_DETAILS_EVSE_DEFECT_CHANGE_CHARGING_STATION = 2;
+  CHARGING_ERROR_DETAILS_EVSE_DEFECT_MALFUNCTION_OF_CHARGING_STATION = 3;
+  CHARGING_ERROR_DETAILS_CHARGE_TYPE_NOT_AVAILABLE = 4;
+  CHARGING_ERROR_DETAILS_CHADEMO_INLET_UNLOCK_ERROR = 5;
+  CHARGING_ERROR_DETAILS_DC_INTERNAL_COMPONENT_DEFECT = 6;
+  CHARGING_ERROR_DETAILS_AC_INTERNAL_COMPONENT_DEFECT = 7;
+  CHARGING_ERROR_DETAILS_AUTHORIZATION_FAILED = 8;
+  CHARGING_ERROR_DETAILS_MESSAGE_9_RESERVED = 9;
+  CHARGING_ERROR_DETAILS_MESSAGE_10_RESERVED = 10;
+  CHARGING_ERROR_DETAILS_MESSAGE_11_RESERVED = 11;
+  CHARGING_ERROR_DETAILS_MESSAGE_12_RESERVED = 12;
+  CHARGING_ERROR_DETAILS_MESSAGE_13_RESERVED = 13;
+  CHARGING_ERROR_DETAILS_NO_INFO_OR_ERROR_MESSAGE = 14;
+  CHARGING_ERROR_DETAILS_CHARGING_SYSTEM_DEFECT = 15;
+  CHARGING_ERROR_DETAILS_DC_CHARGING_DEFECT = 16;
+  CHARGING_ERROR_DETAILS_AC_CHARGING_DEFECT = 17;
+  CHARGING_ERROR_DETAILS_REPLUG_CHARGING_CABLE = 18;
+  CHARGING_ERROR_DETAILS_EVSE_DOES_NOT_RESPOND_RECONNECT = 19;
+  CHARGING_ERROR_DETAILS_EVSE_DOES_NOT_RESPOND_USE_OTHER_AUTHENTIFICATION = 20;
+  CHARGING_ERROR_DETAILS_EVSE_DOES_NOT_RESPOND_EVSE_DEFECT = 21;
+  CHARGING_ERROR_DETAILS_EVSE_DOES_NOT_RESPOND_TRY_OTHER_EVSE = 22;
+  CHARGING_ERROR_DETAILS_EV_INITIATED_SHUTDOWN_LONG_TIME_USAGE_LIMIT_REACHED = 23;
+  CHARGING_ERROR_DETAILS_NO_VALID_PLUG_AND_CHARGE_CERTIFICATE_AVAILABLE = 24;
+  CHARGING_ERROR_DETAILS_UNKNOWN_CHARGING_ERROR_OCCURRED = 25;
+  CHARGING_ERROR_DETAILS_NACS_ERROR_CHARGING_STATION_NOT_COMPATIBLE = 26;
+  CHARGING_ERROR_DETAILS_PLAYPROTECTION_ACTIVE = 27;
+}
+
+// --- Vehicle State ---
+
+enum Ignitionstate {
+  IGNITIONSTATE_LOCK = 0;
+  IGNITIONSTATE_OFF = 1;
+  IGNITIONSTATE_ACCESSORY = 2;
+  // value 3 not defined
+  IGNITIONSTATE_ON = 4;
+  IGNITIONSTATE_START = 5;
+}
+
+enum EngineState {
+  ENGINE_STATE_NOT_RUNNING = 0;
+  ENGINE_STATE_RUNNING = 1;
+}
+
+enum Parkbrakestatus {
+  PARKBRAKESTATUS_NOT_ENGAGED = 0;
+  PARKBRAKESTATUS_ENGAGED = 1;
+}
+
+enum EngineHoodStatus {
+  ENGINE_HOOD_STATUS_CLOSED = 0;
+  ENGINE_HOOD_STATUS_OPEN = 1;
+}
+
+enum Rooftopstatus {
+  ROOFTOPSTATUS_UNLOCKED = 0;
+  ROOFTOPSTATUS_OPEN_AND_LOCKED = 1;
+  ROOFTOPSTATUS_CLOSED_AND_LOCKED = 2;
+}
+
+// --- Windows/Sunroof ---
+
+enum Windowstatus {
+  WINDOWSTATUS_INTERMEDIATE = 0;
+  WINDOWSTATUS_COMPLETELY_OPENED = 1;
+  WINDOWSTATUS_COMPLETELY_CLOSED = 2;
+  WINDOWSTATUS_AIRING_POSITION = 3;
+}
+
+enum WindowStatusBlind {
+  WINDOW_STATUS_BLIND_INTERMEDIATE = 0;
+  WINDOW_STATUS_BLIND_COMPLETELY_OPENED = 1;
+  WINDOW_STATUS_BLIND_COMPLETELY_CLOSED = 2;
+}
+
+enum WindowStatusOverall {
+  WINDOW_STATUS_OVERALL_OPEN = 0;
+  WINDOW_STATUS_OVERALL_CLOSED = 1;
+  WINDOW_STATUS_OVERALL_COMPLETELY_OPEN = 2;
+  WINDOW_STATUS_OVERALL_AIRING = 3;
+}
+
+enum Sunroofstatus {
+  SUNROOFSTATUS_CLOSED = 0;
+  SUNROOFSTATUS_COMPLETE_OPEN = 1;
+  SUNROOFSTATUS_LIFTING_OPEN = 2;
+  SUNROOFSTATUS_RUNNING = 3;
+}
+
+enum SunroofStatusBlind {
+  SUNROOF_STATUS_BLIND_INTERMEDIATE = 0;
+  SUNROOF_STATUS_BLIND_COMPLETELY_OPENED = 1;
+  SUNROOF_STATUS_BLIND_COMPLETELY_CLOSED = 2;
+  SUNROOF_STATUS_BLIND_OPENING = 3;
+}
+
+enum SunroofEvent {
+  SUNROOF_EVENT_NONE = 0;
+  SUNROOF_EVENT_RAIN_LIFT_POSITION = 1;
+  SUNROOF_EVENT_AUTOMATIC_LIFT_POSITION = 2;
+  SUNROOF_EVENT_VENTILATION_POSITION = 3;
+}
+
+enum FlipWindowStatus {
+  FLIP_WINDOW_STATUS_CLOSED = 0;
+  FLIP_WINDOW_STATUS_OPEN = 1;
+}
+
+// --- Tires ---
+
+enum TireMarker {
+  TIRE_MARKER_NO_WARNING = 0;
+  TIRE_MARKER_SOFT_WARNING = 1;
+  TIRE_MARKER_LOW_PRESSURE = 2;
+  TIRE_MARKER_DEFLATION = 3;
+  TIRE_MARKER_MARK = 4;
+}
+
+enum TireSensorAvailable {
+  TIRE_SENSOR_AVAILABLE_ALL_LOCATED = 0;
+  TIRE_SENSOR_AVAILABLE_ONE_TO_THREE_MISSING = 1;
+  TIRE_SENSOR_AVAILABLE_ALL_MISSING = 2;
+  TIRE_SENSOR_AVAILABLE_SYSTEM_ERROR = 3;
+  TIRE_SENSOR_AVAILABLE_AUTOLOCATE_ERROR = 4;
+}
+
+enum TireWarningLevelPrw {
+  TIRE_WARNING_LEVEL_PRW_NO_WARNING = 0;
+  TIRE_WARNING_LEVEL_PRW_WARNING = 1;
+  TIRE_WARNING_LEVEL_PRW_GO_TO_WORKSHOP = 2;
+}
+
+enum Tirewarninglamp {
+  TIREWARNINGLAMP_NO_COMBI_MESSAGE = 0;
+  TIREWARNINGLAMP_CONSTANT_LIGHT = 1;
+  TIREWARNINGLAMP_BLINKING_THEN_CONSTANT = 2;
+}
+
+enum Tirewarningsprw {
+  TIREWARNINGSPRW_NO_WARNING = 0;
+  TIREWARNINGSPRW_WARNING = 1;
+}
+
+enum Tirewarningsrdk {
+  TIREWARNINGSRDK_NO_WARNING = 0;
+  TIREWARNINGSRDK_SOFT_WARNING = 1;
+  TIREWARNINGSRDK_LOW_PRESSURE = 2;
+  TIREWARNINGSRDK_DEFLATION = 3;
+}
+
+// --- Preconditioning ---
+
+enum PrecondError {
+  PRECOND_ERROR_NO_ERROR = 0;
+  PRECOND_ERROR_BATTERY_LOW_FUEL_LOW = 1;
+  PRECOND_ERROR_PLAY_PROTECTION = 2;
+  PRECOND_ERROR_CHARGING_NOT_FINISHED = 3;
+  PRECOND_ERROR_INTERNAL_ERROR = 4;
+  PRECOND_ERROR_ENERGY_BUDGET_LOW = 5;
+  PRECOND_ERROR_OPEN_WINDOWS_DOORS = 6;
+  PRECOND_ERROR_REGULAR_CLIMATIZATION_ACTIVE = 7;
+}
+
+enum PrecondNow {
+  PRECOND_NOW_INACTIVE = 0;
+  PRECOND_NOW_ACTIVE = 1;
+}
+
+enum PrecondOperatingMode {
+  PRECOND_OPERATING_MODE_OFF = 0;
+  PRECOND_OPERATING_MODE_HEAT = 1;
+  PRECOND_OPERATING_MODE_COOL = 2;
+  PRECOND_OPERATING_MODE_VENTILATE = 3;
+}
+
+enum Precondatdeparture {
+  PRECONDATDEPARTURE_INACTIVE = 0;
+  PRECONDATDEPARTURE_ACTIVE = 1;
+}
+
+enum PrecondSeat {
+  PRECOND_SEAT_OFF = 0;
+  PRECOND_SEAT_ON = 1;
+}
+
+// --- Auxheat ---
+
+enum Auxheatstatus {
+  AUXHEATSTATUS_INACTIVE = 0;
+  AUXHEATSTATUS_HEATING_NORMAL_MODE = 1;
+  AUXHEATSTATUS_VENTILATING_NORMAL_MODE = 2;
+  AUXHEATSTATUS_HEATING_MANUAL = 3;
+  AUXHEATSTATUS_POST_RUNNING_HEATING = 4;
+  AUXHEATSTATUS_POST_RUNNING_VENTILATING = 5;
+  AUXHEATSTATUS_HEATING_AUTO = 6;
+}
+
+enum Auxheattimeselection {
+  AUXHEATTIMESELECTION_NO_TIMER = 0;
+  AUXHEATTIMESELECTION_TIMER_1 = 1;
+  AUXHEATTIMESELECTION_TIMER_2 = 2;
+  AUXHEATTIMESELECTION_TIMER_3 = 3;
+}
+
+enum Auxheatwarning {
+  AUXHEATWARNING_NONE = 0;
+  AUXHEATWARNING_CONFIRMATION = 1;
+  AUXHEATWARNING_CONFIRMATION_2 = 2;
+}
+
+// --- Time/Schedule ---
+
+enum DepartureTimeMode {
+  DEPARTURE_TIME_MODE_INACTIVE = 0;
+  DEPARTURE_TIME_MODE_ADHOC_ACTIVE = 1;
+  DEPARTURE_TIME_MODE_WEEKLYSET_ACTIVE = 2;
+  DEPARTURE_TIME_MODE_TIMER_ACTV = 3;
+  DEPARTURE_TIME_MODE_INTELLIGENT_DP_ACTV = 4;
+}
+
+enum Weekday {
+  WEEKDAY_MONDAY = 0;
+  WEEKDAY_TUESDAY = 1;
+  WEEKDAY_WEDNESDAY = 2;
+  WEEKDAY_THURSDAY = 3;
+  WEEKDAY_FRIDAY = 4;
+  WEEKDAY_SATURDAY = 5;
+  WEEKDAY_SUNDAY = 6;
+}
+
+// --- Other ---
+
+enum RangeSkipIndication {
+  RANGE_SKIP_INDICATION_DISPLAY = 0;
+  RANGE_SKIP_INDICATION_SKIP = 1;
+}
+
+enum FilterParticleLoading {
+  FILTER_PARTICLE_LOADING_HIGH = 0;
+  FILTER_PARTICLE_LOADING_MEDIUM = 1;
+  FILTER_PARTICLE_LOADING_LOW = 2;
+}
+
+enum LanguageHU {
+  LANGUAGE_HU_GERMAN = 0;
+  LANGUAGE_HU_ENGLISH_IMP = 1;
+  LANGUAGE_HU_FRENCH = 2;
+  LANGUAGE_HU_ITALIAN = 3;
+  LANGUAGE_HU_SPANISH = 4;
+  LANGUAGE_HU_JAPANESE = 5;
+  LANGUAGE_HU_ENGLISH_MET = 6;
+  LANGUAGE_HU_DUTCH = 7;
+  LANGUAGE_HU_DANISH = 8;
+  LANGUAGE_HU_SWEDISH = 9;
+  LANGUAGE_HU_TURKISH = 10;
+  LANGUAGE_HU_PORTUGUESE = 11;
+  LANGUAGE_HU_RUSSIAN = 12;
+  LANGUAGE_HU_ARABIC = 13;
+  LANGUAGE_HU_CHINESE = 14;
+  LANGUAGE_HU_ENGLISH_AM = 15;
+  LANGUAGE_HU_TRAD_CHINESE = 16;
+  LANGUAGE_HU_KOREAN = 17;
+  LANGUAGE_HU_FINNISH = 18;
+  LANGUAGE_HU_POLISH = 19;
+  LANGUAGE_HU_CZECH = 20;
+  LANGUAGE_HU_PORTUGUESE_BRAZIL = 21;
+  LANGUAGE_HU_NORWEGIAN = 22;
+  LANGUAGE_HU_THAI = 23;
+  LANGUAGE_HU_INDONESIAN = 24;
+  LANGUAGE_HU_BULGARIAN = 25;
+  LANGUAGE_HU_SLOVAKIAN = 26;
+  LANGUAGE_HU_CROATIAN = 27;
+  LANGUAGE_HU_SERBIAN = 28;
+  LANGUAGE_HU_HUNGARIAN = 29;
+  LANGUAGE_HU_UKRAINIAN = 30;
+  LANGUAGE_HU_MALAYAN = 31;
+  LANGUAGE_HU_VIETNAMESE = 32;
+  LANGUAGE_HU_ROMANIAN = 33;
+  LANGUAGE_HU_TRAD_CHINESE_TW = 34;
+  LANGUAGE_HU_HEBREW = 35;
+  LANGUAGE_HU_GREEK = 36;
+  LANGUAGE_HU_SLOVENIAN = 37;
+}
+
+enum SpeedUnitFromIC {
+  SPEED_UNIT_FROM_IC_KM_H = 0;
+  SPEED_UNIT_FROM_IC_MPH = 1;
+}
+
+enum TemperatureUnitHU {
+  TEMPERATURE_UNIT_HU_CELSIUS = 0;
+  TEMPERATURE_UNIT_HU_FAHRENHEIT = 1;
+}
+
+enum TimeFormatHU {
+  TIME_FORMAT_HU_12_HOURS = 0;
+  TIME_FORMAT_HU_24_HOURS = 1;
+}
+
+enum TrackingStateHu {
+  TRACKING_STATE_HU_OFF = 0;
+  TRACKING_STATE_HU_ON = 1;
+}
+
+enum VehicleDataConnectionState {
+  VEHICLE_DATA_CONNECTION_STATE_DISCONNECTED = 0;
+  VEHICLE_DATA_CONNECTION_STATE_CONNECTED = 1;
+}
+
+enum VehicleHealthStatus {
+  VEHICLE_HEALTH_STATUS_GREEN = 0;
+  VEHICLE_HEALTH_STATUS_YELLOW = 1;
+  VEHICLE_HEALTH_STATUS_RED = 2;
+}
+
+enum DrivingMode {
+  DRIVING_MODE_UNKNOWN = 0;
+  DRIVING_MODE_OFF = 1;
+  DRIVING_MODE_ON = 2;
+  DRIVING_MODE_PENDING_OFF = 3;
+  DRIVING_MODE_PENDING_ON = 4;
+  DRIVING_MODE_ERROR = 5;
+}
+
+enum OilWarningLevel {
+  OIL_WARNING_LEVEL_OVERFILL = 0;
+  OIL_WARNING_LEVEL_OK = 1;
+  OIL_WARNING_LEVEL_UNDERFILL = 2;
+  OIL_WARNING_LEVEL_NOT_AVAILABLE = 3;
+}
+
+enum ParkEventLevel {
+  PARK_EVENT_LEVEL_LOW = 0;
+  PARK_EVENT_LEVEL_MEDIUM = 1;
+  PARK_EVENT_LEVEL_HIGH = 2;
+}
+
+enum ParkEventType {
+  PARK_EVENT_TYPE_IDLE = 0;
+  PARK_EVENT_TYPE_FRONT_LEFT = 1;
+  PARK_EVENT_TYPE_FRONT_MIDDLE = 2;
+  PARK_EVENT_TYPE_FRONT_RIGHT = 3;
+  PARK_EVENT_TYPE_RIGHT = 4;
+  PARK_EVENT_TYPE_REAR_RIGHT = 5;
+  PARK_EVENT_TYPE_REAR_MIDDLE = 6;
+  PARK_EVENT_TYPE_REAR_LEFT = 7;
+  PARK_EVENT_TYPE_LEFT = 8;
+  PARK_EVENT_TYPE_DIRECTION_UNKNOWN = 9;
+}
+
+enum ParkEventSensorStatus {
+  PARK_EVENT_SENSOR_STATUS_NOT_ACTIVE_SELECTED = 0;
+  PARK_EVENT_SENSOR_STATUS_NOT_ACTIVE_UNSELECTED = 1;
+  PARK_EVENT_SENSOR_STATUS_ACTIVE = 2;
+}
+
+enum Warningwashwater {
+  WARNINGWASHWATER_INACTIVE = 0;
+  WARNINGWASHWATER_TRIGGERED = 1;
+}
+
+enum HybridWarnings {
+  HYBRID_WARNINGS_NONE = 0;
+  HYBRID_WARNINGS_SEEK_SERVICE = 1;
+  HYBRID_WARNINGS_HIGH_VOLTAGE_FAULT = 2;
+  HYBRID_WARNINGS_POWER_TRAIN_FAULT = 3;
+  HYBRID_WARNINGS_STARTER_BATTERY = 4;
+  HYBRID_WARNINGS_STOP_VEHICLE = 5;
+  HYBRID_WARNINGS_PLUGIN_ONLY = 6;
+  HYBRID_WARNINGS_PLUGIN_STILL_ACTIVE = 7;
+  HYBRID_WARNINGS_POWER_REDUCE = 8;
+  HYBRID_WARNINGS_STOP_ENGINE_OFF = 9;
+}
+
+enum LastTheftWarningReason {
+  LAST_THEFT_WARNING_REASON_NO_ALARM = 0;
+  LAST_THEFT_WARNING_REASON_BASIS_ALARM = 16;
+  LAST_THEFT_WARNING_REASON_DOOR_FRONT_LEFT = 17;
+  LAST_THEFT_WARNING_REASON_DOOR_FRONT_RIGHT = 18;
+  LAST_THEFT_WARNING_REASON_DOOR_REAR_LEFT = 19;
+  LAST_THEFT_WARNING_REASON_DOOR_REAR_RIGHT = 20;
+  LAST_THEFT_WARNING_REASON_HOOD = 21;
+  LAST_THEFT_WARNING_REASON_DECKLID = 22;
+  LAST_THEFT_WARNING_REASON_COMMON_ALM_IN = 23;
+  LAST_THEFT_WARNING_REASON_PANIC = 26;
+  LAST_THEFT_WARNING_REASON_GLOVEBOX = 27;
+  LAST_THEFT_WARNING_REASON_CENTERBOX = 28;
+  LAST_THEFT_WARNING_REASON_REARBOX = 29;
+  LAST_THEFT_WARNING_REASON_FLIP_WINDOW = 30;
+  LAST_THEFT_WARNING_REASON_SENSOR_VTA = 32;
+  LAST_THEFT_WARNING_REASON_ITS = 33;
+  LAST_THEFT_WARNING_REASON_ITS_SLV = 34;
+  LAST_THEFT_WARNING_REASON_TPS = 35;
+  LAST_THEFT_WARNING_REASON_SIREN = 36;
+  LAST_THEFT_WARNING_REASON_HOLD_COM = 37;
+  LAST_THEFT_WARNING_REASON_REMOTE = 38;
+  LAST_THEFT_WARNING_REASON_EXT_ITS_1 = 42;
+  LAST_THEFT_WARNING_REASON_EXT_ITS_2 = 43;
+  LAST_THEFT_WARNING_REASON_EXT_ITS_3 = 44;
+  LAST_THEFT_WARNING_REASON_EXT_ITS_4 = 45;
+  LAST_THEFT_WARNING_REASON_CHILD_PRESENCE_1 = 46;
+  LAST_THEFT_WARNING_REASON_CHILD_PRESENCE_2 = 47;
+  LAST_THEFT_WARNING_REASON_CENTRAL_LOCKING = 48;
+  LAST_THEFT_WARNING_REASON_AMBIGUOUS = 60;
+}
+
+enum HvBatteryThermalPropagationEvent {
+  HV_BATTERY_THERMAL_PROPAGATION_NO_WARNING = 0;
+  HV_BATTERY_THERMAL_PROPAGATION_WARNING_1 = 1;
+  HV_BATTERY_THERMAL_PROPAGATION_WARNING_2 = 2;
+}
+
+enum StarterBatteryState {
+  STARTER_BATTERY_STATE_GREEN = 0;
+  STARTER_BATTERY_STATE_YELLOW = 1;
+  STARTER_BATTERY_STATE_RED = 2;
+  STARTER_BATTERY_STATE_ORANGE = 3;
+  STARTER_BATTERY_STATE_GREEN_YELLOW = 4;
+}
+
+enum VehiclePositionErrorCode {
+  VEHICLE_POSITION_ERROR_CODE_UNKNOWN = 0;
+  VEHICLE_POSITION_ERROR_CODE_SERVICE_INACTIVE = 1;
+  VEHICLE_POSITION_ERROR_CODE_TRACKING_INACTIVE = 2;
+  VEHICLE_POSITION_ERROR_CODE_PARKED = 3;
+  VEHICLE_POSITION_ERROR_CODE_IGNITION_ON = 4;
+  VEHICLE_POSITION_ERROR_CODE_OK = 5;
+}
+
+enum CalibrationRequest {
+  CALIBRATION_REQUEST_NO_REQUEST = 0;
+  CALIBRATION_REQUEST_LOW = 1;
+  CALIBRATION_REQUEST_HIGH = 2;
+}
+
+enum AssystOilQuantity {
+  ASSYST_OIL_QUANTITY_NO_MEASUREMENT = 0;
+  ASSYST_OIL_QUANTITY_NO_MEASUREMENT_ENGINE_RUNNING = 1;
+  ASSYST_OIL_QUANTITY_MEASUREMENT_IGNITION_ON = 2;
+  ASSYST_OIL_QUANTITY_WAIT = 3;
+  ASSYST_OIL_QUANTITY_MEASUREMENT_ACTIVE = 4;
+  ASSYST_OIL_QUANTITY_OIL_OK = 5;
+  ASSYST_OIL_QUANTITY_OIL_REDUCED = 6;
+  ASSYST_OIL_QUANTITY_REFILL_1LTR = 7;
+  ASSYST_OIL_QUANTITY_REFILL_1_5LTR = 8;
+  ASSYST_OIL_QUANTITY_REFILL_2LTR = 9;
+  ASSYST_OIL_QUANTITY_REFILL_0_5LTR = 10;
+  ASSYST_OIL_QUANTITY_ENGINE_START_REQUIRED = 11;
+  ASSYST_OIL_QUANTITY_ENGINE_WARMUP_REQUIRED = 12;
+  ASSYST_OIL_QUANTITY_VEHICLE_NOT_HORIZONTAL = 13;
+  ASSYST_OIL_QUANTITY_NO_MEASUREMENT_RESULT = 14;
+}
+
+enum AssystOilWarning {
+  ASSYST_OIL_WARNING_IDLE = 0;
+  ASSYST_OIL_WARNING_REFILL_LTR = 1;
+  ASSYST_OIL_WARNING_NOT_DEFINED = 2;
+  ASSYST_OIL_WARNING_OVERFILL_1 = 3;
+  ASSYST_OIL_WARNING_SENSOR_FAULT = 4;
+  ASSYST_OIL_WARNING_SWTCH_MIN = 5;
+  ASSYST_OIL_WARNING_ENG_STOP = 6;
+}
+
+enum ProtectionActivationStatus {
+  PROTECTION_ACTIVATION_STATUS_OFF = 0;
+  PROTECTION_ACTIVATION_STATUS_ON = 1;
+  PROTECTION_ACTIVATION_STATUS_INIT = 2;
+}
+
+enum ProtectionSensorStatus {
+  PROTECTION_SENSOR_STATUS_NOT_ACTIVE = 0;
+  PROTECTION_SENSOR_STATUS_ACTIVE = 1;
+}
+
+enum TcuConnectionStateLowChannel {
+  TCU_CONNECTION_STATE_LOW_CHANNEL_UNKNOWN = 0;
+  TCU_CONNECTION_STATE_LOW_CHANNEL_INITIALLY_CONNECTED = 1;
+  TCU_CONNECTION_STATE_LOW_CHANNEL_RECONNECTED = 2;
+  TCU_CONNECTION_STATE_LOW_CHANNEL_DISCONNECTED = 3;
+  TCU_CONNECTION_STATE_LOW_CHANNEL_UNPLANNED_DISCONNECTED = 4;
+}
+
+enum TcuThermoShutDown {
+  TCU_THERMO_SHUT_DOWN_UNKNOWN = 0;
+  TCU_THERMO_SHUT_DOWN_NOT_ACTIVE = 1;
+  TCU_THERMO_SHUT_DOWN_ACTIVE = 2;
+}
+
+enum KeyActivationState {
+  KEY_ACTIVATION_STATE_UNKNOWN = 0;
+  KEY_ACTIVATION_STATE_ALL_ACTIVE = 1;
+  KEY_ACTIVATION_STATE_SELECTIVE_DEACTIVATED = 2;
+  KEY_ACTIVATION_STATE_ALL_DEACTIVATED = 3;
+}
+
+enum PictureTransferSelectionStatus {
+  PICTURE_TRANSFER_SELECTION_STATUS_NOT_SELECTED = 0;
+  PICTURE_TRANSFER_SELECTION_STATUS_SELECTED = 1;
+}
+
+// ===================================================================
+// Enum Attribute Wrapper Types
+// ===================================================================
+
+message AmgStageModeStateEnumAttribute { AmgStageModeState value = 1; VSUMetadata metadata = 2; }
+message AssystOilQuantityEnumAttribute { AssystOilQuantity value = 1; VSUMetadata metadata = 2; }
+message AssystOilWarningEnumAttribute { AssystOilWarning value = 1; VSUMetadata metadata = 2; }
+message AuxheatstatusEnumAttribute { Auxheatstatus value = 1; VSUMetadata metadata = 2; }
+message AuxheattimeselectionEnumAttribute { Auxheattimeselection value = 1; VSUMetadata metadata = 2; }
+message BatteryHealthEnumAttribute { BatteryHealth value = 1; VSUMetadata metadata = 2; }
+message CalibrationRequestEnumAttribute { CalibrationRequest value = 1; VSUMetadata metadata = 2; }
+message ChargeCouplerLockStatusEnumAttribute { ChargeCouplerLockStatus value = 1; VSUMetadata metadata = 2; }
+message ChargeCouplerStatusEnumAttribute { ChargeCouplerStatus value = 1; VSUMetadata metadata = 2; }
+message ChargeFlapStatusEnumAttribute { ChargeFlapStatus value = 1; VSUMetadata metadata = 2; }
+message ChargingCompatibilityErrorEnumAttribute { ChargingCompatibilityError value = 1; VSUMetadata metadata = 2; }
+message ChargingCouplerErrorDetailsEnumAttribute { VehicleAttributeStatus.ChargingCouplerErrorDetails value = 1; VSUMetadata metadata = 2; }
+message ChargingErrorDetailsEnumAttribute { ChargingErrorDetails value = 1; VSUMetadata metadata = 2; }
+message ChargingErrorImpossibleChangeTo400VEnumAttribute { VehicleAttributeStatus.ChargingErrorImpossibleChangeTo400V value = 1; VSUMetadata metadata = 2; }
+message ChargingErrorImpossibleChangeTo800VEnumAttribute { VehicleAttributeStatus.ChargingErrorImpossibleChangeTo800V value = 1; VSUMetadata metadata = 2; }
+message ChargingErrorVehicleNoSupport400VEnumAttribute { VehicleAttributeStatus.ChargingErrorVehicleNoSupport400V value = 1; VSUMetadata metadata = 2; }
+message ChargingFlapErrorDetailsEnumAttribute { ChargingFlapErrorDetails value = 1; VSUMetadata metadata = 2; }
+message ChargingModeEnumAttribute { ChargingMode value = 1; VSUMetadata metadata = 2; }
+message ChargingstatusEnumAttribute { Chargingstatus value = 1; VSUMetadata metadata = 2; }
+message ChargingStopErrorDetailsEnumAttribute { ChargingStopErrorDetails value = 1; VSUMetadata metadata = 2; }
+message ChildPresenceDetectionWarningLastEventEnumAttribute { ChildPresenceDetectionWarningLastEvent value = 1; VSUMetadata metadata = 2; }
+message ChildPresenceDetectionWarningLevelEnumAttribute { ChildPresenceDetectionWarningLevel value = 1; VSUMetadata metadata = 2; }
+message DcChargingProfileEnumAttribute { DcChargingProfile value = 1; VSUMetadata metadata = 2; }
+message DepartureTimeModeEnumAttribute { DepartureTimeMode value = 1; VSUMetadata metadata = 2; }
+message DoorlockstatusEnumAttribute { Doorlockstatus value = 1; VSUMetadata metadata = 2; }
+message DoorlockstatusvehicleEnumAttribute { Doorlockstatusvehicle value = 1; VSUMetadata metadata = 2; }
+message DoorstatusEnumAttribute { Doorstatus value = 1; VSUMetadata metadata = 2; }
+message DoorStatusOverallEnumAttribute { DoorStatusOverall value = 1; VSUMetadata metadata = 2; }
+message DoorstatusgasEnumAttribute { Doorstatusgas value = 1; VSUMetadata metadata = 2; }
+message DrivingModeEnumAttribute { DrivingMode value = 1; VSUMetadata metadata = 2; }
+message EmergencyPowerSupplyEnumAttribute { EmergencyPowerSupply value = 1; VSUMetadata metadata = 2; }
+message EngineHoodStatusEnumAttribute { EngineHoodStatus value = 1; VSUMetadata metadata = 2; }
+message EngineStateEnumAttribute { EngineState value = 1; VSUMetadata metadata = 2; }
+message EvsePairingStateEnumAttribute { EvsePairingState value = 1; VSUMetadata metadata = 2; }
+message ExteriorMonitoringStatusEnumAttribute { ExteriorMonitoringStatus value = 1; VSUMetadata metadata = 2; }
+message FilterParticleLoadingEnumAttribute { FilterParticleLoading value = 1; VSUMetadata metadata = 2; }
+message FlipWindowStatusEnumAttribute { FlipWindowStatus value = 1; VSUMetadata metadata = 2; }
+message HvBatteryPrecondAvailabilityEnumAttribute { HvBatteryPrecondAvailability value = 1; VSUMetadata metadata = 2; }
+message HvBatteryThermalPropagationEventEnumAttribute { HvBatteryThermalPropagationEvent value = 1; VSUMetadata metadata = 2; }
+message HybridWarningsEnumAttribute { HybridWarnings value = 1; VSUMetadata metadata = 2; }
+message IgnitionstateEnumAttribute { Ignitionstate value = 1; VSUMetadata metadata = 2; }
+message InteriorMonitoringStatusEnumAttribute { InteriorMonitoringStatus value = 1; VSUMetadata metadata = 2; }
+message InteriorProtectionSelectionStatusEnumAttribute { InteriorProtectionSelectionStatus value = 1; VSUMetadata metadata = 2; }
+message KeyActivationStateEnumAttribute { KeyActivationState value = 1; VSUMetadata metadata = 2; }
+message LanguageHUEnumAttribute { LanguageHU value = 1; VSUMetadata metadata = 2; }
+message LastTheftWarningReasonEnumAttribute { LastTheftWarningReason value = 1; VSUMetadata metadata = 2; }
+message OilWarningLevelEnumAttribute { OilWarningLevel value = 1; VSUMetadata metadata = 2; }
+message ParkbrakestatusEnumAttribute { Parkbrakestatus value = 1; VSUMetadata metadata = 2; }
+message ParkCollisionActivationStatusEnumAttribute { ParkCollisionActivationStatus value = 1; VSUMetadata metadata = 2; }
+message ParkCollisionInactiveReasonEnumAttribute { ParkCollisionInactiveReason value = 1; VSUMetadata metadata = 2; }
+message ParkCollisionPictureTransferStatusEnumAttribute { ParkCollisionPictureTransferStatus value = 1; VSUMetadata metadata = 2; }
+message ParkCollisionSelectionStatusEnumAttribute { ParkCollisionSelectionStatus value = 1; VSUMetadata metadata = 2; }
+message ParkEventLevelEnumAttribute { ParkEventLevel value = 1; VSUMetadata metadata = 2; }
+message ParkEventPictureSelectionStatusEnumAttribute { ParkEventPictureSelectionStatus value = 1; VSUMetadata metadata = 2; }
+message ParkEventPictureTransmissionStatusEnumAttribute { ParkEventPictureTransmissionStatus value = 1; VSUMetadata metadata = 2; }
+message ParkEventSensorStatusEnumAttribute { ParkEventSensorStatus value = 1; VSUMetadata metadata = 2; }
+message ParkEventTypeEnumAttribute { ParkEventType value = 1; VSUMetadata metadata = 2; }
+message PerformanceLimitationModeStatusEnumAttribute { PerformanceLimitationModeStatus value = 1; VSUMetadata metadata = 2; }
+message PictureRecordingStatusEnumAttribute { PictureRecordingStatus value = 1; VSUMetadata metadata = 2; }
+message PictureTransferSelectionStatusEnumAttribute { PictureTransferSelectionStatus value = 1; VSUMetadata metadata = 2; }
+message PrecondatdepartureEnumAttribute { Precondatdeparture value = 1; VSUMetadata metadata = 2; }
+message PrecondErrorEnumAttribute { PrecondError value = 1; VSUMetadata metadata = 2; }
+message PrecondNowEnumAttribute { PrecondNow value = 1; VSUMetadata metadata = 2; }
+message PrecondOperatingModeEnumAttribute { PrecondOperatingMode value = 1; VSUMetadata metadata = 2; }
+message PrecondSeatEnumAttribute { PrecondSeat value = 1; VSUMetadata metadata = 2; }
+message ProtectionActivationStatusEnumAttribute { ProtectionActivationStatus value = 1; VSUMetadata metadata = 2; }
+message ProtectionSensorStatusEnumAttribute { ProtectionSensorStatus value = 1; VSUMetadata metadata = 2; }
+message RangeSkipIndicationEnumAttribute { RangeSkipIndication value = 1; VSUMetadata metadata = 2; }
+message RooftopstatusEnumAttribute { Rooftopstatus value = 1; VSUMetadata metadata = 2; }
+message SelectedChargeProgramEnumAttribute { SelectedChargeProgram value = 1; VSUMetadata metadata = 2; }
+message SmartChargingEnumAttribute { SmartCharging value = 1; VSUMetadata metadata = 2; }
+message SmartChargingAtDepartureEnumAttribute { SmartChargingAtDeparture value = 1; VSUMetadata metadata = 2; }
+message SohCalibrationNotificationsEnumAttribute { SohCalibrationNotifications value = 1; VSUMetadata metadata = 2; }
+message SohCalibrationPlannedEnumAttribute { SohCalibrationPlanned value = 1; VSUMetadata metadata = 2; }
+message SohCalibrationRequiredEnumAttribute { SohCalibrationRequired value = 1; VSUMetadata metadata = 2; }
+message SohCalibrationStateEnumAttribute { SohCalibrationState value = 1; VSUMetadata metadata = 2; }
+message SohFavorableConditionsEnumAttribute { SohFavorableConditions value = 1; VSUMetadata metadata = 2; }
+message SpeedUnitFromICEnumAttribute { SpeedUnitFromIC value = 1; VSUMetadata metadata = 2; }
+message StarterBatteryStateEnumAttribute { StarterBatteryState value = 1; VSUMetadata metadata = 2; }
+message SunroofEventEnumAttribute { SunroofEvent value = 1; VSUMetadata metadata = 2; }
+message SunroofstatusEnumAttribute { Sunroofstatus value = 1; VSUMetadata metadata = 2; }
+message SunroofStatusBlindEnumAttribute { SunroofStatusBlind value = 1; VSUMetadata metadata = 2; }
+message TcuConnectionStateLowChannelEnumAttribute { TcuConnectionStateLowChannel value = 1; VSUMetadata metadata = 2; }
+message TcuThermoShutDownEnumAttribute { TcuThermoShutDown value = 1; VSUMetadata metadata = 2; }
+message TemperatureUnitHUEnumAttribute { TemperatureUnitHU value = 1; VSUMetadata metadata = 2; }
+message TimeFormatHUEnumAttribute { TimeFormatHU value = 1; VSUMetadata metadata = 2; }
+message TireMarkerEnumAttribute { TireMarker value = 1; VSUMetadata metadata = 2; }
+message TireSensorAvailableEnumAttribute { TireSensorAvailable value = 1; VSUMetadata metadata = 2; }
+message TireWarningLevelPrwEnumAttribute { TireWarningLevelPrw value = 1; VSUMetadata metadata = 2; }
+message TirewarninglampEnumAttribute { Tirewarninglamp value = 1; VSUMetadata metadata = 2; }
+message TirewarningsprwEnumAttribute { Tirewarningsprw value = 1; VSUMetadata metadata = 2; }
+message TirewarningsrdkEnumAttribute { Tirewarningsrdk value = 1; VSUMetadata metadata = 2; }
+message TowProtectionSelectionStatusEnumAttribute { TowProtectionSelectionStatus value = 1; VSUMetadata metadata = 2; }
+message TrackingStateHuEnumAttribute { TrackingStateHu value = 1; VSUMetadata metadata = 2; }
+message TurnOffEnginePreWarningEnumAttribute { TurnOffEnginePreWarning value = 1; VSUMetadata metadata = 2; }
+message VehicleDataConnectionStateEnumAttribute { VehicleDataConnectionState value = 1; VSUMetadata metadata = 2; }
+message VehicleHealthStatusEnumAttribute { VehicleHealthStatus value = 1; VSUMetadata metadata = 2; }
+message VehiclePositionErrorCodeEnumAttribute { VehiclePositionErrorCode value = 1; VSUMetadata metadata = 2; }
+message VehicleTheftAlarmInactiveReasonEnumAttribute { VehicleTheftAlarmInactiveReason value = 1; VSUMetadata metadata = 2; }
+message WarningwashwaterEnumAttribute { Warningwashwater value = 1; VSUMetadata metadata = 2; }
+message WeekdayEnumAttribute { Weekday value = 1; VSUMetadata metadata = 2; }
+message WindowstatusEnumAttribute { Windowstatus value = 1; VSUMetadata metadata = 2; }
+message WindowStatusBlindEnumAttribute { WindowStatusBlind value = 1; VSUMetadata metadata = 2; }
+message WindowStatusOverallEnumAttribute { WindowStatusOverall value = 1; VSUMetadata metadata = 2; }
+
+// ===================================================================
+// Object Attribute Wrapper Types
+// ===================================================================
+
+message AmgStageModeErrorObjectAttribute { AmgStageModeError value = 1; VSUMetadata metadata = 2; }
+message ChargingBreakClockTimerObjectAttribute { ChargingBreakClockTimerValue value = 1; VSUMetadata metadata = 2; }
+message ChargingPredictionDepartureTimeObjectAttribute { ChargingPredictionDepartureTime value = 1; VSUMetadata metadata = 2; }
+message ChargingPredictionSocObjectAttribute { ChargingPredictionSoc value = 1; VSUMetadata metadata = 2; }
+message ChargingScheduleActiveObjectAttribute { ChargingScheduleActive value = 1; VSUMetadata metadata = 2; }
+message ChargingScheduleRequestedObjectAttribute { ChargingScheduleRequested value = 1; VSUMetadata metadata = 2; }
+message HvBatteryPrecondRequestStateObjectAttribute { HvBatteryPrecondRequestState value = 1; VSUMetadata metadata = 2; }
+message HvBatteryPrecondStateObjectAttribute { HvBatteryPrecondState value = 1; VSUMetadata metadata = 2; }
+message KeylineActivationStateObjectAttribute { KeylineActivationStateValue value = 1; VSUMetadata metadata = 2; }
+message NextDepartureTimeObjectAttribute {
+  NextDepartureTimeValue value = 1;
+  VSUMetadata metadata = 2;
+  VehicleAttributeStatus.ClockHourUnit unit = 3;
+  string display_value = 4;
+}
+message PrecondOperabilityStateObjectAttribute { PrecondOperabilityState value = 1; VSUMetadata metadata = 2; }
+message PrecondStateObjectAttribute { PrecondState value = 1; VSUMetadata metadata = 2; }
+message RemoteUpdateStartStatusObjectAttribute { RemoteUpdateStartStatus value = 1; VSUMetadata metadata = 2; }
+message WeeklyProfileObjectAttribute { WeeklyProfile value = 1; VSUMetadata metadata = 2; }
+
+// ===================================================================
+// Array Attribute Wrapper Types
+// ===================================================================
+
+message AuxheatwarningsArrayAttribute { repeated Auxheatwarning value = 1; VSUMetadata metadata = 2; }
+message ChargeFlapsArrayAttribute { repeated ChargeFlapsEntry value = 1; VSUMetadata metadata = 2; }
+message ChargeInletsArrayAttribute { repeated ChargeInletsEntry value = 1; VSUMetadata metadata = 2; }
+message ChargeProgramsArrayAttribute { repeated ChargeProgramParameters value = 1; VSUMetadata metadata = 2; }
+message ChargingPowerRestrictionArrayAttribute { repeated ChargingPowerRestriction value = 1; VSUMetadata metadata = 2; }
+message ChargingTimerArrayAttribute { repeated ChargingTimerEntry value = 1; VSUMetadata metadata = 2; }
+message SocprofileArrayAttribute { repeated StateOfCharge value = 1; VSUMetadata metadata = 2; }
+message SpeedAlertConfArrayAttribute { repeated SpeedAlertConf value = 1; VSUMetadata metadata = 2; }
+message TemperaturePointsArrayAttribute {
+  message TemperaturePoint {
+    // 0-based, ordered front/rear then left/center/right. NOTE: this differs from the
+    // Zone enum in vehicle-commands.proto (1-based, UNKNOWN=0, left/right/center).
+    enum Zone {
+      FRONT_LEFT = 0;
+      FRONT_CENTER = 1;
+      FRONT_RIGHT = 2;
+      REAR_LEFT = 3;
+      REAR_CENTER = 4;
+      REAR_RIGHT = 5;
+      REAR_2_LEFT = 6;
+      REAR_2_CENTER = 7;
+      REAR_2_RIGHT = 8;
+    }
+    Zone zone = 1 [ json_name = "zone" ];
+    DoubleTemperatureAttribute temperature = 2 [ json_name = "temperature" ];
+    bool active = 3 [ json_name = "active" ];
+  }
+  repeated TemperaturePoint value = 1;
+  VSUMetadata metadata = 2;
+}
+message WeeklySetHUArrayAttribute { repeated WeeklySetting value = 1; VSUMetadata metadata = 2; }
+
+
+enum SeatballetPositionState {
+  SEATBALLET_POSITION_STATE_OFF = 0;
+  SEATBALLET_POSITION_STATE_RUN = 1;
+  SEATBALLET_POSITION_STATE_ABORT = 2;
+  SEATBALLET_POSITION_STATE_FINISHED = 3;
+  SEATBALLET_POSITION_STATE_GET = 4;
+}
+
+enum ChildPresenceDetectionOccupancyStatus {
+  CHILD_PRESENCE_DETECTION_OCCUPANCY_STATUS_IDLE = 0;
+  CHILD_PRESENCE_DETECTION_OCCUPANCY_STATUS_PENDING = 1;
+  CHILD_PRESENCE_DETECTION_OCCUPANCY_STATUS_EMPTY = 2;
+  CHILD_PRESENCE_DETECTION_OCCUPANCY_STATUS_OCCUPIED_CHILD = 3;
+  CHILD_PRESENCE_DETECTION_OCCUPANCY_STATUS_OCCUPIED_ADULT = 4;
+}
+
+message PetMode {
+  enum Status {
+    PET_MODE_STATUS_INACTIVE = 0;
+    PET_MODE_STATUS_PARTIALLY_ACTIVE = 1;
+    PET_MODE_STATUS_ACTIVE = 2;
+    PET_MODE_STATUS_RUNTIME_EXCEEDED = 3;
+    PET_MODE_STATUS_RANGE_EXCEEDED = 4;
+    PET_MODE_STATUS_MALFUNCTION = 5;
+  }
+
+  message Info {
+    enum Level {
+      PET_MODE_INFO_LEVEL_INFO = 0;
+      PET_MODE_INFO_LEVEL_WARN = 1;
+      PET_MODE_INFO_LEVEL_ERROR = 2;
+    }
+
+    enum Type {
+      PET_MODE_INFO_TYPE_TEMPERATURE_WARNING = 0;
+      PET_MODE_INFO_TYPE_RUNTIME_WARNING_10_MINUTES = 1;
+      PET_MODE_INFO_TYPE_RUNTIME_WARNING_30_MINUTES = 2;
+      PET_MODE_INFO_TYPE_RUNTIME_WARNING_60_MINUTES = 3;
+      PET_MODE_INFO_TYPE_RUNTIME_WARNING_90_MINUTES = 4;
+      PET_MODE_INFO_TYPE_RUNTIME_WARNING_120_MINUTES = 5;
+      PET_MODE_INFO_TYPE_RUNTIME_WARNING_150_MINUTES = 6;
+      PET_MODE_INFO_TYPE_RUNTIME_WARNING_180_MINUTES = 7;
+      PET_MODE_INFO_TYPE_RUNTIME_NOTICE_60_MINUTES = 8;
+      PET_MODE_INFO_TYPE_RUNTIME_NOTICE_90_MINUTES = 9;
+      PET_MODE_INFO_TYPE_RUNTIME_NOTICE_120_MINUTES = 10;
+      PET_MODE_INFO_TYPE_RUNTIME_NOTICE_150_MINUTES = 11;
+      PET_MODE_INFO_TYPE_RANGE_WARNING_55_KILOMETERS = 12;
+      PET_MODE_INFO_TYPE_RANGE_WARNING_50_KILOMETERS = 13;
+      PET_MODE_INFO_TYPE_ERROR_WARNING = 14;
+    }
+
+    Level level = 1;
+    Type type = 2;
+  }
+
+  Status status = 1;
+  google.protobuf.Timestamp endtime = 2;
+  Info info = 3;
+  google.protobuf.Timestamp starttime = 4;
+}
+
+message PetModeObjectAttribute {
+  PetMode value = 1;
+  VSUMetadata metadata = 2;
+}
+
+message SeatballetPositionStateEnumAttribute {
+  SeatballetPositionState value = 1;
+  VSUMetadata metadata = 2;
+}
+
+message ChildPresenceDetectionOccupancyStatusEnumAttribute {
+  ChildPresenceDetectionOccupancyStatus value = 1;
+  VSUMetadata metadata = 2;
+}
+
+// ===================================================================
+// VehicleStatusUpdate - Typed vehicle status message (275 fields)
+// ===================================================================
+
+message VehicleStatusUpdate {
+  string fin_or_vin = 1;
+  bool full_update = 2;
+  AmgStageModeErrorObjectAttribute amg_stage_mode_error = 3;
+  AmgStageModeStateEnumAttribute amg_stage_mode_state = 4;
+  AssystOilQuantityEnumAttribute assyst_oil_quantity = 5;
+  AssystOilWarningEnumAttribute assyst_oil_warning = 6;
+  BoolAttribute auxheat_active = 7;
+  Int64Attribute auxheatruntime = 8;
+  AuxheatstatusEnumAttribute auxheatstatus = 9;
+  Int64ClockHourAttribute auxheattime1 = 10;
+  Int64ClockHourAttribute auxheattime2 = 11;
+  Int64ClockHourAttribute auxheattime3 = 12;
+  AuxheattimeselectionEnumAttribute auxheattimeselection = 13;
+  AuxheatwarningsArrayAttribute auxheatwarnings = 14;
+  DoubleSpeedAttribute average_speed_reset = 15;
+  DoubleSpeedAttribute average_speed_start = 16;
+  BatteryHealthEnumAttribute battery_health = 17;
+  BoolAttribute bidirectional_charging_active = 18;
+  ChargeCouplerLockStatusEnumAttribute charge_coupler_a_c_lock_status = 19;
+  ChargeCouplerStatusEnumAttribute charge_coupler_a_c_status = 20;
+  ChargeCouplerLockStatusEnumAttribute charge_coupler_d_c_lock_status = 21;
+  ChargeCouplerStatusEnumAttribute charge_coupler_d_c_status = 22;
+  ChargeFlapStatusEnumAttribute charge_flap_a_c_status = 23;
+  ChargeFlapStatusEnumAttribute charge_flap_d_c_status = 24;
+  ChargeFlapsArrayAttribute charge_flaps = 25;
+  ChargeInletsArrayAttribute charge_inlets = 26;
+  ChargeProgramsArrayAttribute charge_programs = 27;
+  ChargingBreakClockTimerObjectAttribute charging_break_clock_timer = 28;
+  ChargingCompatibilityErrorEnumAttribute charging_compatibility_error = 29;
+  ChargingCouplerErrorDetailsEnumAttribute charging_coupler_error_details = 30;
+  ChargingErrorDetailsEnumAttribute charging_error_details = 31;
+  ChargingErrorImpossibleChangeTo400VEnumAttribute charging_error_impossible_change_to400_v = 32;
+  ChargingErrorImpossibleChangeTo800VEnumAttribute charging_error_impossible_change_to800_v = 33;
+  ChargingErrorVehicleNoSupport400VEnumAttribute charging_error_vehicle_no_support400_v = 34;
+  ChargingFlapErrorDetailsEnumAttribute charging_flap_error_details = 35;
+  ChargingModeEnumAttribute charging_mode = 36;
+  DoubleAttribute charging_power = 37;
+  Int64Attribute charging_power_eco_limit = 38;
+  ChargingPowerRestrictionArrayAttribute charging_power_restriction = 39;
+  ChargingPredictionDepartureTimeObjectAttribute charging_prediction_departure_time = 40;
+  ChargingPredictionSocObjectAttribute charging_prediction_full_soc = 41;
+  ChargingPredictionSocObjectAttribute charging_prediction_max_soc = 42;
+  ChargingPredictionSocObjectAttribute charging_prediction_min_soc = 43;
+  ChargingPredictionSocObjectAttribute charging_prediction_target_soc = 44;
+  ChargingScheduleActiveObjectAttribute charging_schedule_active = 45;
+  ChargingScheduleRequestedObjectAttribute charging_schedule_requested = 46;
+  ChargingStopErrorDetailsEnumAttribute charging_stop_error_details = 47;
+  ChargingTimerArrayAttribute charging_timer = 48;
+  BoolAttribute chargingactive = 49;
+  ChargingstatusEnumAttribute chargingstatus = 50;
+  Int64Attribute child_presence_detection_warning_counter = 51;
+  ChildPresenceDetectionWarningLastEventEnumAttribute child_presence_detection_warning_last_event = 52;
+  ChildPresenceDetectionWarningLevelEnumAttribute child_presence_detection_warning_level = 53;
+  DcChargingProfileEnumAttribute dc_charging_profile = 54;
+  DoorstatusEnumAttribute decklidstatus = 55;
+  DepartureTimeModeEnumAttribute departure_time_mode = 56;
+  WeekdayEnumAttribute departure_time_weekday = 57;
+  Int64ClockHourAttribute departuretime = 58;
+  Int64RatioAttribute departuretimesoc = 59;
+  DoubleDistanceAttribute distance_electrical_reset = 60;
+  DoubleDistanceAttribute distance_electrical_start = 61;
+  DoubleDistanceAttribute distance_gas_reset = 62;
+  DoubleDistanceAttribute distance_gas_start = 63;
+  DoubleDistanceAttribute distance_reset = 64;
+  DoubleDistanceAttribute distance_start = 65;
+  DoubleDistanceAttribute distance_z_e_reset = 66;
+  DoubleDistanceAttribute distance_z_e_start = 67;
+  DoorlockstatusEnumAttribute doorlockstatusdecklid = 68;
+  DoorlockstatusEnumAttribute doorlockstatusfrontleft = 69;
+  DoorlockstatusEnumAttribute doorlockstatusfrontright = 70;
+  DoorlockstatusEnumAttribute doorlockstatusgas = 71;
+  DoorlockstatusEnumAttribute doorlockstatusrearleft = 72;
+  DoorlockstatusEnumAttribute doorlockstatusrearright = 73;
+  DoorlockstatusvehicleEnumAttribute doorlockstatusvehicle = 74;
+  DoorstatusEnumAttribute doorstatusfrontleft = 75;
+  DoorstatusEnumAttribute doorstatusfrontright = 76;
+  DoorstatusgasEnumAttribute doorstatusgas = 77;
+  DoorstatusEnumAttribute doorstatusrearleft = 78;
+  DoorstatusEnumAttribute doorstatusrearright = 79;
+  Int64Attribute driven_time_reset = 80;
+  Int64Attribute driven_time_start = 81;
+  Int64Attribute driven_time_z_e_reset = 82;
+  Int64Attribute driven_time_z_e_start = 83;
+  Int64RatioAttribute ecoscoreaccel = 84;
+  DoubleDistanceAttribute ecoscorebonusrange = 85;
+  Int64RatioAttribute ecoscoreconst = 86;
+  Int64RatioAttribute ecoscorefreewhl = 87;
+  Int64RatioAttribute ecoscoretotal = 88;
+  DoubleRatioAttribute electric_ratio_reset = 89;
+  DoubleRatioAttribute electric_ratio_start = 90;
+  RangeSkipIndicationEnumAttribute electrical_range_skip_indication = 91;
+  DoubleElectricityConsumptionAttribute electricconsumptionreset = 92;
+  DoubleElectricityConsumptionAttribute electricconsumptionstart = 93;
+  EmergencyPowerSupplyEnumAttribute emergency_power_supply = 94;
+  WeekdayEnumAttribute endof_charge_time_weekday = 95;
+  Int64ClockHourAttribute endofchargetime = 96;
+  EngineHoodStatusEnumAttribute engine_hood_status = 97;
+  EngineStateEnumAttribute engine_state = 98;
+  Int64RatioAttribute ev_range_assist_drive_on_s_o_c = 99;
+  Int64Attribute ev_range_assist_drive_on_time = 100;
+  EvsePairingStateEnumAttribute evse_pairing_state = 101;
+  TimestampAttribute exterior_monitoring_last_event = 102;
+  ExteriorMonitoringStatusEnumAttribute exterior_monitoring_status = 103;
+  FilterParticleLoadingEnumAttribute filter_particle_loading = 104;
+  FlipWindowStatusEnumAttribute flip_window_status = 105;
+  Int64DistanceAttribute gained_range_since_start_of_charging = 106;
+  DoubleAttribute gas_tank_level = 107;
+  DoubleRatioAttribute gas_tank_level_percent = 108;
+  DoubleDistanceAttribute gas_tank_range = 109;
+  DoubleGasConsumptionAttribute gasconsumptionreset = 110;
+  DoubleGasConsumptionAttribute gasconsumptionstart = 111;
+  HvBatteryPrecondAvailabilityEnumAttribute hv_battery_precond_availability = 112;
+  Int64Attribute hv_battery_precond_duration = 113;
+  HvBatteryPrecondRequestStateObjectAttribute hv_battery_precond_request_state = 114;
+  HvBatteryPrecondStateObjectAttribute hv_battery_precond_state = 115;
+  Int64Attribute hv_battery_state_of_health = 116;
+  Int64Attribute hv_battery_state_of_health_distance_update = 117;
+  DoubleAttribute hv_battery_state_of_health_reserve_capacity = 118;
+  HvBatteryThermalPropagationEventEnumAttribute hv_battery_thermal_propagation_event = 119;
+  HybridWarningsEnumAttribute hybrid_warnings = 120;
+  IgnitionstateEnumAttribute ignitionstate = 121;
+  TimestampAttribute interior_monitoring_last_event = 122;
+  InteriorMonitoringStatusEnumAttribute interior_monitoring_status = 123;
+  ProtectionActivationStatusEnumAttribute interior_protection_activation_status = 124;
+  InteriorProtectionSelectionStatusEnumAttribute interior_protection_selection_status = 125;
+  ProtectionSensorStatusEnumAttribute interior_protection_sensor_status = 126;
+  KeyActivationStateEnumAttribute key_activation_state = 127;
+  KeylineActivationStateObjectAttribute keyline_activation_state = 128;
+  LanguageHUEnumAttribute language_h_u = 129;
+  TimestampClockHourAttribute last_park_event = 130;
+  Int64Attribute last_park_event_id = 131;
+  BoolAttribute last_park_event_not_confirmed = 132;
+  TimestampAttribute last_theft_warning = 133;
+  LastTheftWarningReasonEnumAttribute last_theft_warning_reason = 134;
+  RangeSkipIndicationEnumAttribute liquid_range_skip_indication = 135;
+  DoubleCombustionConsumptionAttribute liquidconsumptionreset = 136;
+  DoubleCombustionConsumptionAttribute liquidconsumptionstart = 137;
+  Int64RatioAttribute max_soc = 138;
+  Int64RatioAttribute max_soc_lower_limit = 139;
+  Int64RatioAttribute max_soc_upper_limit = 140;
+  Int64DistanceAttribute maxrange = 141;
+  Int64RatioAttribute min_soc = 142;
+  Int64RatioAttribute min_soc_lower_limit = 143;
+  Int64RatioAttribute min_soc_upper_limit = 144;
+  NextDepartureTimeObjectAttribute next_departure_time = 145;
+  WeekdayEnumAttribute next_departure_time_weekday = 146;
+  Int64DistanceAttribute odo = 147;
+  Int64RatioAttribute oil_level = 148;
+  OilWarningLevelEnumAttribute oil_warning_level = 149;
+  BoolAttribute panic_alarm_active = 150;
+  ParkCollisionActivationStatusEnumAttribute park_collision_activation_status = 151;
+  ParkCollisionInactiveReasonEnumAttribute park_collision_inactive_reason = 152;
+  ParkCollisionPictureTransferStatusEnumAttribute park_collision_picture_transfer_status = 153;
+  ParkCollisionSelectionStatusEnumAttribute park_collision_selection_status = 154;
+  ParkEventLevelEnumAttribute park_event_level = 155;
+  ParkEventPictureSelectionStatusEnumAttribute park_event_picture_selection_status = 156;
+  ParkEventPictureTransmissionStatusEnumAttribute park_event_picture_transmission_status = 157;
+  ParkEventSensorStatusEnumAttribute park_event_sensor_status = 158;
+  ParkEventTypeEnumAttribute park_event_type = 159;
+  ParkbrakestatusEnumAttribute parkbrakestatus = 160;
+  PerformanceLimitationModeStatusEnumAttribute performance_limitation_mode_status = 161;
+  PictureRecordingStatusEnumAttribute picture_recording_status = 162;
+  PictureTransferSelectionStatusEnumAttribute picture_transfer_selection_status = 163;
+  DoubleAttribute position_heading = 164;
+  DoubleAttribute position_lat = 165;
+  DoubleAttribute position_long = 166;
+  BoolAttribute precond_active = 167;
+  BoolAttribute precond_at_departure_disable = 168;
+  Int64Attribute precond_duration = 169;
+  PrecondErrorEnumAttribute precond_error = 170;
+  PrecondNowEnumAttribute precond_now = 171;
+  PrecondErrorEnumAttribute precond_now_error = 172;
+  PrecondOperabilityStateObjectAttribute precond_operability_state = 173;
+  PrecondOperatingModeEnumAttribute precond_operating_mode = 174;
+  PrecondSeatEnumAttribute precond_seat_front_left = 175;
+  PrecondSeatEnumAttribute precond_seat_front_right = 176;
+  PrecondSeatEnumAttribute precond_seat_rear_left = 177;
+  PrecondSeatEnumAttribute precond_seat_rear_right = 178;
+  PrecondStateObjectAttribute precond_state = 179;
+  PrecondatdepartureEnumAttribute precondatdeparture = 180;
+  Int64DistanceAttribute range_ad_blue = 181;
+  Int64DistanceAttribute range_electric_wltp = 182;
+  Int64DistanceAttribute rangeelectric = 183;
+  Int64DistanceAttribute rangeliquid = 184;
+  BoolAttribute remote_start_active = 185;
+  Int64Attribute remote_start_endtime = 186;
+  DoubleTemperatureAttribute remote_start_temperature = 187;
+  RemoteUpdateStartStatusObjectAttribute remote_update_start_status = 188;
+  RooftopstatusEnumAttribute rooftopstatus = 189;
+  SelectedChargeProgramEnumAttribute selected_charge_program = 190;
+  Int64Attribute serviceintervaldays = 191;
+  Int64DistanceAttribute serviceintervaldistance = 192;
+  SmartChargingEnumAttribute smart_charging = 193;
+  SmartChargingAtDepartureEnumAttribute smart_charging_at_departure = 194;
+  SmartChargingAtDepartureEnumAttribute smart_charging_at_departure2 = 195;
+  Int64RatioAttribute soc = 196;
+  CalibrationRequestEnumAttribute soc_calibration_request = 197;
+  SocprofileArrayAttribute socprofile = 198;
+  SohCalibrationNotificationsEnumAttribute soh_calibration_notifications = 199;
+  SohCalibrationPlannedEnumAttribute soh_calibration_planned = 200;
+  CalibrationRequestEnumAttribute soh_calibration_request = 201;
+  SohCalibrationRequiredEnumAttribute soh_calibration_required = 202;
+  SohCalibrationStateEnumAttribute soh_calibration_state = 203;
+  Int64Attribute soh_charge_time_extension = 204;
+  SohFavorableConditionsEnumAttribute soh_favorable_conditions = 205;
+  SpeedAlertConfArrayAttribute speed_alert_conf = 206;
+  SpeedUnitFromICEnumAttribute speed_unit_from_i_c = 207;
+  SunroofEventEnumAttribute sunroof_event = 208;
+  BoolAttribute sunroof_event_active = 209;
+  SunroofStatusBlindEnumAttribute sunroof_status_front_blind = 210;
+  SunroofStatusBlindEnumAttribute sunroof_status_rear_blind = 211;
+  SunroofstatusEnumAttribute sunroofstatus = 212;
+  Int64RatioAttribute tank_level_ad_blue = 213;
+  Int64RatioAttribute tanklevelpercent = 214;
+  Int64RatioAttribute target_soc = 215;
+  TcuConnectionStateLowChannelEnumAttribute tcu_connection_state_low_channel = 216;
+  TcuThermoShutDownEnumAttribute tcu_thermo_shut_down = 217;
+  DrivingModeEnumAttribute teenage_driving_mode = 218;
+  TemperaturePointsArrayAttribute temperature_points = 219;
+  TemperatureUnitHUEnumAttribute temperature_unit_h_u = 220;
+  BoolAttribute theft_alarm_active = 221;
+  BoolAttribute theft_system_armed = 222;
+  TimeFormatHUEnumAttribute time_format_h_u = 223;
+  TireMarkerEnumAttribute tire_marker_front_left = 224;
+  TireMarkerEnumAttribute tire_marker_front_right = 225;
+  TireMarkerEnumAttribute tire_marker_inner_rear_left = 226;
+  TireMarkerEnumAttribute tire_marker_inner_rear_right = 227;
+  TireMarkerEnumAttribute tire_marker_rear_left = 228;
+  TireMarkerEnumAttribute tire_marker_rear_right = 229;
+  DoublePressureAttribute tire_pressure_inner_rear_left = 230;
+  DoublePressureAttribute tire_pressure_inner_rear_right = 231;
+  TireSensorAvailableEnumAttribute tire_sensor_available = 232;
+  TireWarningLevelPrwEnumAttribute tire_warning_level_prw = 233;
+  DoublePressureAttribute tirepressure_front_left = 234;
+  DoublePressureAttribute tirepressure_front_right = 235;
+  DoublePressureAttribute tirepressure_rear_left = 236;
+  DoublePressureAttribute tirepressure_rear_right = 237;
+  TirewarninglampEnumAttribute tirewarninglamp = 238;
+  TirewarningsprwEnumAttribute tirewarningsprw = 239;
+  TirewarningsrdkEnumAttribute tirewarningsrdk = 240;
+  ProtectionActivationStatusEnumAttribute tow_protection_activation_status = 241;
+  TowProtectionSelectionStatusEnumAttribute tow_protection_selection_status = 242;
+  ProtectionSensorStatusEnumAttribute tow_protection_sensor_status = 243;
+  TrackingStateHuEnumAttribute tracking_state_h_u = 244;
+  TurnOffEnginePreWarningEnumAttribute turn_off_engine_pre_warning = 245;
+  Int64Attribute turn_off_engine_pre_warning_time = 246;
+  DrivingModeEnumAttribute valet_driving_mode = 247;
+  VehicleDataConnectionStateEnumAttribute vehicle_data_connection_state = 248;
+  VehicleHealthStatusEnumAttribute vehicle_health_status = 249;
+  VehicleTheftAlarmInactiveReasonEnumAttribute vehicle_theft_alarm_inactive_reason = 250;
+  Int64Attribute vtime = 251;
+  BoolAttribute warningbrakefluid = 252;
+  BoolAttribute warningbrakeliningwear = 253;
+  BoolAttribute warningcoolantlevellow = 254;
+  BoolAttribute warningenginelight = 255;
+  WarningwashwaterEnumAttribute warningwashwater = 256;
+  WeeklyProfileObjectAttribute weekly_profile = 257;
+  WeeklySetHUArrayAttribute weekly_set_h_u = 258;
+  WindowStatusBlindEnumAttribute window_status_rear_blind = 259;
+  WindowStatusBlindEnumAttribute window_status_rear_left_blind = 260;
+  WindowStatusBlindEnumAttribute window_status_rear_right_blind = 261;
+  WindowstatusEnumAttribute windowstatusfrontleft = 262;
+  WindowstatusEnumAttribute windowstatusfrontright = 263;
+  WindowstatusEnumAttribute windowstatusrearleft = 264;
+  WindowstatusEnumAttribute windowstatusrearright = 265;
+  DoorStatusOverallEnumAttribute door_status_overall = 266;
+  DoubleDistanceAttribute overall_range = 267;
+  BoolAttribute proximity_calculation_for_vehicle_position_required = 268;
+  StarterBatteryStateEnumAttribute starter_battery_state = 269;
+  Int64Attribute tire_press_meas_timestamp = 270;
+  VehiclePositionErrorCodeEnumAttribute vehicle_position_error_code = 271;
+  WindowStatusOverallEnumAttribute window_status_overall = 272;
+  PetModeObjectAttribute pet_mode = 273;
+  SeatballetPositionStateEnumAttribute seatballet_position_state = 274;
+  ChildPresenceDetectionOccupancyStatusEnumAttribute child_presence_detection_occupancy_status = 275;
+}

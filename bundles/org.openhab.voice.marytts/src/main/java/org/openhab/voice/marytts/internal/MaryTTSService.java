@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,9 +21,13 @@ import java.util.Set;
 
 import org.openhab.core.audio.AudioFormat;
 import org.openhab.core.audio.AudioStream;
-import org.openhab.core.voice.TTSException;
-import org.openhab.core.voice.TTSService;
+import org.openhab.core.voice.tts.AbstractCachedTTSService;
+import org.openhab.core.voice.tts.TTSCache;
+import org.openhab.core.voice.tts.TTSException;
+import org.openhab.core.voice.tts.TTSService;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,8 +43,8 @@ import marytts.modules.synthesis.Voice;
  * @author Kelly Davis - Initial contribution and API
  * @author Kai Kreuzer - Refactored to updated APIs and moved to openHAB
  */
-@Component
-public class MaryTTSService implements TTSService {
+@Component(service = TTSService.class)
+public class MaryTTSService extends AbstractCachedTTSService {
 
     private final Logger logger = LoggerFactory.getLogger(MaryTTSService.class);
 
@@ -49,14 +53,16 @@ public class MaryTTSService implements TTSService {
     /**
      * Set of supported voices
      */
-    private Set<org.openhab.core.voice.Voice> voices;
+    private Set<org.openhab.core.voice.tts.Voice> voices;
 
     /**
      * Set of supported audio formats
      */
     private Set<AudioFormat> audioFormats;
 
-    protected void activate() {
+    @Activate
+    public MaryTTSService(final @Reference TTSCache ttsCache) {
+        super(ttsCache);
         try {
             marytts = new LocalMaryInterface();
             voices = initVoices();
@@ -67,7 +73,7 @@ public class MaryTTSService implements TTSService {
     }
 
     @Override
-    public Set<org.openhab.core.voice.Voice> getAvailableVoices() {
+    public Set<org.openhab.core.voice.tts.Voice> getAvailableVoices() {
         return voices;
     }
 
@@ -77,8 +83,8 @@ public class MaryTTSService implements TTSService {
     }
 
     @Override
-    public AudioStream synthesize(String text, org.openhab.core.voice.Voice voice, AudioFormat requestedFormat)
-            throws TTSException {
+    public AudioStream synthesizeForCache(String text, org.openhab.core.voice.tts.Voice voice,
+            AudioFormat requestedFormat) throws TTSException {
         // Validate arguments
         if (text == null || text.isEmpty()) {
             throw new TTSException("The passed text is null or empty");
@@ -133,8 +139,8 @@ public class MaryTTSService implements TTSService {
      *
      * @return The voices of this instance
      */
-    private Set<org.openhab.core.voice.Voice> initVoices() {
-        Set<org.openhab.core.voice.Voice> voices = new HashSet<>();
+    private Set<org.openhab.core.voice.tts.Voice> initVoices() {
+        Set<org.openhab.core.voice.tts.Voice> voices = new HashSet<>();
         for (Locale locale : marytts.getAvailableLocales()) {
             for (String voiceLabel : marytts.getAvailableVoices(locale)) {
                 voices.add(new MaryTTSVoice(locale, voiceLabel));

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -101,7 +101,7 @@ public class QbusThermostatHandler extends QbusGlobalHandler {
                 if (qBridgeHandler.getStatus() == ThingStatus.ONLINE) {
                     updateStatus(ThingStatus.ONLINE);
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
+                    updateStatus(ThingStatusDetail.BRIDGE_OFFLINE,
                             "Bridge offline for THERMOSTAT ID " + this.thermostatId);
                 }
             }
@@ -194,8 +194,8 @@ public class QbusThermostatHandler extends QbusGlobalHandler {
             throws InterruptedException, IOException {
         String snr = getSN();
         if (snr != null) {
-            if (command instanceof DecimalType) {
-                int mode = ((DecimalType) command).intValue();
+            if (command instanceof DecimalType decimalCommand) {
+                int mode = decimalCommand.intValue();
                 qThermostat.executeMode(mode, snr);
             }
         }
@@ -214,10 +214,9 @@ public class QbusThermostatHandler extends QbusGlobalHandler {
             throws InterruptedException, IOException {
         String snr = getSN();
         if (snr != null) {
-            if (command instanceof QuantityType<?>) {
-                QuantityType<?> s = (QuantityType<?>) command;
-                double sp = s.doubleValue();
-                QuantityType<?> spCelcius = s.toUnit(CELSIUS);
+            if (command instanceof QuantityType<?> quantityCommand) {
+                double sp = quantityCommand.doubleValue();
+                QuantityType<?> spCelcius = quantityCommand.toUnit(CELSIUS);
 
                 if (spCelcius != null) {
                     qThermostat.executeSetpoint(sp, snr);

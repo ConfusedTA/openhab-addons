@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,6 +22,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -29,6 +30,8 @@ import java.util.stream.Collectors;
 
 import javax.measure.Unit;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.regoheatpump.internal.protocol.RegoConnection;
 import org.openhab.binding.regoheatpump.internal.rego6xx.CommandFactory;
 import org.openhab.binding.regoheatpump.internal.rego6xx.ErrorLine;
@@ -60,13 +63,18 @@ import org.slf4j.LoggerFactory;
  *
  * @author Boris Krivonog - Initial contribution
  */
+@NonNullByDefault
 abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
+    private static final int DEFAULT_RETRY = 5;
+    private static final int CONNECT_RETRY_BASE_MILLIS = 500;
+    private static final int CONNECT_RETRY_MAX_MILLIS = 5000;
 
     private static final class ChannelDescriptor {
-        private Date lastUpdate;
-        private byte[] cachedValue;
+        private @Nullable Date lastUpdate;
+        private byte @Nullable [] cachedValue;
 
-        public byte[] cachedValueIfNotExpired(int refreshTime) {
+        public byte @Nullable [] cachedValueIfNotExpired(int refreshTime) {
+            Date lastUpdate = this.lastUpdate;
             if (lastUpdate == null || (lastUpdate.getTime() + refreshTime * 900 < new Date().getTime())) {
                 return null;
             }
@@ -82,23 +90,32 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
 
     private final Logger logger = LoggerFactory.getLogger(Rego6xxHeatPumpHandler.class);
     private final Map<String, ChannelDescriptor> channelDescriptors = new HashMap<>();
+    private final RegoRegisterMapper mapper = RegoRegisterMapper.REGO600;
+    private final Object connectionLock = new Object();
+    private @Nullable RegoConnection connection;
+    private @Nullable ScheduledFuture<?> scheduledRefreshFuture;
     private int refreshInterval;
-    private RegoConnection connection;
-    private RegoRegisterMapper mapper;
-    private ScheduledFuture<?> scheduledRefreshFuture;
+    private boolean disposed;
 
     protected Rego6xxHeatPumpHandler(Thing thing) {
         super(thing);
     }
 
-    protected abstract RegoConnection createConnection();
+    protected abstract RegoConnection createConnection() throws IOException;
 
     @Override
     public void initialize() {
-        mapper = RegoRegisterMapper.REGO600;
         refreshInterval = ((Number) getConfig().get(REFRESH_INTERVAL)).intValue();
 
-        connection = createConnection();
+        synchronized (connectionLock) {
+            disposed = false;
+            try {
+                connection = createConnection();
+            } catch (IOException e) {
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                return;
+            }
+        }
 
         scheduledRefreshFuture = scheduler.scheduleWithFixedDelay(this::refresh, 2, refreshInterval, TimeUnit.SECONDS);
 
@@ -109,21 +126,20 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
     public void dispose() {
         super.dispose();
 
-        if (connection != null) {
-            connection.close();
+        synchronized (connectionLock) {
+            disposed = true;
+            closeAndNullifyConnectionLocked("Handler disposal");
         }
 
+        ScheduledFuture<?> scheduledRefreshFuture = this.scheduledRefreshFuture;
+        this.scheduledRefreshFuture = null;
         if (scheduledRefreshFuture != null) {
             scheduledRefreshFuture.cancel(true);
-            scheduledRefreshFuture = null;
         }
 
         synchronized (channelDescriptors) {
             channelDescriptors.clear();
         }
-
-        connection = null;
-        mapper = null;
     }
 
     @Override
@@ -220,7 +236,7 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
     private void readAndUpdateLastError(String channelIID, Function<ErrorLine, State> converter) {
         executeCommandAndUpdateState(channelIID, CommandFactory.createReadLastErrorCommand(),
                 ResponseParserFactory.ERROR_LINE, e -> {
-                    return e == null ? UnDefType.NULL : converter.apply(e);
+                    return e == ErrorLine.NO_ERROR ? UnDefType.NULL : converter.apply(e);
                 });
     }
 
@@ -252,7 +268,7 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
         });
     }
 
-    private synchronized <T> void executeCommand(String channelIID, byte[] command, ResponseParser<T> parser,
+    private synchronized <T> void executeCommand(@Nullable String channelIID, byte[] command, ResponseParser<T> parser,
             Consumer<T> resultProcessor) {
         try {
             T result = executeCommandWithRetry(channelIID, command, parser, 5);
@@ -264,25 +280,38 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
                 channelDescriptors.clear();
             }
 
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
-        } catch (Rego6xxProtocolException e) {
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+        } catch (Rego6xxProtocolException | RuntimeException e) {
             logger.warn("Executing command for channel '{}' failed.", channelIID, e);
-            updateState(channelIID, UnDefType.UNDEF);
+            if (channelIID != null) {
+                updateState(channelIID, UnDefType.UNDEF);
+            }
         } catch (InterruptedException e) {
             logger.debug("Execution interrupted when accessing value for channel '{}'.", channelIID, e);
             Thread.currentThread().interrupt();
         }
     }
 
-    private <T> T executeCommandWithRetry(String channelIID, byte[] command, ResponseParser<T> parser, int retry)
-            throws Rego6xxProtocolException, IOException, InterruptedException {
+    private <T> T executeCommandWithRetry(@Nullable String channelIID, byte[] command, ResponseParser<T> parser,
+            int retry) throws Rego6xxProtocolException, IOException, InterruptedException {
         try {
             checkRegoDevice();
             return executeCommand(channelIID, command, parser);
         } catch (IOException | Rego6xxProtocolException e) {
             if (retry > 0) {
-                logger.debug("Executing command for channel '{}' failed, retry {}.", channelIID, retry, e);
-                Thread.sleep(200);
+                int attempt = DEFAULT_RETRY - retry + 1;
+                long sleepTime = CONNECT_RETRY_BASE_MILLIS * (1L << (Math.max(0, attempt - 1)));
+                if (sleepTime > CONNECT_RETRY_MAX_MILLIS) {
+                    sleepTime = CONNECT_RETRY_MAX_MILLIS;
+                }
+                sleepTime += ThreadLocalRandom.current().nextLong(0, 200);
+
+                logger.debug("Executing command for channel '{}' failed (attempt {}). Retrying in {} ms.", channelIID,
+                        attempt, sleepTime, e);
+
+                closeAndNullifyConnection("Retry attempt after failure");
+                Thread.sleep(sleepTime);
+
                 return executeCommandWithRetry(channelIID, command, parser, retry - 1);
             }
 
@@ -316,20 +345,49 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
         }
     }
 
-    private <T> T executeCommand(String channelIID, byte[] command, ResponseParser<T> parser)
+    /**
+     * Safely closes and nullifies the connection with proper error handling and logging.
+     * This ensures the serial port is properly released and prevents "port in use" errors.
+     * 
+     * @param reason the reason for closing the connection (for logging)
+     */
+    private void closeAndNullifyConnection(String reason) {
+        synchronized (connectionLock) {
+            closeAndNullifyConnectionLocked(reason);
+        }
+    }
+
+    private void closeAndNullifyConnectionLocked(String reason) {
+        RegoConnection connection = this.connection;
+        this.connection = null;
+
+        if (connection != null) {
+            try {
+                logger.debug("Closing connection due to: {}", reason);
+                connection.close();
+                logger.debug("Connection closed successfully");
+            } catch (Exception e) {
+                logger.warn("Error while closing connection: {}", e.getMessage(), e);
+            }
+        }
+
+        if (thing.getStatus() == ThingStatus.ONLINE) {
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Connection lost: " + reason);
+        }
+    }
+
+    private <T> T executeCommand(@Nullable String channelIID, byte[] command, ResponseParser<T> parser)
             throws Rego6xxProtocolException, IOException, InterruptedException {
         try {
             return executeCommandInternal(channelIID, command, parser);
-        } catch (IOException e) {
-            if (connection != null) {
-                connection.close();
-            }
-
+        } catch (IOException | Rego6xxProtocolException | InterruptedException | RuntimeException e) {
+            // Close and nullify connection on any failure to ensure clean state for retries
+            closeAndNullifyConnection("executeCommand failed: " + e.getMessage());
             throw e;
         }
     }
 
-    private <T> T executeCommandInternal(String channelIID, byte[] command, ResponseParser<T> parser)
+    private <T> T executeCommandInternal(@Nullable String channelIID, byte[] command, ResponseParser<T> parser)
             throws Rego6xxProtocolException, IOException, InterruptedException {
         // CHANNEL_LAST_ERROR_CODE and CHANNEL_LAST_ERROR_TIMESTAMP are read from same
         // register. To prevent accessing same register twice when both channels are linked,
@@ -338,8 +396,12 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
                 || CHANNEL_LAST_ERROR_TIMESTAMP.equals(channelIID)) ? CHANNEL_LAST_ERROR : channelIID;
 
         // Use transient channel descriptor for null (not cached) channels.
-        ChannelDescriptor descriptor = channelIID == null ? new ChannelDescriptor()
-                : channelDescriptorForChannel(mappedChannelIID);
+        ChannelDescriptor descriptor;
+        if (mappedChannelIID == null) {
+            descriptor = new ChannelDescriptor();
+        } else {
+            descriptor = channelDescriptorForChannel(mappedChannelIID);
+        }
 
         byte[] cachedValue = descriptor.cachedValueIfNotExpired(refreshInterval);
         if (cachedValue != null) {
@@ -348,8 +410,20 @@ abstract class Rego6xxHeatPumpHandler extends BaseThingHandler {
         }
 
         // Send command to device and wait for response.
-        if (!connection.isConnected()) {
-            connection.connect();
+        RegoConnection connection;
+        synchronized (connectionLock) {
+            if (disposed) {
+                throw new IOException("Handler disposed while processing command");
+            }
+            connection = this.connection;
+            if (connection == null) {
+                connection = createConnection();
+                this.connection = connection;
+            }
+
+            if (!connection.isConnected()) {
+                connection.connect();
+            }
         }
 
         // Give heat pump some time between commands. Feeding commands too quickly

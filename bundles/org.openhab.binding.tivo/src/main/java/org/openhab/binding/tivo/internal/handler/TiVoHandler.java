@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,6 +14,7 @@ package org.openhab.binding.tivo.internal.handler;
 
 import static org.openhab.binding.tivo.internal.TiVoBindingConstants.*;
 
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -73,7 +74,7 @@ public class TiVoHandler extends BaseThingHandler {
         // Handles the commands from the various TiVo channel objects
         logger.debug("handleCommand '{}', parameter: {}", channelUID, command);
 
-        if (!isInitialized() || !tivoConnection.isPresent()) {
+        if (!isInitialized() || tivoConnection.isEmpty()) {
             logger.debug("handleCommand '{}' device is not initialized yet, command '{}' will be ignored.",
                     getThing().getUID(), channelUID + " " + command);
             return;
@@ -82,7 +83,7 @@ public class TiVoHandler extends BaseThingHandler {
         TivoStatusData currentStatus = tivoConnection.get().getServiceStatus();
         String commandKeyword = "";
 
-        String commandParameter = command.toString().toUpperCase();
+        String commandParameter = command.toString().toUpperCase(Locale.ENGLISH);
         if (command instanceof RefreshType) {
             // Future enhancement, if we can come up with a sensible set of actions when a REFRESH is issued
             logger.debug("TiVo '{}' skipping REFRESH command for channel: '{}'.", getThing().getUID(),
@@ -104,25 +105,63 @@ public class TiVoHandler extends BaseThingHandler {
                 commandKeyword = "IRCODE";
                 break;
             case CHANNEL_TIVO_KBDCMD:
-                commandKeyword = "KEYBOARD";
+                commandKeyword = KEYBOARD;
                 break;
+            case CHANNEL_TIVO_SEARCH:
+                if (commandParameter.isBlank()) {
+                    logger.debug("Search string was blank");
+                    return;
+                }
+
+                try {
+                    sendCommand("TELEPORT", "SEARCH", currentStatus);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+
+                // Wait 1 second for the SEARCH screen to load
+                scheduler.schedule(() -> {
+                    try {
+                        for (int i = 0; i < commandParameter.length(); i++) {
+                            if (commandParameter.charAt(i) >= 'A' && commandParameter.charAt(i) <= 'Z') {
+                                sendCommand(KEYBOARD, String.valueOf(commandParameter.charAt(i)), currentStatus);
+                            } else if (Character.isDigit(commandParameter.charAt(i))) {
+                                sendCommand(KEYBOARD, "NUM" + commandParameter.charAt(i), currentStatus);
+                            } else if (Character.isSpaceChar(commandParameter.charAt(i))) {
+                                sendCommand(KEYBOARD, "SPACE", currentStatus);
+                            } else {
+                                logger.debug("Search character not supported: {}",
+                                        String.valueOf(commandParameter.charAt(i)));
+                            }
+                            TimeUnit.MILLISECONDS.sleep(100);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }, 1, TimeUnit.SECONDS);
+                return;
+            default:
+                logger.debug("TiVo '{}' ignoring command '{}' for unsupported channel '{}'.", getThing().getUID(),
+                        command, channelUID.getId());
+                return;
         }
         try {
             sendCommand(commandKeyword, commandParameter, currentStatus);
         } catch (InterruptedException e) {
-            // TiVo handler disposed or openHAB exiting, do nothing
+            Thread.currentThread().interrupt();
         }
     }
 
     public void setStatusOffline() {
         lastConnectionStatus = ConnectionStatus.UNKNOWN;
-        this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+        this.updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                 "Power on device or check network configuration/connection.");
     }
 
     private void sendCommand(String commandKeyword, String commandParameter, TivoStatusData currentStatus)
             throws InterruptedException {
-        if (!tivoConnection.isPresent()) {
+        if (tivoConnection.isEmpty()) {
             return;
         }
 
@@ -190,7 +229,7 @@ public class TiVoHandler extends BaseThingHandler {
             try {
                 tivoConnection.get().connTivoDisconnect();
             } catch (InterruptedException e) {
-                // TiVo handler disposed or openHAB exiting, do nothing
+                Thread.currentThread().interrupt();
             }
             tivoConnection = Optional.empty();
         }
@@ -207,7 +246,7 @@ public class TiVoHandler extends BaseThingHandler {
                 try {
                     connection.statusRefresh();
                 } catch (InterruptedException e) {
-                    // TiVo handler disposed or openHAB exiting, do nothing
+                    Thread.currentThread().interrupt();
                 }
             });
         };
@@ -229,7 +268,7 @@ public class TiVoHandler extends BaseThingHandler {
                 try {
                     connection.statusRefresh();
                 } catch (InterruptedException e) {
-                    // TiVo handler disposed or openHAB exiting, do nothing
+                    Thread.currentThread().interrupt();
                 }
             });
         }
@@ -299,8 +338,7 @@ public class TiVoHandler extends BaseThingHandler {
             }
 
         } catch (NumberFormatException e) {
-            logger.warn("TiVo'{}' unable to parse channel integer, value sent was: '{}'", getThing().getUID(),
-                    command.toString());
+            logger.warn("TiVo'{}' unable to parse channel integer, value sent was: '{}'", getThing().getUID(), command);
         }
         return tmpStatus;
     }
@@ -308,7 +346,8 @@ public class TiVoHandler extends BaseThingHandler {
     /**
      * {@link updateTivoStatus} populates the items with the status / channel information.
      *
-     * @param tivoStatusData the {@link TivoStatusData}
+     * @param oldStatusData the {@link TivoStatusData}
+     * @param newStatusData the {@link TivoStatusData}
      */
     public void updateTivoStatus(TivoStatusData oldStatusData, TivoStatusData newStatusData) {
         if (newStatusData.getConnectionStatus() != ConnectionStatus.INIT) {
@@ -333,7 +372,7 @@ public class TiVoHandler extends BaseThingHandler {
                                     newStatusData.getChannelNum() + "." + newStatusData.getSubChannelNum()));
                         }
                     }
-                    updateState(CHANNEL_TIVO_IS_RECORDING, newStatusData.isRecording() ? OnOffType.ON : OnOffType.OFF);
+                    updateState(CHANNEL_TIVO_IS_RECORDING, OnOffType.from(newStatusData.isRecording()));
                 }
 
                 // Now set the pubToUI flag to false, as we have already published this status
@@ -354,7 +393,7 @@ public class TiVoHandler extends BaseThingHandler {
                         updateStatus(ThingStatus.ONLINE);
                         break;
                     case STANDBY:
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
+                        updateStatus(ThingStatusDetail.BRIDGE_OFFLINE,
                                 "STANDBY MODE: Send command TIVO to Remote Control Button (IRCODE) item to wakeup.");
                         break;
                     case UNKNOWN:

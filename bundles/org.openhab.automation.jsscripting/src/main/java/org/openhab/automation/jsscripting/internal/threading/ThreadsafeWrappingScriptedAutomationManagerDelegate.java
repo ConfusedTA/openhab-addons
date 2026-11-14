@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -10,8 +10,9 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-
 package org.openhab.automation.jsscripting.internal.threading;
+
+import java.util.concurrent.locks.Lock;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.automation.Rule;
@@ -31,15 +32,21 @@ import org.openhab.core.automation.type.TriggerType;
  * instance of this class that they are registered with.
  *
  * @author Jonathan Gilbert - Initial contribution
+ * @author Florian Hotze - Pass in lock object for multi-thread synchronization; Switch to {@link Lock} for multi-thread
+ *         synchronization
  */
 @NonNullByDefault
 public class ThreadsafeWrappingScriptedAutomationManagerDelegate {
 
     private ScriptedAutomationManager delegate;
-    private Object lock = new Object();
+    private final Lock lock;
+    private final long lockAcquisitionTimeoutMS;
 
-    public ThreadsafeWrappingScriptedAutomationManagerDelegate(ScriptedAutomationManager delegate) {
+    public ThreadsafeWrappingScriptedAutomationManagerDelegate(ScriptedAutomationManager delegate, Lock lock,
+            long lockAcquisitionTimeoutMS) {
         this.delegate = delegate;
+        this.lock = lock;
+        this.lockAcquisitionTimeoutMS = lockAcquisitionTimeoutMS;
     }
 
     public void removeModuleType(String UID) {
@@ -60,8 +67,8 @@ public class ThreadsafeWrappingScriptedAutomationManagerDelegate {
 
     public Rule addRule(Rule element) {
         // wrap in a threadsafe version, safe per context
-        if (element instanceof SimpleRule) {
-            element = new ThreadsafeSimpleRuleDelegate(lock, (SimpleRule) element);
+        if (element instanceof SimpleRule rule) {
+            element = new ThreadsafeSimpleRuleDelegate(lock, lockAcquisitionTimeoutMS, rule);
         }
 
         return delegate.addRule(element);

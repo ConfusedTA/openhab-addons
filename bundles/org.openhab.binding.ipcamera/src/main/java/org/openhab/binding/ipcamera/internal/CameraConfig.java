@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -27,7 +27,9 @@ public class CameraConfig {
     private int onvifPort;
     private String username = "";
     private String password = "";
+    public boolean useToken = true;
     private int onvifMediaProfile;
+    private int onvifEventServiceType;
     private int pollTime;
     private String ffmpegInput = "";
     private String snapshotUrl = "";
@@ -47,10 +49,19 @@ public class CameraConfig {
     private String snapshotOptions = "";
     private String motionOptions = "";
     private boolean ptzContinuous;
+    private int ptzPanMin = 0;
+    private int ptzPanMax = 6000;
+    private int ptzTiltMin = 150;
+    private int ptzTiltMax = 1400;
+    private int channelStatusInterval = 60;
     private int gifPreroll;
 
     public int getOnvifMediaProfile() {
         return onvifMediaProfile;
+    }
+
+    public int getOnvifEventServiceType() {
+        return onvifEventServiceType;
     }
 
     public String getFfmpegInputOptions() {
@@ -101,8 +112,32 @@ public class CameraConfig {
         return ptzContinuous;
     }
 
+    public int getPtzPanMin() {
+        return ptzPanMin;
+    }
+
+    public int getPtzPanMax() {
+        return ptzPanMax;
+    }
+
+    public int getPtzTiltMin() {
+        return ptzTiltMin;
+    }
+
+    public int getPtzTiltMax() {
+        return ptzTiltMax;
+    }
+
+    public int getChannelStatusInterval() {
+        return channelStatusInterval;
+    }
+
     public String getAlarmInputUrl() {
         return alarmInputUrl;
+    }
+
+    public void setAlarmInputUrl(String url) {
+        alarmInputUrl = url;
     }
 
     public String getCustomAudioAlarmUrl() {

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -44,7 +44,7 @@ import com.google.gson.Gson;
  * The {@link NukiHttpClient} class is responsible for getting data from the Nuki Bridge.
  *
  * @author Markus Katter - Initial contribution
- * @contributer Jan Vybíral - Hashed token authentication
+ * @author Jan Vybíral - Hashed token authentication
  */
 @NonNullByDefault
 public class NukiHttpClient {
@@ -73,8 +73,7 @@ public class NukiHttpClient {
     private NukiBaseResponse handleException(Exception e) {
         if (e instanceof ExecutionException) {
             Throwable cause = e.getCause();
-            if (cause instanceof HttpResponseException) {
-                HttpResponseException causeException = (HttpResponseException) cause;
+            if (cause instanceof HttpResponseException causeException) {
                 int status = causeException.getResponse().getStatus();
                 String reason = causeException.getResponse().getReason();
                 logger.debug("HTTP Response Exception! Status[{}] - Reason[{}]! Check your API Token!", status, reason);
@@ -98,7 +97,7 @@ public class NukiHttpClient {
     }
 
     public BridgeInfoResponse getBridgeInfo() {
-        logger.debug("getBridgeInfo() in thread {}", Thread.currentThread().getId());
+        logger.debug("getBridgeInfo() in thread {}", Thread.currentThread().threadId());
         try {
             ContentResponse contentResponse = executeRequest(linkBuilder.info());
             int status = contentResponse.getStatus();
@@ -119,7 +118,7 @@ public class NukiHttpClient {
     }
 
     public BridgeListResponse getList() {
-        logger.debug("getList() in thread {}", Thread.currentThread().getId());
+        logger.debug("getList() in thread {}", Thread.currentThread().threadId());
         try {
             ContentResponse contentResponse = executeRequest(linkBuilder.list());
             int status = contentResponse.getStatus();
@@ -142,7 +141,7 @@ public class NukiHttpClient {
     }
 
     public BridgeLockStateResponse getBridgeLockState(String nukiId, int deviceType) {
-        logger.debug("getBridgeLockState({}) in thread {}", nukiId, Thread.currentThread().getId());
+        logger.debug("getBridgeLockState({}) in thread {}", nukiId, Thread.currentThread().threadId());
 
         try {
             ContentResponse contentResponse = executeRequest(linkBuilder.lockState(nukiId, deviceType));
@@ -163,8 +162,8 @@ public class NukiHttpClient {
         }
     }
 
-    public BridgeLockActionResponse getSmartLockAction(String nukiId, SmartLockAction action) {
-        return getBridgeLockAction(nukiId, action.getAction(), NukiBindingConstants.DEVICE_SMART_LOCK);
+    public BridgeLockActionResponse getSmartLockAction(String nukiId, SmartLockAction action, int deviceType) {
+        return getBridgeLockAction(nukiId, action.getAction(), deviceType);
     }
 
     public BridgeLockActionResponse getOpenerAction(String nukiId, OpenerAction action) {
@@ -172,7 +171,7 @@ public class NukiHttpClient {
     }
 
     private BridgeLockActionResponse getBridgeLockAction(String nukiId, int lockAction, int deviceType) {
-        logger.debug("getBridgeLockAction({}, {}) in thread {}", nukiId, lockAction, Thread.currentThread().getId());
+        logger.debug("getBridgeLockAction({}, {}) in thread {}", nukiId, lockAction, Thread.currentThread().threadId());
         try {
             ContentResponse contentResponse = executeRequest(linkBuilder.lockAction(nukiId, deviceType, lockAction));
             int status = contentResponse.getStatus();
@@ -193,7 +192,7 @@ public class NukiHttpClient {
     }
 
     public BridgeCallbackAddResponse getBridgeCallbackAdd(String callbackUrl) {
-        logger.debug("getBridgeCallbackAdd({}) in thread {}", callbackUrl, Thread.currentThread().getId());
+        logger.debug("getBridgeCallbackAdd({}) in thread {}", callbackUrl, Thread.currentThread().threadId());
         try {
             ContentResponse contentResponse = executeRequest(linkBuilder.callbackAdd(callbackUrl));
             int status = contentResponse.getStatus();
@@ -215,7 +214,7 @@ public class NukiHttpClient {
     }
 
     public BridgeCallbackListResponse getBridgeCallbackList() {
-        logger.debug("getBridgeCallbackList() in thread {}", Thread.currentThread().getId());
+        logger.debug("getBridgeCallbackList() in thread {}", Thread.currentThread().threadId());
         try {
             ContentResponse contentResponse = executeRequest(linkBuilder.callbackList());
             int status = contentResponse.getStatus();
@@ -237,7 +236,7 @@ public class NukiHttpClient {
     }
 
     public BridgeCallbackRemoveResponse getBridgeCallbackRemove(int id) {
-        logger.debug("getBridgeCallbackRemove({}) in thread {}", id, Thread.currentThread().getId());
+        logger.debug("getBridgeCallbackRemove({}) in thread {}", id, Thread.currentThread().threadId());
         try {
             ContentResponse contentResponse = executeRequest(linkBuilder.callbackRemove(id));
             int status = contentResponse.getStatus();

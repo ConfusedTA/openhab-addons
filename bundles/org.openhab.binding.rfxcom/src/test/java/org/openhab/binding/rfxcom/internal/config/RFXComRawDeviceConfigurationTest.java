@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -60,13 +60,13 @@ public class RFXComRawDeviceConfigurationTest {
 
     @Test
     public void testConfigWithTooLargePulse() {
-        config.openPulses = "100000 200000";
+        config.onPulses = "100000 200000";
         assertThrows(RFXComInvalidParameterException.class, () -> config.parseAndValidate());
     }
 
     @Test
     public void testConfigWithNaN() {
-        config.closedPulses = "abc def";
+        config.offPulses = "abc def";
         assertThrows(RFXComInvalidParameterException.class, () -> config.parseAndValidate());
     }
 

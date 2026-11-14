@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -28,7 +28,6 @@ import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -69,7 +68,7 @@ public class UnitHandler extends AbstractOmnilinkStatusHandler<ExtendedUnitStatu
         if (bridgeHandler != null) {
             updateUnitProperties(bridgeHandler);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                     "Received null bridge while initializing Unit!");
         }
     }
@@ -99,16 +98,16 @@ public class UnitHandler extends AbstractOmnilinkStatusHandler<ExtendedUnitStatu
         logger.debug("handleCommand called for channel: {}, command: {}", channelUID, command);
 
         if (command instanceof RefreshType) {
-            retrieveStatus().ifPresentOrElse(this::updateChannels, () -> updateStatus(ThingStatus.OFFLINE,
-                    ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
+            retrieveStatus().ifPresentOrElse(this::updateChannels,
+                    () -> updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
             return;
         }
 
         switch (channelUID.getId()) {
             case CHANNEL_UNIT_LEVEL:
             case CHANNEL_UNIT_SWITCH:
-                if (command instanceof OnOffType) {
-                    handleOnOff(channelUID, (OnOffType) command);
+                if (command instanceof OnOffType onOffCommand) {
+                    handleOnOff(channelUID, onOffCommand);
                 } else {
                     logger.debug("Invalid command: {}, must be OnOffType", command);
                 }
@@ -119,8 +118,8 @@ public class UnitHandler extends AbstractOmnilinkStatusHandler<ExtendedUnitStatu
             case CHANNEL_UNIT_OFF_FOR_MINUTES:
             case CHANNEL_UNIT_ON_FOR_HOURS:
             case CHANNEL_UNIT_OFF_FOR_HOURS:
-                if (command instanceof DecimalType) {
-                    handleUnitDuration(channelUID, (DecimalType) command);
+                if (command instanceof DecimalType decimalCommand) {
+                    handleUnitDuration(channelUID, decimalCommand);
                 } else {
                     logger.debug("Invalid command: {}, must be DecimalType", command);
                 }
@@ -160,11 +159,9 @@ public class UnitHandler extends AbstractOmnilinkStatusHandler<ExtendedUnitStatu
     public void updateChannels(ExtendedUnitStatus status) {
         logger.debug("updateChannels called for Unit status: {}", status);
         int unitStatus = status.getStatus();
-        int level = 0;
+        int level = Status.UNIT_OFF;
 
-        if (unitStatus == Status.UNIT_OFF) {
-            level = 0;
-        } else if (unitStatus == Status.UNIT_ON) {
+        if (unitStatus == Status.UNIT_ON) {
             level = 100;
         } else if ((unitStatus >= Status.UNIT_SCENE_A) && (unitStatus <= Status.UNIT_SCENE_L)) {
             level = 100;
@@ -206,7 +203,7 @@ public class UnitHandler extends AbstractOmnilinkStatusHandler<ExtendedUnitStatu
     /**
      * Handle a switch press event by triggering the appropriate channel.
      *
-     * @param switchPressEvent
+     * @param switchPressEvent A switch press event to handle.
      */
     public void handleSwitchPressEvent(SwitchPressEvent switchPressEvent) {
         ChannelUID activateChannel = new ChannelUID(getThing().getUID(), TRIGGER_CHANNEL_SWITCH_PRESS_EVENT);

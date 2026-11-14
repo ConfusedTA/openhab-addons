@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,7 +21,6 @@ import org.openhab.binding.alarmdecoder.internal.protocol.EXPMessage;
 import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.UnDefType;
@@ -29,7 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link ZoneHandler} is responsible for handling wired zones (i.e. REL & EXP messages).
+ * The {@link ZoneHandler} is responsible for handling wired zones (i.e. REL &amp; EXP messages).
  *
  * @author Bob Adair - Initial contribution
  * @author Bill Forsyth - Initial contribution
@@ -46,7 +45,7 @@ public class ZoneHandler extends ADThingHandler {
     }
 
     /** Construct zone id from address and channel */
-    public static final String zoneID(int address, int channel) {
+    public static String zoneID(int address, int channel) {
         return String.format("%d-%d", address, channel);
     }
 
@@ -55,7 +54,7 @@ public class ZoneHandler extends ADThingHandler {
         config = getConfigAs(ZoneConfig.class);
 
         if (config.address < 0 || config.channel < 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Invalid address/channel setting");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Invalid address/channel setting");
             return;
         }
         logger.debug("Zone handler initializing for address {} channel {}", config.address, config.channel);

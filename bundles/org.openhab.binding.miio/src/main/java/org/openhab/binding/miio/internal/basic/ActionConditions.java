@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,6 +13,7 @@
 package org.openhab.binding.miio.internal.basic;
 
 import java.awt.Color;
+import java.util.Locale;
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -77,7 +78,7 @@ public class ActionConditions {
      * @return RGB value + brightness as first byte
      */
     private static @Nullable JsonElement hsvToBRGB(@Nullable Command command, @Nullable JsonElement value) {
-        if (command != null && command instanceof HSBType) {
+        if (command instanceof HSBType) {
             HSBType hsb = (HSBType) command;
             Color color = Color.getHSBColor(hsb.getHue().floatValue() / 360, hsb.getSaturation().floatValue() / 100,
                     hsb.getBrightness().floatValue() / 100);
@@ -119,7 +120,7 @@ public class ActionConditions {
      * @return
      */
     private static @Nullable JsonElement hsbOnly(@Nullable Command command, @Nullable JsonElement value) {
-        if (command != null && command instanceof HSBType) {
+        if (command instanceof HSBType) {
             return value;
         }
         return null;
@@ -163,6 +164,19 @@ public class ActionConditions {
         return null;
     }
 
+    /**
+     * Convert a text value to lower case, for devices that only accept lower case values.
+     *
+     * @param value
+     * @return the value in lower case, other values are returned unchanged
+     */
+    private static @Nullable JsonElement lowerCase(@Nullable JsonElement value) {
+        if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+            return new JsonPrimitive(value.getAsString().toLowerCase(Locale.ROOT));
+        }
+        return value;
+    }
+
     public static @Nullable JsonElement executeAction(MiIoDeviceActionCondition condition,
             @Nullable Map<String, Object> deviceVariables, @Nullable JsonElement value, @Nullable Command command) {
         switch (condition.getName().toUpperCase()) {
@@ -178,6 +192,8 @@ public class ActionConditions {
                 return hsbOnly(command, value);
             case "MATCHVALUE":
                 return matchValue(condition, command, value);
+            case "LOWERCASE":
+                return lowerCase(value);
             default:
                 LOGGER.debug("Condition {} not found. Returning '{}'", condition,
                         value != null ? value.toString() : "");

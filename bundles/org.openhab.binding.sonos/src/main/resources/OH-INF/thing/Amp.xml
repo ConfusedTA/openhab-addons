@@ -6,10 +6,10 @@
 
 	<!-- Amplifier Amp Thing Type -->
 	<thing-type id="Amp" listed="false">
-		<!-- Label without column (:) because of device pairing name restrictions -->
+		<!-- Label without colon (:) because of device pairing name restrictions -->
 		<label>Amp</label>
 		<description>Represents SONOS Amp amplifier</description>
-
+		<semantic-equipment-tag>AudioVisual</semantic-equipment-tag>
 		<channels>
 			<channel id="add" typeId="add"/>
 			<channel id="alarm" typeId="alarm"/>
@@ -27,6 +27,7 @@
 			<channel id="repeat" typeId="repeat"/>
 			<channel id="favorite" typeId="favorite"/>
 			<channel id="led" typeId="led"/>
+			<channel id="buttonlock" typeId="buttonlock"/>
 			<channel id="localcoordinator" typeId="localcoordinator"/>
 			<channel id="loudness" typeId="loudness"/>
 			<channel id="mute" typeId="system.mute"/>
@@ -69,6 +70,7 @@
 		<properties>
 			<property name="vendor">SONOS</property>
 			<property name="modelId">Amp</property>
+			<property name="thingTypeVersion">1</property>
 		</properties>
 
 		<representation-property>udn</representation-property>

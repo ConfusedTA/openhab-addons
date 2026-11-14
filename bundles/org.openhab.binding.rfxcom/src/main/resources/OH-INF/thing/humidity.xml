@@ -14,6 +14,7 @@
 
 		<label>RFXCOM Humidity Sensor</label>
 		<description>A Humidity device.</description>
+		<semantic-equipment-tag>HumiditySensor</semantic-equipment-tag>
 
 		<channels>
 			<channel id="humidity" typeId="humidity"/>
@@ -34,6 +35,7 @@
 				<options>
 					<option value="HUM1">LaCrosse TX3</option>
 					<option value="HUM2">LaCrosse WS2300</option>
+					<option value="HUM3">Inovalley S80 plant humidity sensor</option>
 				</options>
 			</parameter>
 		</config-description>

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -35,11 +35,11 @@ import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
-import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.util.ColorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,6 +80,11 @@ public abstract class YeelightHandlerBase extends BaseThingHandler
         DeviceManager.getInstance().startDiscovery(15 * 1000);
     }
 
+    @Override
+    public void dispose() {
+        mDevice.disconnect();
+    }
+
     private DeviceType getDeviceModel(ThingTypeUID typeUID) {
         if (typeUID.equals(THING_TYPE_CEILING)) {
             return DeviceType.ceiling;
@@ -113,7 +118,7 @@ public abstract class YeelightHandlerBase extends BaseThingHandler
     public void updateStatusHelper(ConnectState connectState) {
         switch (connectState) {
             case DISCONNECTED:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Device is offline!");
+                updateStatus(ThingStatus.OFFLINE, "Device is offline!");
                 if (mDevice.isAutoConnect()) {
                     DeviceManager.sInstance.startDiscovery(5 * 1000);
                     logger.debug("Thing OFFLINE. Initiated discovery");
@@ -175,46 +180,44 @@ public abstract class YeelightHandlerBase extends BaseThingHandler
         }
         switch (channelUID.getId()) {
             case CHANNEL_BRIGHTNESS:
-                if (command instanceof PercentType) {
-                    handlePercentMessage((PercentType) command);
-                } else if (command instanceof OnOffType) {
-                    handleOnOffCommand((OnOffType) command);
-                } else if (command instanceof IncreaseDecreaseType) {
-                    handleIncreaseDecreaseBrightnessCommand((IncreaseDecreaseType) command);
+                if (command instanceof PercentType percentCommand) {
+                    handlePercentMessage(percentCommand);
+                } else if (command instanceof OnOffType onOffCommand) {
+                    handleOnOffCommand(onOffCommand);
+                } else if (command instanceof IncreaseDecreaseType increaseDecreaseCommand) {
+                    handleIncreaseDecreaseBrightnessCommand(increaseDecreaseCommand);
                 }
                 break;
             case CHANNEL_COLOR:
-                if (command instanceof HSBType) {
-                    HSBType hsbCommand = (HSBType) command;
+                if (command instanceof HSBType hsbCommand) {
                     if (hsbCommand.getBrightness().intValue() == 0) {
                         handleOnOffCommand(OnOffType.OFF);
                     } else {
                         handleHSBCommand(hsbCommand);
                     }
-                } else if (command instanceof PercentType) {
-                    handlePercentMessage((PercentType) command);
-                } else if (command instanceof OnOffType) {
-                    handleOnOffCommand((OnOffType) command);
-                } else if (command instanceof IncreaseDecreaseType) {
-                    handleIncreaseDecreaseBrightnessCommand((IncreaseDecreaseType) command);
+                } else if (command instanceof PercentType percentCommand) {
+                    handlePercentMessage(percentCommand);
+                } else if (command instanceof OnOffType onOffCommand) {
+                    handleOnOffCommand(onOffCommand);
+                } else if (command instanceof IncreaseDecreaseType increaseDecreaseCommand) {
+                    handleIncreaseDecreaseBrightnessCommand(increaseDecreaseCommand);
                 }
                 break;
             case CHANNEL_COLOR_TEMPERATURE:
-                if (command instanceof PercentType) {
-                    handleColorTemperatureCommand((PercentType) command);
-                } else if (command instanceof IncreaseDecreaseType) {
-                    handleIncreaseDecreaseBrightnessCommand((IncreaseDecreaseType) command);
+                if (command instanceof PercentType percentCommand) {
+                    handleColorTemperatureCommand(percentCommand);
+                } else if (command instanceof IncreaseDecreaseType increaseDecreaseCommand) {
+                    handleIncreaseDecreaseBrightnessCommand(increaseDecreaseCommand);
                 }
                 break;
 
             case CHANNEL_BACKGROUND_COLOR:
-                if (command instanceof HSBType) {
-                    HSBType hsbCommand = (HSBType) command;
+                if (command instanceof HSBType hsbCommand) {
                     handleBackgroundHSBCommand(hsbCommand);
-                } else if (command instanceof PercentType) {
-                    handleBackgroundBrightnessPercentMessage((PercentType) command);
-                } else if (command instanceof OnOffType) {
-                    handleBackgroundOnOffCommand((OnOffType) command);
+                } else if (command instanceof PercentType percentCommand) {
+                    handleBackgroundBrightnessPercentMessage(percentCommand);
+                } else if (command instanceof OnOffType onOffCommand) {
+                    handleBackgroundOnOffCommand(onOffCommand);
                 }
                 break;
             case CHANNEL_NIGHTLIGHT:
@@ -285,7 +288,7 @@ public abstract class YeelightHandlerBase extends BaseThingHandler
 
     void handleHSBCommand(HSBType color) {
         DeviceAction cAction = DeviceAction.color;
-        cAction.putValue(color.getRGB() & 0xFFFFFF);
+        cAction.putValue(ColorUtil.hsbTosRgb(color) & 0xFFFFFF);
         cAction.putDuration(getDuration());
         DeviceManager.getInstance().doAction(deviceId, cAction);
     }

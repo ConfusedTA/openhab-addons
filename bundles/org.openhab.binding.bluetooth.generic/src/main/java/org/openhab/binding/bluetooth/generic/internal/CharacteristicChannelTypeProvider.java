@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,17 +14,19 @@ package org.openhab.binding.bluetooth.generic.internal;
 
 import java.math.BigDecimal;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.bluetooth.BluetoothBindingConstants;
+import org.openhab.bluetooth.gattparser.BluetoothGattParser;
+import org.openhab.bluetooth.gattparser.BluetoothGattParserFactory;
+import org.openhab.bluetooth.gattparser.spec.Enumerations;
+import org.openhab.bluetooth.gattparser.spec.Field;
 import org.openhab.core.thing.type.ChannelType;
 import org.openhab.core.thing.type.ChannelTypeBuilder;
 import org.openhab.core.thing.type.ChannelTypeProvider;
@@ -34,15 +36,11 @@ import org.openhab.core.types.StateOption;
 import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.sputnikdev.bluetooth.gattparser.BluetoothGattParser;
-import org.sputnikdev.bluetooth.gattparser.BluetoothGattParserFactory;
-import org.sputnikdev.bluetooth.gattparser.spec.Enumerations;
-import org.sputnikdev.bluetooth.gattparser.spec.Field;
 
 /**
  * {@link CharacteristicChannelTypeProvider} that provides channel types for dynamically discovered characteristics.
  *
- * @author Vlad Kolotov - Original author
+ * @author Vlad Kolotov - Initial contribution
  * @author Connor Petty - Modified for openHAB use.
  */
 @NonNullByDefault
@@ -74,8 +72,7 @@ public class CharacteristicChannelTypeProvider implements ChannelTypeProvider {
 
                 if (gattParser.isKnownCharacteristic(characteristicUUID)) {
                     List<Field> fields = gattParser.getFields(characteristicUUID).stream()
-                            .filter(field -> BluetoothChannelUtils.encodeFieldID(field).equals(fieldName))
-                            .collect(Collectors.toList());
+                            .filter(field -> BluetoothChannelUtils.encodeFieldID(field).equals(fieldName)).toList();
 
                     if (fields.size() > 1) {
                         logger.warn("Multiple fields with the same name found: {} / {}. Skipping them.",
@@ -108,10 +105,7 @@ public class CharacteristicChannelTypeProvider implements ChannelTypeProvider {
         if (channelID.charAt(30) != '-') {
             return false;
         }
-        if (channelID.charAt(67) != '-') {
-            return false;
-        }
-        return true;
+        return channelID.charAt(67) == '-';
     }
 
     public ChannelTypeUID registerChannelType(String characteristicUUID, boolean advanced, boolean readOnly,
@@ -135,8 +129,8 @@ public class CharacteristicChannelTypeProvider implements ChannelTypeProvider {
             throw new IllegalStateException("Unknown field format type: " + field.getUnit());
         }
 
-        if (itemType.equals("Switch")) {
-            options = Collections.emptyList();
+        if ("Switch".equals(itemType)) {
+            options = List.of();
         }
 
         StateDescriptionFragmentBuilder stateDescBuilder = StateDescriptionFragmentBuilder.create()//
@@ -175,7 +169,7 @@ public class CharacteristicChannelTypeProvider implements ChannelTypeProvider {
                 .stream()//
                 .flatMap(List::stream)
                 .map(enumeration -> new StateOption(String.valueOf(enumeration.getKey()), enumeration.getValue()))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private static @Nullable BigDecimal toBigDecimal(@Nullable Double value) {

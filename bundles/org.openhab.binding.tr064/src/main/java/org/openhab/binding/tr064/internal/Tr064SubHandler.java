@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -37,6 +37,7 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandler;
+import org.openhab.core.thing.binding.ThingHandlerCallback;
 import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -77,7 +78,11 @@ public class Tr064SubHandler extends BaseThingHandler {
     }
 
     @Override
-    @SuppressWarnings("null")
+    public <T> T getConfigAs(Class<T> configurationClass) {
+        return super.getConfigAs(configurationClass);
+    }
+
+    @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         Tr064ChannelConfig channelConfig = channels.get(channelUID);
         if (channelConfig == null) {
@@ -86,6 +91,7 @@ public class Tr064SubHandler extends BaseThingHandler {
         }
 
         if (command instanceof RefreshType) {
+            final SOAPConnector soapConnector = this.soapConnector;
             State state = stateCache.putIfAbsentAndGet(channelUID, () -> soapConnector == null ? UnDefType.UNDEF
                     : soapConnector.getChannelStateFromDevice(channelConfig, channels, stateCache));
             if (state != null) {
@@ -99,6 +105,7 @@ public class Tr064SubHandler extends BaseThingHandler {
             return;
         }
         scheduler.execute(() -> {
+            final SOAPConnector soapConnector = this.soapConnector;
             if (soapConnector == null) {
                 logger.warn("Could not send command because connector not available");
             } else {
@@ -111,8 +118,7 @@ public class Tr064SubHandler extends BaseThingHandler {
     public void initialize() {
         config = getConfigAs(Tr064SubConfiguration.class);
         if (!config.isValid()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "One or more mandatory configuration fields are empty");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "One or more mandatory configuration fields are empty");
             return;
         }
 
@@ -121,7 +127,7 @@ public class Tr064SubHandler extends BaseThingHandler {
             updateStatus(ThingStatus.UNKNOWN);
             connectFuture = scheduler.scheduleWithFixedDelay(this::internalInitialize, 0, 30, TimeUnit.SECONDS);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -137,16 +143,19 @@ public class Tr064SubHandler extends BaseThingHandler {
         }
         final SCPDUtil scpdUtil = bridgeHandler.getSCPDUtil();
         if (scpdUtil == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "Could not get device definitions");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Could not get device definitions");
             return;
         }
-
+        final ThingHandlerCallback callback = getCallback();
+        if (callback == null) {
+            updateStatus(ThingStatus.OFFLINE, "Could not get callback");
+            return;
+        }
         if (checkProperties(scpdUtil)) {
             // properties set, check channels
             ThingBuilder thingBuilder = editThing();
             thingBuilder.withoutChannels(thing.getChannels());
-            Util.checkAvailableChannels(thing, thingBuilder, scpdUtil, config.uuid, deviceType, channels);
+            Util.checkAvailableChannels(thing, callback, thingBuilder, scpdUtil, config.uuid, deviceType, channels);
             updateThing(thingBuilder.build());
 
             // remove connect scheduler
@@ -155,7 +164,7 @@ public class Tr064SubHandler extends BaseThingHandler {
 
             isInitialized = true;
             installPolling();
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+            updateStatus(ThingStatus.ONLINE);
         }
     }
 
@@ -210,13 +219,21 @@ public class Tr064SubHandler extends BaseThingHandler {
             }
             this.deviceType = deviceType;
 
+            if (THING_TYPE_SUBDEVICE_LAN.equals(thing.getThingTypeUID()) && !DEVICE_TYPE_LAN.equals(deviceType)) {
+                // the LAN channels are only available on a LAN device, so a wrong uuid would silently yield a Thing
+                // without them
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "uuid " + config.uuid
+                        + " belongs to a device of type " + deviceType + ", expected " + DEVICE_TYPE_LAN);
+                return false;
+            }
+
             Map<String, String> properties = editProperties();
             properties.put("deviceType", deviceType);
             updateProperties(properties);
 
             return true;
         } catch (SCPDException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                     "Failed to update device properties: " + e.getMessage());
 
             return false;
@@ -226,7 +243,7 @@ public class Tr064SubHandler extends BaseThingHandler {
     @Override
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
         if (!bridgeStatusInfo.getStatus().equals(ThingStatus.ONLINE)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             removeConnectScheduler();
         } else {
             if (isInitialized) {

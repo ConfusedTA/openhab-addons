@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,7 +16,6 @@ import static org.openhab.binding.avmfritz.internal.AVMFritzBindingConstants.*;
 import static org.openhab.core.thing.Thing.PROPERTY_VENDOR;
 
 import java.util.Dictionary;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -25,8 +24,10 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.jupnp.model.meta.DeviceDetails;
 import org.jupnp.model.meta.ModelDetails;
 import org.jupnp.model.meta.RemoteDevice;
+import org.openhab.core.config.core.ConfigParser;
 import org.openhab.core.config.discovery.DiscoveryResult;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
+import org.openhab.core.config.discovery.DiscoveryService;
 import org.openhab.core.config.discovery.upnp.UpnpDiscoveryParticipant;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
@@ -39,7 +40,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The {@link AVMFritzUpnpDiscoveryParticipant} is responsible for discovering new and removed FRITZ!Box devices. It
- * uses the central {@link UpnpDiscoveryService}.
+ * uses the central {@link org.openhab.core.config.discovery.upnp.internal.UpnpDiscoveryService}.
  *
  * @author Robert Bausdorf - Initial contribution
  * @author Christoph Weitkamp - Added support for groups
@@ -51,7 +52,7 @@ public class AVMFritzUpnpDiscoveryParticipant implements UpnpDiscoveryParticipan
 
     private final Logger logger = LoggerFactory.getLogger(AVMFritzUpnpDiscoveryParticipant.class);
 
-    private boolean isAutoDiscoveryEnabled = true;
+    private volatile boolean isAutoDiscoveryEnabled = true;
 
     @Activate
     protected void activate(ComponentContext componentContext) {
@@ -65,10 +66,9 @@ public class AVMFritzUpnpDiscoveryParticipant implements UpnpDiscoveryParticipan
 
     private void activateOrModifyService(ComponentContext componentContext) {
         Dictionary<String, @Nullable Object> properties = componentContext.getProperties();
-        String autoDiscoveryPropertyValue = (String) properties.get("background");
-        if (autoDiscoveryPropertyValue != null && autoDiscoveryPropertyValue.length() != 0) {
-            isAutoDiscoveryEnabled = Boolean.valueOf(autoDiscoveryPropertyValue);
-        }
+        isAutoDiscoveryEnabled = ConfigParser.valueAsOrElse(
+                properties.get(DiscoveryService.CONFIG_PROPERTY_BACKGROUND_DISCOVERY), Boolean.class,
+                isAutoDiscoveryEnabled);
     }
 
     @Override
@@ -83,16 +83,11 @@ public class AVMFritzUpnpDiscoveryParticipant implements UpnpDiscoveryParticipan
             if (uid != null) {
                 logger.debug("discovered: {} ({}) at {}", device.getDisplayString(),
                         device.getDetails().getFriendlyName(), device.getIdentity().getDescriptorURL().getHost());
-
-                Map<String, Object> properties = new HashMap<>();
-                properties.put(CONFIG_IP_ADDRESS, device.getIdentity().getDescriptorURL().getHost());
-                properties.put(PROPERTY_VENDOR, device.getDetails().getManufacturerDetails().getManufacturer());
-
-                DiscoveryResult result = DiscoveryResultBuilder.create(uid).withProperties(properties)
+                return DiscoveryResultBuilder.create(uid)
+                        .withProperties(Map.of(CONFIG_IP_ADDRESS, device.getIdentity().getDescriptorURL().getHost(),
+                                PROPERTY_VENDOR, device.getDetails().getManufacturerDetails().getManufacturer()))
                         .withLabel(device.getDetails().getFriendlyName()).withRepresentationProperty(CONFIG_IP_ADDRESS)
                         .build();
-
-                return result;
             }
         }
         return null;
@@ -114,9 +109,9 @@ public class AVMFritzUpnpDiscoveryParticipant implements UpnpDiscoveryParticipan
                         if (modelName.startsWith(BOX_MODEL_NAME)) {
                             logger.debug("discovered on {}", device.getIdentity().getDiscoveredOnLocalAddress());
                             return new ThingUID(BRIDGE_THING_TYPE, id);
-                        } else if (modelName.startsWith(POWERLINE_MODEL_NAME)) {
+                        } else if (POWERLINE546E_MODEL_NAME.equals(modelName)) {
                             logger.debug("discovered on {}", device.getIdentity().getDiscoveredOnLocalAddress());
-                            return new ThingUID(PL546E_STANDALONE_THING_TYPE, id);
+                            return new ThingUID(POWERLINE546E_STANDALONE_THING_TYPE, id);
                         }
                     }
                 }

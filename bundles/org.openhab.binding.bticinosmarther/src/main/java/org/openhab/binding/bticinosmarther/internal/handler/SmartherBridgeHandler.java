@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,9 +22,9 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -121,7 +121,7 @@ public class SmartherBridgeHandler extends BaseBridgeHandler
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(SmartherModuleDiscoveryService.class);
+        return Set.of(SmartherModuleDiscoveryService.class);
     }
 
     // ===========================================================================
@@ -136,17 +136,17 @@ public class SmartherBridgeHandler extends BaseBridgeHandler
 
         this.config = getConfigAs(SmartherBridgeConfiguration.class);
         if (StringUtil.isBlank(config.getSubscriptionKey())) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The 'Subscription Key' property is not set or empty. If you have an older thing please recreate it.");
             return;
         }
         if (StringUtil.isBlank(config.getClientId())) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The 'Client Id' property is not set or empty. If you have an older thing please recreate it.");
             return;
         }
         if (StringUtil.isBlank(config.getClientSecret())) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The 'Client Secret' property is not set or empty. If you have an older thing please recreate it.");
             return;
         }
@@ -208,8 +208,9 @@ public class SmartherBridgeHandler extends BaseBridgeHandler
 
     @Override
     public void handleRemoval() {
-        super.handleRemoval();
         stopPoll(true);
+        oAuthFactory.deleteServiceAndAccessToken(thing.getUID().getAsString());
+        super.handleRemoval();
     }
 
     @Override
@@ -357,12 +358,12 @@ public class SmartherBridgeHandler extends BaseBridgeHandler
             return true;
         } catch (SmartherAuthorizationException e) {
             logger.warn("Bridge[{}] Authorization error during polling: {}", thing.getUID(), e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
         } catch (RuntimeException e) {
             // All other exceptions apart from Authorization and Gateway issues
             logger.warn("Bridge[{}] Unexpected error during polling, please report if this keeps occurring: ",
                     thing.getUID(), e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, e.getMessage());
         }
         schedulePoll();
         return false;
@@ -472,7 +473,7 @@ public class SmartherBridgeHandler extends BaseBridgeHandler
     public List<Location> getLocations() {
         final ExpiringCache<List<Location>> localLocationCache = this.locationCache;
         final List<Location> locations = (localLocationCache != null) ? localLocationCache.getValue() : null;
-        return (locations != null) ? locations : Collections.emptyList();
+        return (locations != null) ? locations : List.of();
     }
 
     @Override
@@ -581,7 +582,7 @@ public class SmartherBridgeHandler extends BaseBridgeHandler
         } catch (OAuthResponseException e) {
             throw new SmartherAuthorizationException(e.toString(), e);
         } catch (OAuthException | IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             throw new SmartherGatewayException(e.getMessage(), e);
         }
     }

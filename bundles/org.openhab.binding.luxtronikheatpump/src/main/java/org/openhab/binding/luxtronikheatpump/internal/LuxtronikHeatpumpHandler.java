@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import javax.measure.Unit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.luxtronikheatpump.internal.enums.HeatpumpChannel;
 import org.openhab.binding.luxtronikheatpump.internal.enums.HeatpumpCoolingOperationMode;
 import org.openhab.binding.luxtronikheatpump.internal.enums.HeatpumpOperationMode;
@@ -70,17 +71,22 @@ public class LuxtronikHeatpumpHandler extends BaseThingHandler {
     }
 
     @Override
+    public <T> T getConfigAs(Class<T> configurationClass) {
+        return super.getConfigAs(configurationClass);
+    }
+
+    @Override
     public void updateState(String channelID, State state) {
         super.updateState(channelID, state);
     }
 
     @Override
-    public void updateProperty(String name, String value) {
+    public void updateProperty(String name, @Nullable String value) {
         super.updateProperty(name, value);
     }
 
     public void setStatusConnectionError() {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                 "couldn't establish network connection [host '" + config.ipAddress + "']");
     }
 
@@ -111,9 +117,7 @@ public class LuxtronikHeatpumpHandler extends BaseThingHandler {
             return;
         }
 
-        if (command instanceof QuantityType) {
-            QuantityType<?> value = (QuantityType<?>) command;
-
+        if (command instanceof QuantityType value) {
             Unit<?> unit = channel.getUnit();
             if (unit != null) {
                 value = value.toUnit(unit);
@@ -122,8 +126,8 @@ public class LuxtronikHeatpumpHandler extends BaseThingHandler {
             command = new DecimalType(value.floatValue());
         }
 
-        if (command instanceof OnOffType) {
-            command = ((OnOffType) command) == OnOffType.ON ? new DecimalType(1) : DecimalType.ZERO;
+        if (command instanceof OnOffType onOffCommand) {
+            command = onOffCommand == OnOffType.ON ? new DecimalType(1) : DecimalType.ZERO;
         }
 
         if (!(command instanceof DecimalType)) {
@@ -160,6 +164,7 @@ public class LuxtronikHeatpumpHandler extends BaseThingHandler {
                 break;
             case CHANNEL_EINST_WK_AKT:
             case CHANNEL_EINST_BWS_AKT:
+            case CHANNEL_EINST_HZFTRL_AKT:
             case CHANNEL_EINST_KUCFTL_AKT:
             case CHANNEL_SOLLWERT_KUCFTL_AKT:
             case CHANNEL_SOLL_BWS_AKT:
@@ -205,8 +210,7 @@ public class LuxtronikHeatpumpHandler extends BaseThingHandler {
         config = getConfigAs(LuxtronikHeatpumpConfiguration.class);
 
         if (!config.isValid()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "At least one mandatory configuration field is empty");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "At least one mandatory configuration field is empty");
             return;
         }
 
@@ -277,8 +281,12 @@ public class LuxtronikHeatpumpHandler extends BaseThingHandler {
             Integer channelId = channel.getChannelId();
             int length = channel.isWritable() ? heatpumpParams.length : heatpumpValues.length;
             ChannelUID channelUID = new ChannelUID(thing.getUID(), channel.getCommand());
-            ChannelTypeUID channelTypeUID = new ChannelTypeUID(LuxtronikHeatpumpBindingConstants.BINDING_ID,
-                    channel.getCommand());
+            ChannelTypeUID channelTypeUID;
+            if (channel.getCommand().matches("^channel[0-9]+$")) {
+                channelTypeUID = new ChannelTypeUID(LuxtronikHeatpumpBindingConstants.BINDING_ID, "unknown");
+            } else {
+                channelTypeUID = new ChannelTypeUID(LuxtronikHeatpumpBindingConstants.BINDING_ID, channel.getCommand());
+            }
             if ((channelId != null && length <= channelId)
                     || (config.showAllChannels == Boolean.FALSE && !channel.isVisible(visibilityValues))) {
                 logger.debug("Hiding channel {}", channel.getCommand());

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,7 +21,6 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.types.Command;
@@ -63,8 +62,6 @@ public abstract class AbstractBridgeHandler extends BaseBridgeHandler {
 
     /**
      * Creates a connection and other supportive objects.
-     *
-     * @param addr
      */
     protected abstract void startConnectAndKeepAlive();
 
@@ -81,8 +78,7 @@ public abstract class AbstractBridgeHandler extends BaseBridgeHandler {
             try {
                 address = InetAddress.getByName(config.host);
             } catch (UnknownHostException ignored) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "Address set, but is invalid!");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Address set, but is invalid!");
                 return;
             }
         }

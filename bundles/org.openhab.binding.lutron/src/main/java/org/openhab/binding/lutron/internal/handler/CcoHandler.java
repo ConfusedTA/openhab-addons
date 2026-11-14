@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -37,9 +37,9 @@ import org.slf4j.LoggerFactory;
  * Handler responsible for communicating with Lutron contact closure outputs (CCOs).
  * e.g. VCRX CCOs and CCO RF module
  *
- * Note: For a RA2 Pulsed CCO, querying the output state with ?OUTPUT,<id>,1 is meaningless and will always
- * return 100 (on). Also, the main repeater will not report ~OUTPUT commands for a pulsed CCO regardless of
- * the #MONITORING setting. So this binding supports sending pulses ONLY.
+ * Note: For a RA2 Pulsed CCO, querying the output state with {@code ?OUTPUT,<id>,1} is meaningless and will
+ * always return 100 (on). Also, the main repeater will not report ~OUTPUT commands for a pulsed CCO regardless
+ * of the #MONITORING setting. So this binding supports sending pulses ONLY.
  *
  * @author Bob Adair - Initial contribution
  *
@@ -72,7 +72,7 @@ public class CcoHandler extends LutronHandler {
         Number id = (Number) getThing().getConfiguration().get(INTEGRATION_ID);
 
         if (id == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId");
             return;
         }
         integrationId = id.intValue();
@@ -82,10 +82,10 @@ public class CcoHandler extends LutronHandler {
         if (outputType == null) {
             String oType = (String) getThing().getConfiguration().get(CCO_TYPE);
 
-            if (oType == null || oType == CCO_TYPE_PULSED) {
+            if (oType == null || CCO_TYPE_PULSED.equals(oType)) {
                 logger.debug("Setting CCO type Pulsed for device {}.", integrationId);
                 outputType = CcoOutputType.PULSED;
-            } else if (oType == CCO_TYPE_MAINTAINED) {
+            } else if (CCO_TYPE_MAINTAINED.equals(oType)) {
                 logger.debug("Setting CCO type Maintained for device {}.", integrationId);
                 outputType = CcoOutputType.MAINTAINED;
             } else {
@@ -96,13 +96,13 @@ public class CcoHandler extends LutronHandler {
 
         // If output type pulsed, determine pulse length
         if (outputType == CcoOutputType.PULSED) {
-            Number defaultPulse = (Number) getThing().getConfiguration().get(DEFAULT_PULSE);
+            Number configuredPulse = (Number) getThing().getConfiguration().get(DEFAULT_PULSE);
 
-            if (defaultPulse != null) {
-                double dp = defaultPulse.doubleValue();
+            if (configuredPulse != null) {
+                double dp = configuredPulse.doubleValue();
                 if (dp >= 0 && dp <= 99.0) {
-                    defaultPulse = dp;
-                    logger.debug("Pulse length set to {} seconds for device {}.", defaultPulse, integrationId);
+                    this.defaultPulse = dp;
+                    logger.debug("Pulse length set to {} seconds for device {}.", this.defaultPulse, integrationId);
                 } else {
                     logger.warn("Invalid pulse length value set. Using default for device {}.", integrationId);
                 }
@@ -118,13 +118,13 @@ public class CcoHandler extends LutronHandler {
         logger.debug("Initializing device state for CCO {}", integrationId);
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
         } else if (bridge.getStatus() == ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Awaiting initial response");
+            updateStatus(ThingStatus.UNKNOWN, "Awaiting initial response");
             queryOutput(TargetType.CCO, OutputCommand.ACTION_STATE);
             // handleUpdate() will set thing status to online when response arrives
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -191,7 +191,7 @@ public class CcoHandler extends LutronHandler {
                 }
                 try {
                     BigDecimal state = new BigDecimal(parameters[1]);
-                    updateState(CHANNEL_SWITCH, state.compareTo(BigDecimal.ZERO) == 0 ? OnOffType.OFF : OnOffType.ON);
+                    updateState(CHANNEL_SWITCH, OnOffType.from(state.compareTo(BigDecimal.ZERO) != 0));
                 } catch (NumberFormatException e) {
                     logger.warn("Unable to parse update {} {} from CCO {}", type, Arrays.asList(parameters),
                             integrationId);

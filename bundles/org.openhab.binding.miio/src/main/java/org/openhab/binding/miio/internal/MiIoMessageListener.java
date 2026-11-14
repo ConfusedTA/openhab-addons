@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -32,10 +32,12 @@ public interface MiIoMessageListener {
     void onMessageReceived(MiIoSendCommand cmd);
 
     /**
-     * Callback method for the {@link MiIoMessageListener}
-     *
-     * @param status Status online/offline
-     * @param statusDetail Status details text
+     * @param statusDetail detail from which the Thing status is derived
      */
-    void onStatusUpdated(ThingStatus status, ThingStatusDetail statusDetail);
+    void onStatusUpdated(ThingStatusDetail statusDetail);
+
+    /**
+     * @param status Thing status to report without a detail
+     */
+    void onStatusUpdated(ThingStatus status);
 }

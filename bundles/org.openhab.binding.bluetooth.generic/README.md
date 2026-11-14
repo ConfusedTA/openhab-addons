@@ -15,6 +15,17 @@ Only a single thing type is added by this binding:
 As any other Bluetooth device, generic bluetooth devices are discovered automatically by the corresponding bridge.
 Generic bluetooth devices will be discovered for any connectable bluetooth device that doesn't match another bluetooth binding.
 
+## Binding Configuration
+
+| Parameter            | Default           |
+|----------------------|-------------------|
+| gattExtensionsFolder | `gatt-extensions` |
+
+The optional `gattExtensionsFolder` contains custom GATT specification XML files for non-standard services and characteristics, so they are exposed as typed channels instead of raw hexadecimal `Unknown` channels.
+It must contain `characteristic` and/or `service` sub-folders with XML files in the Bluetooth SIG GATT XML format.
+A relative path is resolved against the openHAB configuration folder; an absolute path is used as-is.
+See the [bluetooth-gatt-parser](https://github.com/sputnikdev/bluetooth-gatt-parser) project for examples.
+
 ## Thing Configuration
 
 | Parameter       | Required | Default | Description                                                         |
@@ -25,7 +36,7 @@ Generic bluetooth devices will be discovered for any connectable bluetooth devic
 ## Channels
 
 Channels will be dynamically created based on types of characteristics the device supports.
-This binding contains a mostly complete database of standardized GATT services and characteristics 
+This binding contains a mostly complete database of standardized GATT services and characteristics
 that is used to map characteristics to one or multiple channels.
 
 Characteristics not in the database will be mapped to a single `String` channel labeled `Unknown`.

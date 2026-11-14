@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,11 +18,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Hashtable;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.enocean.internal.config.EnOceanBaseConfig;
 import org.openhab.binding.enocean.internal.eep.EEP;
 import org.openhab.binding.enocean.internal.eep.EEPFactory;
@@ -30,6 +33,7 @@ import org.openhab.binding.enocean.internal.eep.EEPType;
 import org.openhab.binding.enocean.internal.messages.BasePacket;
 import org.openhab.binding.enocean.internal.messages.ERP1Message;
 import org.openhab.binding.enocean.internal.messages.ERP1Message.RORG;
+import org.openhab.binding.enocean.internal.statemachine.STMStateMachine;
 import org.openhab.binding.enocean.internal.transceiver.PacketListener;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.thing.Channel;
@@ -48,19 +52,22 @@ import org.openhab.core.util.HexUtils;
  * @author Daniel Weber - Initial contribution
  *         This class defines base functionality for receiving eep messages.
  */
+@NonNullByDefault
 public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements PacketListener {
 
     // List of all thing types which support receiving of eep messages
     public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_ROOMOPERATINGPANEL,
             THING_TYPE_MECHANICALHANDLE, THING_TYPE_CONTACT, THING_TYPE_TEMPERATURESENSOR,
-            THING_TYPE_TEMPERATUREHUMIDITYSENSOR, THING_TYPE_ROCKERSWITCH, THING_TYPE_OCCUPANCYSENSOR,
-            THING_TYPE_LIGHTTEMPERATUREOCCUPANCYSENSOR, THING_TYPE_LIGHTSENSOR, THING_TYPE_PUSHBUTTON,
-            THING_TYPE_AUTOMATEDMETERSENSOR, THING_TYPE_ENVIRONMENTALSENSOR, THING_TYPE_MULTFUNCTIONSMOKEDETECTOR,
-            THING_TYPE_WINDOWSASHHANDLESENSOR);
+            THING_TYPE_TEMPERATUREHUMIDITYSENSOR, THING_TYPE_GASSENSOR, THING_TYPE_ROCKERSWITCH,
+            THING_TYPE_OCCUPANCYSENSOR, THING_TYPE_LIGHTTEMPERATUREOCCUPANCYSENSOR, THING_TYPE_LIGHTSENSOR,
+            THING_TYPE_PUSHBUTTON, THING_TYPE_AUTOMATEDMETERSENSOR, THING_TYPE_ENVIRONMENTALSENSOR,
+            THING_TYPE_MULTFUNCTIONSMOKEDETECTOR, THING_TYPE_WINDOWSASHHANDLESENSOR);
 
     protected final Hashtable<RORG, EEPType> receivingEEPTypes = new Hashtable<>();
 
-    protected ScheduledFuture<?> responseFuture = null;
+    protected @Nullable ScheduledFuture<?> responseFuture = null;
+
+    protected @Nullable STMStateMachine<?, ?> stm = null;
 
     public EnOceanBaseSensorHandler(Thing thing, ItemChannelLinkRegistry itemChannelLinkRegistry) {
         super(thing, itemChannelLinkRegistry);
@@ -72,6 +79,7 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
     }
 
     @Override
+    @Nullable
     Collection<EEPType> getEEPTypes() {
         return Collections.unmodifiableCollection(receivingEEPTypes.values());
     }
@@ -82,7 +90,8 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
         try {
             config.receivingEEPId.forEach(receivingEEP -> {
                 EEPType receivingEEPType = EEPType.getType(receivingEEP);
-                if (receivingEEPTypes.putIfAbsent(receivingEEPType.getRORG(), receivingEEPType) != null) {
+                EEPType existingKey = receivingEEPTypes.putIfAbsent(receivingEEPType.getRORG(), receivingEEPType);
+                if (!Objects.isNull(existingKey)) {
                     throw new IllegalArgumentException("Receiving more than one EEP of the same RORG is not supported");
                 }
             });
@@ -90,7 +99,9 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
                 receivingEEPTypes.put(EEPType.SigBatteryStatus.getRORG(), EEPType.SigBatteryStatus);
             }
         } catch (IllegalArgumentException e) {
-            configurationErrorDescription = e.getMessage();
+            String eMessage = e.getMessage();
+            configurationErrorDescription = eMessage != null ? eMessage
+                    : "IllegalArgumentException without a message was thrown";
             return false;
         }
 
@@ -102,7 +113,10 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
         }
 
         if (!config.enoceanId.equals(EMPTYENOCEANID)) {
-            getBridgeHandler().addPacketListener(this);
+            EnOceanBridgeHandler handler = getBridgeHandler();
+            if (handler != null) {
+                handler.addPacketListener(this);
+            }
         }
 
         return true;
@@ -115,8 +129,9 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
 
     @Override
     public void handleRemoval() {
-        if (getBridgeHandler() != null) {
-            getBridgeHandler().removePacketListener(this);
+        EnOceanBridgeHandler handler = getBridgeHandler();
+        if (handler != null) {
+            handler.removePacketListener(this);
         }
         super.handleRemoval();
     }
@@ -142,12 +157,13 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
     @Override
     public void packetReceived(BasePacket packet) {
         ERP1Message msg = (ERP1Message) packet;
-        EEPType receivingEEPType = receivingEEPTypes.get(msg.getRORG());
-        if (receivingEEPType == null) {
+
+        EEPType localReceivingType = receivingEEPTypes.get(msg.getRORG());
+        if (Objects.isNull(localReceivingType)) {
             return;
         }
 
-        EEP eep = EEPFactory.buildEEP(receivingEEPType, (ERP1Message) packet);
+        EEP eep = EEPFactory.buildEEP(localReceivingType, (ERP1Message) packet);
         logger.debug("ESP Packet payload {} for {} received", HexUtils.bytesToHex(packet.getPayload()),
                 HexUtils.bytesToHex(msg.getSenderId()));
 
@@ -155,7 +171,7 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
             byte[] senderId = msg.getSenderId();
 
             // try to interpret received message for all linked or trigger channels
-            getThing().getChannels().stream().filter(channelFilter(receivingEEPType, senderId))
+            getThing().getChannels().stream().filter(channelFilter(localReceivingType, senderId))
                     .sorted(Comparator.comparing(Channel::getKind)) // handle state channels first
                     .forEachOrdered(channel -> {
 
@@ -168,16 +184,17 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
                         switch (channel.getKind()) {
                             case STATE:
                                 State result = eep.convertToState(channelId, channelTypeId, channelConfig,
-                                        this::getCurrentState);
+                                        this::getCurrentState, stm);
 
                                 // if message can be interpreted (result != UnDefType.UNDEF) => update item state
-                                if (result != null && result != UnDefType.UNDEF) {
+                                if (result != UnDefType.UNDEF) {
                                     updateState(channelId, result);
                                 }
                                 break;
                             case TRIGGER:
                                 String lastEvent = lastEvents.get(channelId);
-                                String event = eep.convertToEvent(channelId, channelTypeId, lastEvent, channelConfig);
+                                String event = eep.convertToEvent(channelId, channelTypeId, lastEvent, channelConfig,
+                                        stm);
                                 if (event != null) {
                                     triggerChannel(channel.getUID(), event);
                                     lastEvents.put(channelId, event);
@@ -186,12 +203,13 @@ public class EnOceanBaseSensorHandler extends EnOceanBaseThingHandler implements
                         }
                     });
 
-            if (receivingEEPType.getRequstesResponse()) {
+            if (localReceivingType.getRequstesResponse()) {
                 // fire trigger for receive
                 triggerChannel(prepareAnswer, "requestAnswer");
                 // Send response after 100ms
+                ScheduledFuture<?> responseFuture = this.responseFuture;
                 if (responseFuture == null || responseFuture.isDone()) {
-                    responseFuture = scheduler.schedule(this::sendRequestResponse, 100, TimeUnit.MILLISECONDS);
+                    this.responseFuture = scheduler.schedule(this::sendRequestResponse, 100, TimeUnit.MILLISECONDS);
                 }
             }
         }

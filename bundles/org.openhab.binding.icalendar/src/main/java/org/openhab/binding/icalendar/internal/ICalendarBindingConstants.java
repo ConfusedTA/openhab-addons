@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -38,9 +38,11 @@ public class ICalendarBindingConstants {
     public static final String CHANNEL_CURRENT_EVENT_START = "current_start";
     public static final String CHANNEL_CURRENT_EVENT_END = "current_end";
     public static final String CHANNEL_CURRENT_EVENT_PRESENT = "current_presence";
+    public static final String CHANNEL_CURRENT_EVENT_LOCATION = "current_location";
     public static final String CHANNEL_NEXT_EVENT_TITLE = "next_title";
     public static final String CHANNEL_NEXT_EVENT_START = "next_start";
     public static final String CHANNEL_NEXT_EVENT_END = "next_end";
+    public static final String CHANNEL_NEXT_EVENT_LOCATION = "next_location";
     public static final String CHANNEL_LAST_UPDATE = "last_update";
     public static final ChannelTypeUID LAST_UPDATE_TYPE_UID = new ChannelTypeUID(BINDING_ID, "last_update");
 
@@ -57,8 +59,10 @@ public class ICalendarBindingConstants {
     public static final String RESULT_BEGIN_ID = "begin";
     public static final String RESULT_END_ID = "end";
     public static final String RESULT_TITLE_ID = "title";
+    public static final String RESULT_LOCATION_ID = "location";
     public static final ChannelGroupTypeUID GROUP_TYPE_UID = new ChannelGroupTypeUID(BINDING_ID, "result");
     public static final ChannelTypeUID BEGIN_TYPE_UID = new ChannelTypeUID(BINDING_ID, "result_start");
     public static final ChannelTypeUID END_TYPE_UID = new ChannelTypeUID(BINDING_ID, "result_end");
     public static final ChannelTypeUID TITLE_TYPE_UID = new ChannelTypeUID(BINDING_ID, "result_title");
+    public static final ChannelTypeUID LOCATION_TYPE_UID = new ChannelTypeUID(BINDING_ID, "result_location");
 }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon:addon id="miio" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:addon="https://openhab.org/schemas/addon/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/addon/v1.0.0 https://openhab.org/schemas/addon-1.0.0.xsd">
+	<type>binding</type>
+	<name>Xiaomi Wifi devices (Mi IO) Binding</name>
+	<description>Binding for Xiaomi wifi devices (Mi IO protocol) which are normally controlled by the mihome app like Mi
+		Robot Vacuums, Yeelights, Humidifiers, Fans etc.</description>
+	<connection>hybrid</connection>
+
+	<config-description>
+		<parameter name="username" type="text" required="false">
+			<label>Xiaomi cloud username</label>
+			<description>Deprecated: configure via the Cloud Connector thing instead. Xiaomi cloud username. Typically your
+				email</description>
+		</parameter>
+		<parameter name="password" type="text" required="false">
+			<label>Xiaomi cloud password</label>
+			<description>Deprecated: configure via the Cloud Connector thing instead.</description>
+		</parameter>
+	</config-description>
+
+</addon:addon>

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.mikrotik.internal.handler;
 
+import static org.openhab.binding.mikrotik.internal.MikrotikBindingConstants.*;
 import static org.openhab.core.thing.ThingStatus.ONLINE;
 import static org.openhab.core.types.RefreshType.REFRESH;
 
@@ -59,6 +60,7 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
     private @Nullable RouterosThingConfig config;
     private @Nullable volatile RouterosDevice routeros;
     private @Nullable ScheduledFuture<?> refreshJob;
+    private @Nullable ScheduledFuture<?> dailyJob;
     private Map<String, State> currentState = new HashMap<>();
 
     public static boolean supportsThingType(ThingTypeUID thingTypeUID) {
@@ -77,10 +79,10 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
         logger.debug("Initializing MikrotikRouterosBridgeHandler with config = {}", cfg);
         if (cfg.isValid()) {
             this.routeros = new RouterosDevice(cfg.host, cfg.port, cfg.login, cfg.password);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, String.format("Connecting to %s", cfg.host));
+            updateStatus(ThingStatus.OFFLINE, String.format("Connecting to %s", cfg.host));
             scheduleRefreshJob();
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Configuration is not valid");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Configuration is not valid");
         }
     }
 
@@ -94,17 +96,39 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
 
     @Override
     protected void updateStatus(ThingStatus status, ThingStatusDetail statusDetail, @Nullable String description) {
-        if (status == ThingStatus.ONLINE
-                || (status == ThingStatus.OFFLINE && statusDetail == ThingStatusDetail.COMMUNICATION_ERROR)) {
-            scheduleRefreshJob();
-        } else if (status == ThingStatus.OFFLINE && statusDetail == ThingStatusDetail.CONFIGURATION_ERROR) {
-            cancelRefreshJob();
-        }
         // update the status only if it's changed
         ThingStatusInfo statusInfo = ThingStatusInfoBuilder.create(status, statusDetail).withDescription(description)
                 .build();
         if (!statusInfo.equals(getThing().getStatusInfo())) {
             super.updateStatus(status, statusDetail, description);
+        }
+        statusUpdated(status, statusDetail);
+    }
+
+    @Override
+    protected void updateStatus(ThingStatus status) {
+        super.updateStatus(status);
+        statusUpdated(status, ThingStatusDetail.NONE);
+    }
+
+    @Override
+    protected void updateStatus(ThingStatus status, @Nullable String description) {
+        super.updateStatus(status, description);
+        statusUpdated(status, ThingStatusDetail.NONE);
+    }
+
+    @Override
+    protected void updateStatus(ThingStatusDetail detail, @Nullable String description) {
+        super.updateStatus(detail, description);
+        statusUpdated(getThing().getStatus(), detail);
+    }
+
+    private void statusUpdated(ThingStatus status, ThingStatusDetail detail) {
+        if (status == ThingStatus.ONLINE
+                || (status == ThingStatus.OFFLINE && detail == ThingStatusDetail.COMMUNICATION_ERROR)) {
+            scheduleRefreshJob();
+        } else if (status == ThingStatus.OFFLINE && detail == ThingStatusDetail.CONFIGURATION_ERROR) {
+            cancelRefreshJob();
         }
     }
 
@@ -120,6 +144,9 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
 
     private void scheduleRefreshJob() {
         synchronized (this) {
+            if (dailyJob == null) {
+                dailyJob = scheduler.scheduleWithFixedDelay(this::dailyRun, 1, 1440, TimeUnit.MINUTES);
+            }
             var cfg = this.config;
             if (refreshJob == null) {
                 int refreshPeriod = 10;
@@ -142,7 +169,20 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
                 job.cancel(true);
                 this.refreshJob = null;
             }
+            job = this.dailyJob;
+            if (job != null) {
+                job.cancel(true);
+                this.dailyJob = null;
+            }
         }
+    }
+
+    private void dailyRun() {
+        RouterosDevice routerOs = getRouteros();
+        if (routerOs == null) {
+            return;
+        }
+        updateState(CHANNEL_UPDATE_AVAILABLE, StateUtil.stringOrNull(routerOs.firmwareCheck()));
     }
 
     private void scheduledRun() {
@@ -177,12 +217,12 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
                 }
                 if (errorMessage.contains("Command timed out") || errorMessage.contains("Error connecting")) {
                     routeros.stop();
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, errorMessage);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, errorMessage);
                 } else if (errorMessage.contains("Connection refused")) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                             "Remote host refused to connect, make sure port is correct");
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, errorMessage);
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, errorMessage);
                 }
             }
         } else {
@@ -211,8 +251,8 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
             // refresh all the client things below
             getThing().getThings().forEach(thing -> {
                 ThingHandler handler = thing.getHandler();
-                if (handler instanceof MikrotikBaseThingHandler<?>) {
-                    ((MikrotikBaseThingHandler<?>) handler).refresh();
+                if (handler instanceof MikrotikBaseThingHandler<?> thingHandler) {
+                    thingHandler.refresh();
                 }
             });
         } catch (ChannelUpdateException e) {
@@ -220,10 +260,10 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
         } catch (MikrotikApiException e) {
             logger.error("RouterOS cache refresh failed in {} due to Mikrotik API error", getThing().getUID(), e);
             routeros.stop();
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         } catch (Exception e) {
             logger.error("Unhandled exception while refreshing the {} RouterOS model", getThing().getUID(), e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -247,40 +287,45 @@ public class MikrotikRouterosBridgeHandler extends BaseBridgeHandler {
         RouterosDevice routerOs = getRouteros();
         String channelID = channelUID.getIdWithoutGroup();
         RouterosSystemResources rbRes = null;
-        if (routerOs != null) {
-            rbRes = routerOs.getSysResources();
+        if (routerOs == null) {
+            return;
         }
+        rbRes = routerOs.getSysResources();
         State oldState = currentState.getOrDefault(channelID, UnDefType.NULL);
         State newState = oldState;
 
         if (rbRes == null) {
             newState = UnDefType.NULL;
         } else {
-            switch (channelID) {
-                case MikrotikBindingConstants.CHANNEL_UP_SINCE:
+            switch (channelUID.getId()) {
+                case CHANNEL_UP_SINCE:
                     newState = StateUtil.timeOrNull(rbRes.getUptimeStart());
                     break;
-                case MikrotikBindingConstants.CHANNEL_FREE_SPACE:
+                case CHANNEL_FREE_SPACE:
                     newState = StateUtil.qtyBytesOrNull(rbRes.getFreeSpace());
                     break;
-                case MikrotikBindingConstants.CHANNEL_TOTAL_SPACE:
+                case CHANNEL_TOTAL_SPACE:
                     newState = StateUtil.qtyBytesOrNull(rbRes.getTotalSpace());
                     break;
-                case MikrotikBindingConstants.CHANNEL_USED_SPACE:
+                case CHANNEL_USED_SPACE:
                     newState = StateUtil.qtyPercentOrNull(rbRes.getSpaceUse());
                     break;
-                case MikrotikBindingConstants.CHANNEL_FREE_MEM:
+                case CHANNEL_FREE_MEM:
                     newState = StateUtil.qtyBytesOrNull(rbRes.getFreeMem());
                     break;
-                case MikrotikBindingConstants.CHANNEL_TOTAL_MEM:
+                case CHANNEL_TOTAL_MEM:
                     newState = StateUtil.qtyBytesOrNull(rbRes.getTotalMem());
                     break;
-                case MikrotikBindingConstants.CHANNEL_USED_MEM:
+                case CHANNEL_USED_MEM:
                     newState = StateUtil.qtyPercentOrNull(rbRes.getMemUse());
                     break;
-                case MikrotikBindingConstants.CHANNEL_CPU_LOAD:
+                case CHANNEL_CPU_LOAD:
                     newState = StateUtil.qtyPercentOrNull(rbRes.getCpuLoad());
                     break;
+                case CHANNEL_UPDATE_AVAILABLE:
+                    break;
+                default:
+                    logger.warn("Unimplemented channel:{}", channelID);
             }
         }
 

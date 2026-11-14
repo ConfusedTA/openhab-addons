@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,7 +13,7 @@
 package org.openhab.binding.souliss.internal.handler;
 
 import java.util.Collection;
-import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -94,7 +94,7 @@ public class SoulissGatewayHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(SoulissGatewayDiscovery.class);
+        return Set.of(SoulissGatewayDiscovery.class);
     }
 
     @Override
@@ -184,7 +184,7 @@ public class SoulissGatewayHandler extends BaseBridgeHandler {
         if (++countPingKo > 3) {
             var bridgeHandler = bridge.getHandler();
             if (bridgeHandler != null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         "Gateway " + bridgeHandler.getThing().getUID() + " do not respond to " + countPingKo + " ping");
             }
         }

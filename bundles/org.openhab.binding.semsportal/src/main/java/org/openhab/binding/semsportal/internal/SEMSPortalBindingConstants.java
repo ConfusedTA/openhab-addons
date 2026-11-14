@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -36,6 +36,11 @@ public class SEMSPortalBindingConstants {
 
     // the default update interval for statusses at the portal
     public static final int DEFAULT_UPDATE_INTERVAL_MINUTES = 5;
+
+    // The client types that the portal accepts at login. A login replaces the previous session of the same client type
+    // of the account, so programs that use the same account need different types.
+    public static final String DEFAULT_CLIENT_TYPE = "semsPlusWeb";
+    public static final List<String> CLIENT_TYPES = List.of(DEFAULT_CLIENT_TYPE, "web", "ios", "android");
 
     // station properties
     public static final String STATION_UUID = "stationUUID";

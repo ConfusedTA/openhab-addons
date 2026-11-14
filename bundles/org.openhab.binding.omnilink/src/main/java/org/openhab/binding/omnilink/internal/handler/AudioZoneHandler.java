@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -29,7 +29,6 @@ import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.PlayPauseType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -69,7 +68,7 @@ public class AudioZoneHandler extends AbstractOmnilinkStatusHandler<ExtendedAudi
         if (bridgeHandler != null) {
             updateAudioZoneProperties(bridgeHandler);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
                     "Received null bridge while initializing Audio Zone!");
         }
     }
@@ -88,8 +87,8 @@ public class AudioZoneHandler extends AbstractOmnilinkStatusHandler<ExtendedAudi
         logger.debug("handleCommand called for channel: {}, command: {}", channelUID, command);
 
         if (command instanceof RefreshType) {
-            retrieveStatus().ifPresentOrElse(this::updateChannels, () -> updateStatus(ThingStatus.OFFLINE,
-                    ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
+            retrieveStatus().ifPresentOrElse(this::updateChannels,
+                    () -> updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "Received null status update!"));
             return;
         }
 
@@ -111,26 +110,24 @@ public class AudioZoneHandler extends AbstractOmnilinkStatusHandler<ExtendedAudi
                 }
                 break;
             case CHANNEL_AUDIO_ZONE_VOLUME:
-                if (command instanceof PercentType) {
-                    sendOmnilinkCommand(CommandMessage.CMD_AUDIO_ZONE_SET_VOLUME, ((PercentType) command).intValue(),
-                            thingID);
+                if (command instanceof PercentType percentCommand) {
+                    sendOmnilinkCommand(CommandMessage.CMD_AUDIO_ZONE_SET_VOLUME, percentCommand.intValue(), thingID);
                 } else {
                     logger.debug("Invalid command: {}, must be PercentType", command);
                 }
                 break;
             case CHANNEL_AUDIO_ZONE_SOURCE:
-                if (command instanceof DecimalType) {
-                    sendOmnilinkCommand(CommandMessage.CMD_AUDIO_ZONE_SET_SOURCE, ((DecimalType) command).intValue(),
-                            thingID);
+                if (command instanceof DecimalType decimalCommand) {
+                    sendOmnilinkCommand(CommandMessage.CMD_AUDIO_ZONE_SET_SOURCE, decimalCommand.intValue(), thingID);
                 } else {
                     logger.debug("Invalid command: {}, must be DecimalType", command);
                 }
                 break;
             case CHANNEL_AUDIO_ZONE_CONTROL:
-                if (command instanceof PlayPauseType) {
-                    handlePlayPauseCommand(channelUID, (PlayPauseType) command);
-                } else if (command instanceof NextPreviousType) {
-                    handleNextPreviousCommand(channelUID, (NextPreviousType) command);
+                if (command instanceof PlayPauseType playPauseCommand) {
+                    handlePlayPauseCommand(channelUID, playPauseCommand);
+                } else if (command instanceof NextPreviousType nextPreviousCommand) {
+                    handleNextPreviousCommand(channelUID, nextPreviousCommand);
                 } else {
                     logger.debug("Invalid command: {}, must be PlayPauseType or NextPreviousType", command);
                 }

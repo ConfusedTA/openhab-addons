@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -91,15 +91,14 @@ public class TACmiHandler extends BaseThingHandler {
         final TACmiConfiguration config = getConfigAs(TACmiConfiguration.class);
 
         if (config.host == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No host configured!");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No host configured!");
             return;
         }
         try {
             cmiAddress = InetAddress.getByName(config.host);
         } catch (final UnknownHostException e1) {
             // message logged by framework via updateStatus
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Failed to get IP of CMI for '" + config.host + "'");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Failed to get IP of CMI for '" + config.host + "'");
             return;
         }
 
@@ -167,9 +166,13 @@ public class TACmiHandler extends BaseThingHandler {
         }
 
         final Bridge br = getBridge();
-        final TACmiCoEBridgeHandler bridge = br == null ? null : (TACmiCoEBridgeHandler) br.getHandler();
+        if (br == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
+        final TACmiCoEBridgeHandler bridge = (TACmiCoEBridgeHandler) br.getHandler();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "No Bridge configured!");
+            logger.debug("Bridge handler unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
         bridge.registerCMI(this);
@@ -258,7 +261,7 @@ public class TACmiHandler extends BaseThingHandler {
                 updateState(channel.getUID(), new DecimalType(value.value));
             } else {
                 final boolean state = ((DigitalMessage) message).getPortState(channelConfig.output);
-                updateState(channel.getUID(), state ? OnOffType.ON : OnOffType.OFF);
+                updateState(channel.getUID(), OnOffType.from(state));
             }
             return;
         }
@@ -380,7 +383,7 @@ public class TACmiHandler extends BaseThingHandler {
                 updateState(channel.getUID(), newState);
             } else {
                 final boolean state = ((DigitalMessage) message).getPortState(output);
-                updateState(channel.getUID(), state ? OnOffType.ON : OnOffType.OFF);
+                updateState(channel.getUID(), OnOffType.from(state));
             }
         }
     }
@@ -389,8 +392,7 @@ public class TACmiHandler extends BaseThingHandler {
         final long refTs = System.currentTimeMillis();
         if (refTs - this.lastMessageRecvTS > 900000 && getThing().getStatus() != ThingStatus.OFFLINE) {
             // no data received for 900 seconds - set thing status to offline..
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "No update from C.M.I. for 15 min");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "No update from C.M.I. for 15 min");
         }
         for (final PodData pd : this.podDatas.values()) {
             if (!(pd instanceof PodDataOutgoing)) {

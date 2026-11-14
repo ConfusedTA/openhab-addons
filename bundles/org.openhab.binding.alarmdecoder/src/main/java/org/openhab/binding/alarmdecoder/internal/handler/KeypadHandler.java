@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -30,7 +30,6 @@ import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.slf4j.Logger;
@@ -72,7 +71,7 @@ public class KeypadHandler extends ADThingHandler {
         }
 
         if (addressMaskLong < 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Invalid addressMask setting");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Invalid addressMask setting");
             return;
         }
         // If 1 and only 1 device is set in the addressMask parameter, use that device number as the sending address
@@ -113,13 +112,13 @@ public class KeypadHandler extends ADThingHandler {
         IntCommandMap intCommandMap = this.intCommandMap;
 
         if (channelUID.getId().equals(CHANNEL_KP_COMMAND)) {
-            if (command instanceof StringType) {
-                String cmd = ((StringType) command).toString();
+            if (command instanceof StringType commandString) {
+                String cmd = commandString.toString();
                 handleKeypadCommand(cmd);
             }
         } else if (channelUID.getId().equals(CHANNEL_KP_INTCOMMAND)) {
-            if (command instanceof Number) {
-                int icmd = ((Number) command).intValue();
+            if (command instanceof Number numberCommand) {
+                int icmd = numberCommand.intValue();
                 if (intCommandMap != null) {
                     String cmd = intCommandMap.getCommand(icmd);
                     if (cmd != null) {

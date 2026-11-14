@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,12 +17,15 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.util.concurrent.TimeUnit;
 
 import org.openhab.core.audio.AudioException;
 import org.openhab.core.audio.AudioFormat;
 import org.openhab.core.audio.AudioStream;
 import org.openhab.core.audio.FixedLengthAudioStream;
-import org.openhab.core.voice.Voice;
+import org.openhab.core.common.Disposable;
+import org.openhab.core.voice.tts.Voice;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,8 +34,9 @@ import org.slf4j.LoggerFactory;
  *
  * @author Kelly Davis - Initial contribution and API
  * @author Kai Kreuzer - Refactored to use AudioStream and fixed audio format to produce
+ * @author Laurent Garnier - Add dispose method to delete the temporary file
  */
-class MacTTSAudioStream extends FixedLengthAudioStream {
+class MacTTSAudioStream extends FixedLengthAudioStream implements Disposable {
 
     private final Logger logger = LoggerFactory.getLogger(MacTTSAudioStream.class);
 
@@ -76,6 +80,16 @@ class MacTTSAudioStream extends FixedLengthAudioStream {
         this.inputStream = createInputStream();
     }
 
+    /**
+     * Timeout for the 'say' process before it is considered hung and destroyed.
+     */
+    private static final int SYNTHESIS_TIMEOUT_SECONDS = 60;
+
+    /**
+     * Grace period allowed for the process to terminate after being destroyed.
+     */
+    private static final int GRACE_PERIOD_SECONDS = 5;
+
     @Override
     public AudioFormat getFormat() {
         return audioFormat;
@@ -83,12 +97,17 @@ class MacTTSAudioStream extends FixedLengthAudioStream {
 
     private InputStream createInputStream() throws AudioException {
         String outputFile = generateOutputFilename();
-        String command = getCommand(outputFile);
-        logger.debug("Executing on command line: {}", command);
+        String[] command = getCommand(outputFile);
+        logger.debug("Executing on command line: {}", (Object) command);
 
         try {
-            Process process = Runtime.getRuntime().exec(command);
-            process.waitFor();
+            Process process = new ProcessBuilder(command).redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            int exitCode = runWithTimeout(process, SYNTHESIS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (exitCode != 0) {
+                throw new AudioException("The 'say' command exited with non-zero code " + exitCode
+                        + " while generating '" + outputFile + "'");
+            }
             file = new File(outputFile);
             if (!file.exists()) {
                 throw new AudioException("Generated file '" + outputFile + "' does not exist.'");
@@ -101,7 +120,42 @@ class MacTTSAudioStream extends FixedLengthAudioStream {
         } catch (IOException e) {
             throw new AudioException("Error while executing '" + command + "'", e);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new AudioException("The '" + command + "' has been interrupted", e);
+        }
+    }
+
+    /**
+     * Waits for the given process to terminate and returns its exit code.
+     *
+     * If the process does not terminate within the given timeout, it is destroyed (forcibly, if necessary) and an
+     * {@link AudioException} is thrown. This protects against hung 'say' processes blocking synthesis forever.
+     *
+     * If the current thread is interrupted while waiting, the process is forcibly destroyed before the interruption is
+     * propagated, so no hung process is left behind.
+     *
+     * @param process the process to wait for
+     * @param timeout the maximum time to wait for the process
+     * @param unit the time unit of the timeout argument
+     * @return the exit code of the terminated process
+     * @throws InterruptedException if the current thread is interrupted while waiting
+     * @throws AudioException if the process did not terminate within the timeout
+     */
+    static int runWithTimeout(Process process, long timeout, TimeUnit unit)
+            throws InterruptedException, AudioException {
+        try {
+            if (process.waitFor(timeout, unit)) {
+                return process.exitValue();
+            }
+            process.destroy();
+            if (!process.waitFor(GRACE_PERIOD_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                process.waitFor(GRACE_PERIOD_SECONDS, TimeUnit.SECONDS);
+            }
+            throw new AudioException("The 'say' process did not finish within " + timeout + " " + unit);
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            throw e;
         }
     }
 
@@ -128,7 +182,7 @@ class MacTTSAudioStream extends FixedLengthAudioStream {
     private String generateOutputFilename() throws AudioException {
         File tempFile;
         try {
-            tempFile = File.createTempFile(Integer.toString(text.hashCode()), ".wav");
+            tempFile = Files.createTempFile(Integer.toString(text.hashCode()), ".wav").toFile();
             tempFile.deleteOnExit();
         } catch (IOException e) {
             throw new AudioException("Unable to create temp file.", e);
@@ -142,19 +196,15 @@ class MacTTSAudioStream extends FixedLengthAudioStream {
      * @param outputFile The absolute filename of the command's output
      * @return The command used to generate the audio file {@code outputFile}
      */
-    private String getCommand(String outputFile) {
-        StringBuffer stringBuffer = new StringBuffer();
-
-        stringBuffer.append("say");
-
-        stringBuffer.append(" --voice=" + this.voice.getLabel());
-        stringBuffer.append(" --output-file=" + outputFile);
-        stringBuffer.append(" --file-format=" + this.audioFormat.getContainer());
-        stringBuffer.append(" --data-format=LEI" + audioFormat.getBitDepth() + "@" + audioFormat.getFrequency());
-        stringBuffer.append(" --channels=1"); // Mono
-        stringBuffer.append(" " + this.text);
-
-        return stringBuffer.toString();
+    private String[] getCommand(String outputFile) {
+        return new String[] { //
+                "say", //
+                "--voice=" + this.voice.getLabel(), //
+                "--output-file=" + outputFile, //
+                "--file-format=" + this.audioFormat.getContainer(), //
+                "--data-format=LEI" + audioFormat.getBitDepth() + "@" + audioFormat.getFrequency(), //
+                "--channels=1", //
+                this.text };
     }
 
     @Override
@@ -173,6 +223,19 @@ class MacTTSAudioStream extends FixedLengthAudioStream {
             return getFileInputStream(file);
         } else {
             throw new AudioException("No temporary audio file available.");
+        }
+    }
+
+    @Override
+    public void dispose() throws IOException {
+        if (file != null && file.exists()) {
+            try {
+                if (!file.delete()) {
+                    logger.warn("Failed to delete the file {}", file.getAbsolutePath());
+                }
+            } catch (SecurityException e) {
+                logger.warn("Failed to delete the file {}: {}", file.getAbsolutePath(), e.getMessage());
+            }
         }
     }
 }

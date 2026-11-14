@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,8 +14,10 @@ package org.openhab.binding.shelly.internal.handler;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.shelly.internal.api.ShellyApiException;
+import org.openhab.binding.shelly.internal.api.ShellyApiInterface;
 import org.openhab.binding.shelly.internal.api.ShellyDeviceProfile;
-import org.openhab.binding.shelly.internal.api.ShellyHttpApi;
+import org.openhab.binding.shelly.internal.config.ShellyApiConfiguration;
+import org.openhab.binding.shelly.internal.config.ShellyThingConfiguration;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.State;
@@ -30,13 +32,17 @@ public interface ShellyManagerInterface {
 
     public Thing getThing();
 
+    public ShellyThingConfiguration getThingConfig();
+
+    public ShellyApiConfiguration getApiConfig();
+
     public String getThingName();
 
     public ShellyDeviceProfile getProfile();
 
     public ShellyDeviceProfile getProfile(boolean forceRefresh) throws ShellyApiException;
 
-    public ShellyHttpApi getApi();
+    public ShellyApiInterface getApi();
 
     public ShellyDeviceStats getStats();
 
@@ -46,7 +52,11 @@ public interface ShellyManagerInterface {
 
     public void setThingOnline();
 
-    public void setThingOffline(ThingStatusDetail detail, String messageKey);
+    public void setThingOfflineAndDisconnect(ThingStatusDetail detail, String messageKey, Object... arguments);
 
     public boolean requestUpdates(int requestCount, boolean refreshSettings);
+
+    public void incProtMessages();
+
+    public void incProtErrors();
 }

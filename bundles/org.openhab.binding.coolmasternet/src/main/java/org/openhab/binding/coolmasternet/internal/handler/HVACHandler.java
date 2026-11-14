@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -91,8 +91,8 @@ public class HVACHandler extends BaseThingHandler {
      * Get the controller handler for this bridge.
      *
      * <p>
-     * This method does not raise any exception, but if null is returned it will
-     * always update the Thing status with the reason.
+     * This method does not raise an exception. If the bridge handler is unavailable, it updates the Thing status.
+     * The framework handles a missing bridge.
      *
      * <p>
      * The returned handler may or may not be connected. This method will not
@@ -102,18 +102,9 @@ public class HVACHandler extends BaseThingHandler {
      * @return the controller handler or null if the controller is unavailable
      */
     private @Nullable ControllerHandler getControllerHandler() {
-        final Bridge bridge = getBridge();
-        if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "CoolMasterNet Controller bridge not configured");
-            return null;
-        }
 
-        final ControllerHandler handler = (ControllerHandler) bridge.getHandler();
-
-        if (handler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED,
-                    "CoolMasterNet Controller bridge not initialized");
+        if (!(this.getBridge() instanceof Bridge bridge && bridge.getHandler() instanceof ControllerHandler handler)) {
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
             return null;
         }
 
@@ -146,11 +137,11 @@ public class HVACHandler extends BaseThingHandler {
                     if (command instanceof RefreshType) {
                         final String on = query(controller, "o");
                         if (on != null) {
-                            updateState(ON, "1".equals(on) ? OnOffType.ON : OnOffType.OFF);
+                            updateState(ON, OnOffType.from("1".equals(on)));
                         }
-                    } else if (command instanceof OnOffType) {
-                        final OnOffType onoff = (OnOffType) command;
-                        controller.sendCommand(String.format("%s %s", onoff == OnOffType.ON ? "on" : "off", uid));
+                    } else if (command instanceof OnOffType onOffCommand) {
+                        controller
+                                .sendCommand(String.format("%s %s", onOffCommand == OnOffType.ON ? "on" : "off", uid));
                     }
                     break;
                 case SET_TEMP:
@@ -161,9 +152,8 @@ public class HVACHandler extends BaseThingHandler {
                             final QuantityType<?> value = new QuantityType<>(temp, controller.getUnit());
                             updateState(SET_TEMP, value);
                         }
-                    } else if (command instanceof QuantityType) {
-                        final QuantityType<?> temp = (QuantityType) command;
-                        final QuantityType<?> converted = temp.toUnit(controller.getUnit());
+                    } else if (command instanceof QuantityType quantityCommand) {
+                        final QuantityType<?> converted = quantityCommand.toUnit(controller.getUnit());
                         final String formatted = converted.format("%.1f");
                         controller.sendCommand(String.format("temp %s %s", uid, formatted));
                     }
@@ -174,8 +164,8 @@ public class HVACHandler extends BaseThingHandler {
                         if (mode != null) {
                             updateState(MODE, new StringType(mode));
                         }
-                    } else if (command instanceof StringType) {
-                        final String mode = ((StringType) command).toString();
+                    } else if (command instanceof StringType stringCommand) {
+                        final String mode = stringCommand.toString();
                         controller.sendCommand(String.format("%s %s", mode, uid));
                     }
                     break;
@@ -185,8 +175,8 @@ public class HVACHandler extends BaseThingHandler {
                         if (fan != null) {
                             updateState(FAN_SPEED, new StringType(fan));
                         }
-                    } else if (command instanceof StringType) {
-                        final String fan = ((StringType) command).toString();
+                    } else if (command instanceof StringType stringCommand) {
+                        final String fan = stringCommand.toString();
                         controller.sendCommand(String.format("fspeed %s %s", uid, fan));
                     }
                     break;
@@ -196,8 +186,8 @@ public class HVACHandler extends BaseThingHandler {
                         if (louvre != null) {
                             updateState(LOUVRE, new StringType(louvre));
                         }
-                    } else if (command instanceof StringType) {
-                        final String louvre = ((StringType) command).toString();
+                    } else if (command instanceof StringType stringCommand) {
+                        final String louvre = stringCommand.toString();
                         controller.sendCommand(String.format("swing %s %s", uid, louvre));
                     }
                     break;
@@ -208,7 +198,7 @@ public class HVACHandler extends BaseThingHandler {
         } catch (final IOException ioe) {
             logger.warn("Failed to handle command '{}' on channel '{}' for unit '{}' due to '{}'", command, channel,
                     uid, ioe.getLocalizedMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, ioe.getLocalizedMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, ioe.getLocalizedMessage());
         }
     }
 

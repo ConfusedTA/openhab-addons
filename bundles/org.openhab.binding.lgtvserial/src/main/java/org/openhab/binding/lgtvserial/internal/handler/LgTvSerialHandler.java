@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -26,6 +26,7 @@ import org.openhab.binding.lgtvserial.internal.protocol.serial.LGSerialResponse;
 import org.openhab.binding.lgtvserial.internal.protocol.serial.LGSerialResponseListener;
 import org.openhab.binding.lgtvserial.internal.protocol.serial.SerialCommunicatorFactory;
 import org.openhab.binding.lgtvserial.internal.protocol.serial.commands.CommandFactory;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.serial.PortInUseException;
 import org.openhab.core.io.transport.serial.SerialPortIdentifier;
 import org.openhab.core.io.transport.serial.SerialPortManager;
@@ -53,7 +54,7 @@ public class LgTvSerialHandler extends BaseThingHandler {
     /**
      * Interval at which to send update refresh commands.
      */
-    private static final int EVENT_REFRESH_INTERVAL = 120;
+    private static final int DEFAULT_REFRESH_INTERVAL_SEC = 120;
 
     /**
      * Logger.
@@ -104,8 +105,10 @@ public class LgTvSerialHandler extends BaseThingHandler {
 
     @Override
     public synchronized void initialize() {
-        String portName = (String) getThing().getConfiguration().get("port");
-        BigDecimal setIdParam = (BigDecimal) getThing().getConfiguration().get("setId");
+        Configuration config = getThing().getConfiguration();
+        String portName = (String) config.get("port");
+        int refreshInterval = ((BigDecimal) config.get("refreshInterval")).intValue();
+        BigDecimal setIdParam = (BigDecimal) config.get("setId");
         int setId = 1;
         if (setIdParam != null) {
             setId = setIdParam.intValue();
@@ -133,22 +136,20 @@ public class LgTvSerialHandler extends BaseThingHandler {
         if (portName != null) {
             SerialPortIdentifier serialPortIdentifier = serialPortManager.getIdentifier(portName);
             if (serialPortIdentifier == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "Serial port does not exist: " + portName);
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Serial port does not exist: " + portName);
                 return;
             }
 
             try {
                 communicator = factory.getInstance(serialPortIdentifier);
             } catch (IOException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
                 return;
             } catch (PortInUseException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "Serial port already used: " + portName);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Serial port already used: " + portName);
                 return;
             } catch (UnsupportedCommOperationException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         "Unsupported operation on '" + portName + "': " + e.getMessage());
                 return;
             }
@@ -156,20 +157,26 @@ public class LgTvSerialHandler extends BaseThingHandler {
             if (communicator != null) {
                 communicator.register(responseListener);
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "Failed to connect to serial port " + portName);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Failed to connect to serial port " + portName);
                 logger.debug("Failed to connect to serial port {}", portName);
                 return;
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Serial port name not configured");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Serial port name not configured");
             logger.debug("Serial port name not configured");
             return;
         }
 
         if (updateJob == null || updateJob.isCancelled()) {
-            updateJob = scheduler.scheduleWithFixedDelay(eventRunnable, 0, EVENT_REFRESH_INTERVAL, TimeUnit.SECONDS);
+            updateJob = scheduler.scheduleWithFixedDelay(eventRunnable, 0,
+                    refreshInterval > 0 ? refreshInterval : DEFAULT_REFRESH_INTERVAL_SEC, TimeUnit.SECONDS);
         }
+        // trigger REFRESH commands for all linked Channels to start polling
+        getThing().getChannels().forEach(channel -> {
+            if (isLinked(channel.getUID())) {
+                channelLinked(channel.getUID());
+            }
+        });
 
         updateStatus(ThingStatus.ONLINE);
     }
@@ -226,7 +233,7 @@ public class LgTvSerialHandler extends BaseThingHandler {
                 try {
                     entry.getValue().execute(entry.getKey(), communicator, null);
                 } catch (IOException e) {
-                    logger.warn("An error occured while sending an update command for {}: {}", entry.getKey(),
+                    logger.warn("An error occurred while sending an update command for {}: {}", entry.getKey(),
                             e.getMessage());
                 }
             }

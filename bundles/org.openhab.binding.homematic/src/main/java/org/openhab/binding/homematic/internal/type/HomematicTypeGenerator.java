@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,27 +12,42 @@
  */
 package org.openhab.binding.homematic.internal.type;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.homematic.internal.model.HmDatapoint;
 import org.openhab.binding.homematic.internal.model.HmDevice;
+import org.openhab.core.thing.type.ChannelType;
+import org.openhab.core.thing.type.ChannelTypeUID;
 
 /**
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 public interface HomematicTypeGenerator {
 
     /**
      * Initializes the type generator.
      */
-    public void initialize();
+    void initialize();
 
     /**
      * Generates the ThingType and ChannelTypes for the given device.
      */
-    public void generate(HmDevice device);
+    void generate(HmDevice device);
+
+    /**
+     * Generates the ChannelType for the given datapoint.
+     */
+    ChannelType createChannelType(HmDatapoint dp, ChannelTypeUID channelTypeUID);
 
     /**
      * Validates all devices for multiple firmware versions. Different firmware versions for the same device may have
      * different datapoints which may cause warnings in the logfile.
      */
-    public void validateFirmwares();
+    void validateFirmwares();
+
+    /**
+     * Returns true, if the given datapoint can be ignored for metadata generation.
+     */
+    boolean isIgnoredDatapoint(HmDatapoint dp);
 }

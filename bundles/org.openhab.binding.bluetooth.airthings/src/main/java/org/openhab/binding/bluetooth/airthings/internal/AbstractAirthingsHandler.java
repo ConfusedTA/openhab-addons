@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,6 +25,7 @@ import org.openhab.binding.bluetooth.BluetoothCharacteristic;
 import org.openhab.binding.bluetooth.BluetoothDevice.ConnectionState;
 import org.openhab.binding.bluetooth.BluetoothUtils;
 import org.openhab.binding.bluetooth.notification.BluetoothConnectionStatusNotification;
+import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
@@ -39,15 +40,19 @@ import org.slf4j.LoggerFactory;
  * @author Kai Kreuzer - Added Airthings Wave Mini support
  */
 @NonNullByDefault
-abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
+public abstract class AbstractAirthingsHandler extends BeaconBluetoothHandler {
 
     private static final int CHECK_PERIOD_SEC = 10;
+    /** Minimum time between the starts of two connection attempts, capped by the refresh interval. */
+    private static final int MIN_RETRY_INTERVAL_SEC = 60;
 
     private final Logger logger = LoggerFactory.getLogger(AbstractAirthingsHandler.class);
 
     private AtomicInteger sinceLastReadSec = new AtomicInteger();
+    private AtomicInteger sinceLastAttemptSec = new AtomicInteger();
     private Optional<AirthingsConfiguration> configuration = Optional.empty();
     private @Nullable ScheduledFuture<?> scheduledTask;
+    private volatile boolean handlerActive;
 
     private volatile int refreshInterval;
     private volatile int errorConnectCounter;
@@ -74,9 +79,10 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
     }
 
     @Override
-    public void initialize() {
+    public synchronized void initialize() {
         logger.debug("Initialize");
         super.initialize();
+        handlerActive = true;
         configuration = Optional.of(getConfigAs(AirthingsConfiguration.class));
         logger.debug("Using configuration: {}", configuration.get());
         cancelScheduledTask();
@@ -87,10 +93,12 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
                     TimeUnit.SECONDS);
         });
         sinceLastReadSec.set(refreshInterval); // update immediately
+        sinceLastAttemptSec.set(retryIntervalSec());
     }
 
     @Override
-    public void dispose() {
+    public synchronized void dispose() {
+        handlerActive = false;
         logger.debug("Dispose");
         cancelScheduledTask();
         serviceState = ServiceState.NOT_RESOLVED;
@@ -105,12 +113,28 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
         }
     }
 
-    private void executePeridioc() {
-        sinceLastReadSec.addAndGet(CHECK_PERIOD_SEC);
-        execute();
+    void executePeridioc() {
+        if (!handlerActive) {
+            return;
+        }
+        try {
+            sinceLastReadSec.addAndGet(CHECK_PERIOD_SEC);
+            sinceLastAttemptSec.addAndGet(CHECK_PERIOD_SEC);
+            execute();
+        } catch (Exception e) { // catch all to avoid scheduleWithFixedDelay being suppressed
+            logger.warn("Failed to read Airthings device", e);
+        }
     }
 
     private synchronized void execute() {
+        if (!handlerActive) {
+            return;
+        }
+        Bridge bridge = getBridge();
+        if (bridge == null || bridge.getStatusInfo().getStatus() != ThingStatus.ONLINE) {
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
+            return;
+        }
         ConnectionState connectionState = device.getConnectionState();
         logger.debug("Device {} state is {}, serviceState {}, readState {}", address, connectionState, serviceState,
                 readState);
@@ -133,6 +157,7 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
 
     private void connect() {
         logger.debug("Connect to device {}...", address);
+        sinceLastAttemptSec.set(0);
         if (!device.connect()) {
             errorConnectCounter++;
             if (errorConnectCounter < 6) {
@@ -140,10 +165,10 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
             } else {
                 logger.debug("ERROR:  Controller reset needed.  Connecting to device {} failed {} times", address,
                         errorConnectCounter);
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Connecting to device failed");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Connecting to device failed");
             }
         } else {
-            logger.debug("Connected to device {}", address);
+            logger.debug("Connection request accepted for device {}", address);
             errorConnectCounter = 0;
         }
     }
@@ -157,8 +182,7 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
             } else {
                 logger.debug("ERROR:  Controller reset needed.  Disconnect from device {} failed {} times", address,
                         errorDisconnectCounter);
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "Disconnect from device failed");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Disconnect from device failed");
             }
         } else {
             logger.debug("Disconnected from device {}", address);
@@ -179,20 +203,9 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
                         BluetoothCharacteristic characteristic = device.getCharacteristic(getDataUUID());
                         if (characteristic != null) {
                             readState = ReadState.READING;
-                            errorReadCounter = 0;
                             errorResolvingCounter = 0;
-                            device.readCharacteristic(characteristic).whenComplete((data, ex) -> {
-                                try {
-                                    logger.debug("Characteristic {} from device {}: {}", characteristic.getUuid(),
-                                            address, data);
-                                    updateStatus(ThingStatus.ONLINE);
-                                    sinceLastReadSec.set(0);
-                                    updateChannels(BluetoothUtils.toIntArray(data));
-                                } finally {
-                                    readState = ReadState.IDLE;
-                                    disconnect();
-                                }
-                            });
+                            device.readCharacteristic(characteristic)
+                                    .whenComplete((data, ex) -> handleReadCompleted(characteristic, data, ex));
                         } else {
                             errorReadCounter++;
                             if (errorReadCounter < 6) {
@@ -201,8 +214,7 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
                                 logger.debug(
                                         "ERROR:  Controller reset needed.  Read data from device {} failed {} times",
                                         address, errorReadCounter);
-                                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                                        "Read data from device failed");
+                                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Read data from device failed");
                             }
                             disconnect();
                         }
@@ -219,10 +231,40 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
                 } else {
                     logger.debug("ERROR:  Controller reset needed.  Unhandled serviceState {} on device {}",
                             serviceState, address);
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "Service discovery for device failed");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Service discovery for device failed");
                 }
                 break;
+        }
+    }
+
+    private synchronized void handleReadCompleted(BluetoothCharacteristic characteristic, byte @Nullable [] data,
+            @Nullable Throwable error) {
+        if (!handlerActive) {
+            return;
+        }
+        try {
+            Bridge bridge = getBridge();
+            if (bridge == null || bridge.getStatusInfo().getStatus() != ThingStatus.ONLINE) {
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
+                return;
+            }
+            if (error != null || data == null) {
+                sinceLastAttemptSec.set(0);
+                errorReadCounter++;
+                logger.debug("Read data from device {} failed {} times", address, errorReadCounter);
+                if (errorReadCounter >= 6) {
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Read data from device failed");
+                }
+                return;
+            }
+            logger.debug("Characteristic {} from device {}: {}", characteristic.getUuid(), address, data);
+            updateStatus(ThingStatus.ONLINE);
+            sinceLastReadSec.set(0);
+            errorReadCounter = 0;
+            updateChannels(BluetoothUtils.toIntArray(data));
+        } finally {
+            readState = ReadState.IDLE;
+            disconnect();
         }
     }
 
@@ -234,6 +276,9 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
 
     @Override
     public void onServicesDiscovered() {
+        if (!handlerActive) {
+            return;
+        }
         serviceState = ServiceState.RESOLVED;
         logger.debug("Service discovery completed for device {}", address);
         printServices();
@@ -246,6 +291,9 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
 
     @Override
     public void onConnectionStateChange(BluetoothConnectionStatusNotification connectionNotification) {
+        if (!handlerActive) {
+            return;
+        }
         logger.debug("Connection State Change Event is {}", connectionNotification.getConnectionState());
         switch (connectionNotification.getConnectionState()) {
             case DISCONNECTED:
@@ -263,8 +311,17 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
 
     private boolean isTimeToRead() {
         int sinceLastRead = sinceLastReadSec.get();
-        logger.debug("Time since last update: {} sec", sinceLastRead);
-        return sinceLastRead >= refreshInterval;
+        int sinceLastAttempt = sinceLastAttemptSec.get();
+        logger.debug("Time since last update: {} sec, since last attempt: {} sec", sinceLastRead, sinceLastAttempt);
+        return sinceLastRead >= refreshInterval && sinceLastAttempt >= retryIntervalSec();
+    }
+
+    /**
+     * A failed attempt leaves the read overdue, so without a minimum spacing the next disconnect notification or tick
+     * would start the next attempt at once.
+     */
+    private int retryIntervalSec() {
+        return Math.min(refreshInterval, MIN_RETRY_INTERVAL_SEC);
     }
 
     /**
@@ -279,5 +336,5 @@ abstract public class AbstractAirthingsHandler extends BeaconBluetoothHandler {
      *
      * @param is the content of the bluetooth characteristic
      */
-    abstract protected void updateChannels(int[] is);
+    protected abstract void updateChannels(int[] is);
 }

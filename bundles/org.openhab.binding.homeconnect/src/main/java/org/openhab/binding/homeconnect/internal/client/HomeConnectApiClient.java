@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,7 +12,6 @@
  */
 package org.openhab.binding.homeconnect.internal.client;
 
-import static java.util.Collections.singletonList;
 import static org.openhab.binding.homeconnect.internal.HomeConnectBindingConstants.*;
 import static org.openhab.binding.homeconnect.internal.client.HttpHelper.*;
 
@@ -47,6 +46,7 @@ import org.openhab.binding.homeconnect.internal.client.model.HomeAppliance;
 import org.openhab.binding.homeconnect.internal.client.model.HomeConnectRequest;
 import org.openhab.binding.homeconnect.internal.client.model.HomeConnectResponse;
 import org.openhab.binding.homeconnect.internal.client.model.Option;
+import org.openhab.binding.homeconnect.internal.client.model.PowerStateAccess;
 import org.openhab.binding.homeconnect.internal.client.model.Program;
 import org.openhab.binding.homeconnect.internal.configuration.ApiBridgeConfiguration;
 import org.openhab.core.auth.client.oauth2.OAuthClientService;
@@ -54,6 +54,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 /**
@@ -326,6 +327,53 @@ public class HomeConnectApiClient {
     }
 
     /**
+     * Provides information on whether the power state of device can be set or only read.
+     *
+     * @param haId home appliance id
+     * @return {@link PowerStateAccess}
+     * @throws CommunicationException API communication exception
+     * @throws AuthorizationException oAuth authorization exception
+     * @throws ApplianceOfflineException appliance is not connected to the cloud
+     */
+    public PowerStateAccess getPowerStateAccess(String haId)
+            throws CommunicationException, AuthorizationException, ApplianceOfflineException {
+        String powerStateSettings = getRaw(haId, BASE_PATH + haId + "/settings/" + SETTING_POWER_STATE);
+
+        /***
+         * Example response:
+         * {
+         * "data": {
+         * "key": "BSH.Common.Setting.PowerState",
+         * "value": "BSH.Common.EnumType.PowerState.Off",
+         * "type": "BSH.Common.EnumType.PowerState",
+         * "constraints": {
+         * "allowedvalues": [
+         * "BSH.Common.EnumType.PowerState.Off",
+         * "BSH.Common.EnumType.PowerState.On"
+         * ],
+         * "default": "BSH.Common.EnumType.PowerState.On",
+         * "access": "readWrite"
+         * }
+         * }
+         * }
+         */
+
+        if (powerStateSettings != null) {
+            JsonObject responseObject = parseString(powerStateSettings).getAsJsonObject();
+            JsonObject data = responseObject.getAsJsonObject("data");
+            JsonElement jsonConstraints = data.get("constraints");
+            if (jsonConstraints.isJsonObject()) {
+                JsonElement jsonAccess = jsonConstraints.getAsJsonObject().get("access");
+                if (jsonAccess.isJsonPrimitive()) {
+                    return PowerStateAccess.fromString(jsonAccess.getAsString());
+                }
+            }
+        }
+
+        return PowerStateAccess.READ_ONLY;
+    }
+
+    /**
      * Set power state of device.
      *
      * @param haId home appliance id
@@ -468,6 +516,48 @@ public class HomeConnectApiClient {
     }
 
     /**
+     * Get battery level of device.
+     *
+     * @param haId home appliance id
+     * @return {@link Data}
+     * @throws CommunicationException API communication exception
+     * @throws AuthorizationException oAuth authorization exception
+     * @throws ApplianceOfflineException appliance is not connected to the cloud
+     */
+    public Data getBatteryLevel(String haId)
+            throws CommunicationException, AuthorizationException, ApplianceOfflineException {
+        return getStatus(haId, STATUS_BATTERY_LEVEL);
+    }
+
+    /**
+     * Get current map of cleaning robot.
+     *
+     * @param haId home appliance id
+     * @return {@link Data}
+     * @throws CommunicationException API communication exception
+     * @throws AuthorizationException oAuth authorization exception
+     * @throws ApplianceOfflineException appliance is not connected to the cloud
+     */
+    public Data getCurrentMap(String haId)
+            throws CommunicationException, AuthorizationException, ApplianceOfflineException {
+        return getSetting(haId, SETTING_CURRENT_MAP);
+    }
+
+    /**
+     * Set current map of cleaning robot.
+     *
+     * @param haId home appliance id
+     * @param map map value (e.g. ConsumerProducts.CleaningRobot.EnumType.AvailableMaps.Map1)
+     * @throws CommunicationException API communication exception
+     * @throws AuthorizationException oAuth authorization exception
+     * @throws ApplianceOfflineException appliance is not connected to the cloud
+     */
+    public void setCurrentMap(String haId, String map)
+            throws CommunicationException, AuthorizationException, ApplianceOfflineException {
+        putSettings(haId, new Data(SETTING_CURRENT_MAP, map, null));
+    }
+
+    /**
      * Get operation state of device.
      *
      * @param haId home appliance id
@@ -602,6 +692,21 @@ public class HomeConnectApiClient {
     public void stopProgram(String haId)
             throws CommunicationException, AuthorizationException, ApplianceOfflineException {
         sendDelete(haId, BASE_PATH + haId + "/programs/active");
+    }
+
+    /**
+     * Send a command to the active program.
+     *
+     * @param haId home appliance id
+     * @param commandKey the command key (e.g. BSH.Common.Command.PauseCommand)
+     * @throws CommunicationException API communication exception
+     * @throws AuthorizationException oAuth authorization exception
+     * @throws ApplianceOfflineException appliance is not connected to the cloud
+     */
+    public void putCommand(String haId, String commandKey)
+            throws CommunicationException, AuthorizationException, ApplianceOfflineException {
+        putData(haId, BASE_PATH + haId + "/commands/" + commandKey, new Data(commandKey, Boolean.TRUE.toString(), null),
+                VALUE_TYPE_BOOLEAN);
     }
 
     public List<AvailableProgram> getPrograms(String haId)
@@ -880,7 +985,7 @@ public class HomeConnectApiClient {
     private void checkResponseCode(int desiredCode, Request request, ContentResponse response, @Nullable String haId,
             @Nullable String requestPayload)
             throws CommunicationException, AuthorizationException, ApplianceOfflineException {
-        checkResponseCode(singletonList(desiredCode), request, response, haId, requestPayload);
+        checkResponseCode(List.of(desiredCode), request, response, haId, requestPayload);
     }
 
     private void checkResponseCode(List<Integer> desiredCodes, Request request, ContentResponse response,
@@ -903,8 +1008,8 @@ public class HomeConnectApiClient {
             trackAndLogApiRequest(haId, request, requestPayload, response, responseBody);
 
             responseBody = responseBody == null ? "" : responseBody;
-            if (code == HttpStatus.CONFLICT_409 && responseBody.toLowerCase().contains("error")
-                    && responseBody.toLowerCase().contains("offline")) {
+            if (code == HttpStatus.CONFLICT_409 && responseBody.toLowerCase(DEFAULT_LOCALE).contains("error")
+                    && responseBody.toLowerCase(DEFAULT_LOCALE).contains("offline")) {
                 throw new ApplianceOfflineException(code, message, responseBody);
             } else {
                 throw new CommunicationException(code, message, responseBody);
@@ -1082,7 +1187,7 @@ public class HomeConnectApiClient {
 
     private void trackApiRequest(HomeConnectRequest homeConnectRequest,
             @Nullable HomeConnectResponse homeConnectResponse) {
-        communicationQueue.add(new ApiRequest(ZonedDateTime.now(), homeConnectRequest, homeConnectResponse));
+        communicationQueue.add(new ApiRequest(ZonedDateTime.now(ZONE_ID), homeConnectRequest, homeConnectResponse));
     }
 
     private HomeConnectRequest map(Request request, @Nullable String requestBody) {

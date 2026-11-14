@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -56,7 +55,7 @@ final class AhaCollectionScheduleImpl implements AhaCollectionSchedule {
     private final String collectionPlace;
 
     /**
-     * Creates an new {@link AhaCollectionScheduleImpl} for the given location.
+     * Creates a new {@link AhaCollectionScheduleImpl} for the given location.
      */
     public AhaCollectionScheduleImpl(final String commune, final String street, final String houseNumber,
             final String houseNumberAddon, final String collectionPlace) {
@@ -81,9 +80,9 @@ final class AhaCollectionScheduleImpl implements AhaCollectionSchedule {
 
         final Elements table = doc.select("table");
 
-        if (table.size() == 0) {
+        if (table.isEmpty()) {
             logger.warn("No result table found.");
-            return Collections.emptyMap();
+            return Map.of();
         }
 
         final Iterator<Element> rowIt = table.get(0).getElementsByTag("tr").iterator();
@@ -91,7 +90,7 @@ final class AhaCollectionScheduleImpl implements AhaCollectionSchedule {
 
         while (rowIt.hasNext()) {
             final Element currentRow = rowIt.next();
-            if (!currentRow.tagName().equals("tr")) {
+            if (!"tr".equals(currentRow.tagName())) {
                 continue;
             }
             // Skip header, empty and download button rows.
@@ -149,7 +148,7 @@ final class AhaCollectionScheduleImpl implements AhaCollectionSchedule {
     }
 
     /**
-     * Returns <code>true</code> if the row is an (empty) delimiter row or if its an row that contains the download
+     * Returns <code>true</code> if the row is an (empty) delimiter row or if its a row that contains the download
      * buttons for ical.
      */
     private boolean isDelimiterOrDownloadRow(Element currentRow) {

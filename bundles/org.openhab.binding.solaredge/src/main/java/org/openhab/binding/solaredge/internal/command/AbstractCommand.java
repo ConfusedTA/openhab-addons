@@ -1,0 +1,301 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.solaredge.internal.command;
+
+import static org.openhab.binding.solaredge.internal.SolarEdgeBindingConstants.*;
+
+import java.net.CookieStore;
+import java.net.HttpCookie;
+import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.api.Response;
+import org.eclipse.jetty.client.api.Result;
+import org.eclipse.jetty.client.util.BufferingResponseListener;
+import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.http.HttpStatus.Code;
+import org.openhab.binding.solaredge.internal.config.PublicApiAuthentication;
+import org.openhab.binding.solaredge.internal.config.PublicApiVersion;
+import org.openhab.binding.solaredge.internal.config.SolarEdgeConfiguration;
+import org.openhab.binding.solaredge.internal.connector.CommunicationStatus;
+import org.openhab.binding.solaredge.internal.connector.StatusUpdateListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+
+/**
+ * base class for all commands. common logic should be implemented here
+ *
+ * @author Alexander Friese - initial contribution
+ */
+@NonNullByDefault
+public abstract class AbstractCommand extends BufferingResponseListener implements SolarEdgeCommand {
+
+    /**
+     * logger
+     */
+    protected final Logger logger = LoggerFactory.getLogger(AbstractCommand.class);
+
+    /**
+     * the configuration
+     */
+    protected final SolarEdgeConfiguration config;
+
+    /**
+     * JSON deserializer
+     */
+    private final Gson gson;
+
+    /**
+     * status code of fulfilled request
+     */
+    private final CommunicationStatus communicationStatus;
+
+    /**
+     * listener to provide updates to the WebInterface class
+     */
+    private final StatusUpdateListener listener;
+    private final Supplier<String> publicApiV2CredentialSupplier;
+    private final Runnable publicApiV2CredentialInvalidator;
+    private final Runnable publicApiV2RequestRecorder;
+    private final Consumer<Response> publicApiV2RateLimitListener;
+    private volatile @Nullable LongSupplier requestGenerationSupplier;
+    private long requestGeneration;
+
+    /**
+     * the constructor
+     *
+     * @param config
+     * @param listener
+     *
+     */
+    public AbstractCommand(SolarEdgeConfiguration config, StatusUpdateListener listener) {
+        this(config, listener, config::getTokenOrApiKey, () -> {
+        }, () -> {
+        }, response -> {
+        });
+    }
+
+    protected AbstractCommand(SolarEdgeConfiguration config, StatusUpdateListener listener,
+            Supplier<String> publicApiV2CredentialSupplier) {
+        this(config, listener, publicApiV2CredentialSupplier, () -> {
+        }, () -> {
+        }, response -> {
+        });
+    }
+
+    protected AbstractCommand(SolarEdgeConfiguration config, StatusUpdateListener listener,
+            Supplier<String> publicApiV2CredentialSupplier, Runnable publicApiV2CredentialInvalidator) {
+        this(config, listener, publicApiV2CredentialSupplier, publicApiV2CredentialInvalidator, () -> {
+        }, response -> {
+        });
+    }
+
+    protected AbstractCommand(SolarEdgeConfiguration config, StatusUpdateListener listener,
+            Supplier<String> publicApiV2CredentialSupplier, Runnable publicApiV2CredentialInvalidator,
+            Runnable publicApiV2RequestRecorder, Consumer<Response> publicApiV2RateLimitListener) {
+        this.communicationStatus = new CommunicationStatus();
+        this.config = config;
+        this.listener = listener;
+        this.publicApiV2CredentialSupplier = publicApiV2CredentialSupplier;
+        this.publicApiV2CredentialInvalidator = publicApiV2CredentialInvalidator;
+        this.publicApiV2RequestRecorder = publicApiV2RequestRecorder;
+        this.publicApiV2RateLimitListener = publicApiV2RateLimitListener;
+        this.gson = new Gson();
+    }
+
+    /**
+     * Log request success
+     */
+    @Override
+    public final void onSuccess(Response response) {
+        super.onSuccess(response);
+        communicationStatus.setHttpCode(HttpStatus.getCode(response.getStatus()));
+        logger.debug("HTTP response {}", response.getStatus());
+        if (!isCurrentRequest()) {
+            return;
+        }
+        if (!config.isUsePrivateApi() && PublicApiVersion.V2.equals(config.getPublicApiVersion())) {
+            publicApiV2RateLimitListener.accept(response);
+        }
+        if (response.getStatus() == HttpStatus.UNAUTHORIZED_401
+                && PublicApiAuthentication.OAUTH.equals(config.getPublicApiAuthentication())) {
+            publicApiV2CredentialInvalidator.run();
+        }
+    }
+
+    /**
+     * Log request failure
+     */
+    @Override
+    public final void onFailure(@Nullable Response response, @Nullable Throwable failure) {
+        if (response != null && failure != null) {
+            super.onFailure(response, failure);
+        }
+        if (failure != null) {
+            logger.debug("Request failed: {}", failure.toString());
+            communicationStatus.setError(failure instanceof Exception exception ? exception : new Exception(failure));
+
+            if (failure instanceof SocketTimeoutException || failure instanceof TimeoutException) {
+                communicationStatus.setHttpCode(Code.REQUEST_TIMEOUT);
+            } else if (failure instanceof UnknownHostException) {
+                communicationStatus.setHttpCode(Code.BAD_GATEWAY);
+            } else {
+                communicationStatus.setHttpCode(Code.INTERNAL_SERVER_ERROR);
+            }
+        } else {
+            logger.debug("Request failed");
+        }
+    }
+
+    @Override
+    public void onContent(Response response, ByteBuffer content) {
+        super.onContent(response, content);
+        String receivedContent = getContentAsString();
+        logger.debug("received content, length: {}", receivedContent == null ? 0 : receivedContent.length());
+    }
+
+    @Override
+    public void performAction(HttpClient asyncclient) {
+        if (!isCurrentRequest()) {
+            return;
+        }
+        Request request = asyncclient.newRequest(getURL()).timeout(config.getAsyncTimeout(), TimeUnit.SECONDS);
+
+        // add authentication data for every request. Handling this here makes it obsolete to implement for each and
+        // every command
+        if (config.isUsePrivateApi()) {
+            // token cookie is only used by private API therefore this can be skipped when using public API
+            CookieStore cookieStore = asyncclient.getCookieStore();
+            HttpCookie c = new HttpCookie(PRIVATE_API_TOKEN_COOKIE_NAME, config.getTokenOrApiKey());
+            c.setDomain(PRIVATE_API_TOKEN_COOKIE_DOMAIN);
+            c.setPath(PRIVATE_API_TOKEN_COOKIE_PATH);
+            cookieStore.add(URI.create(getURL()), c);
+        } else if (PublicApiVersion.V2.equals(config.getPublicApiVersion())) {
+            String credential = Objects.requireNonNull(publicApiV2CredentialSupplier.get());
+            if (credential.isBlank()) {
+                logger.debug("Skipping Monitoring API V2 request because no credential is available");
+                return;
+            }
+            if (PublicApiAuthentication.OAUTH.equals(config.getPublicApiAuthentication())) {
+                request.header("Authorization", "Bearer " + credential);
+            } else {
+                request.header(PUBLIC_DATA_API_V2_KEY_HEADER, credential);
+            }
+        } else {
+            request.param(PUBLIC_DATA_API_KEY_FIELD, config.getTokenOrApiKey());
+        }
+
+        if (!config.isUsePrivateApi() && PublicApiVersion.V2.equals(config.getPublicApiVersion())) {
+            publicApiV2RequestRecorder.run();
+        }
+        prepareRequest(request).send(this);
+    }
+
+    /**
+     * @return returns Http Status Code
+     */
+    public CommunicationStatus getCommunicationStatus() {
+        return communicationStatus;
+    }
+
+    /** Returns whether a failed request may succeed when retried shortly afterwards. */
+    protected final boolean isRetryable() {
+        return switch (communicationStatus.getHttpCode()) {
+            case REQUEST_TIMEOUT, INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * updates status of the registered listener.
+     */
+    protected final void updateListenerStatus() {
+        if (!isCurrentRequest()) {
+            return;
+        }
+        try {
+            listener.update(communicationStatus);
+        } catch (Exception ex) {
+            // this should not happen
+            logger.warn("Exception caught: {}", ex.getMessage(), ex);
+        }
+    }
+
+    /** Bind a command to the connector generation in which it was first queued. */
+    @Override
+    public final synchronized boolean bindRequestGeneration(long generation, LongSupplier currentGeneration) {
+        if (requestGenerationSupplier == null) {
+            requestGeneration = generation;
+            requestGenerationSupplier = currentGeneration;
+        }
+        return isCurrentRequest();
+    }
+
+    private boolean isCurrentRequest() {
+        LongSupplier supplier = requestGenerationSupplier;
+        return supplier == null || requestGeneration == supplier.getAsLong();
+    }
+
+    @Override
+    public final void onComplete(@Nullable Result result) {
+        if (isCurrentRequest()) {
+            handleResponse(result);
+        }
+    }
+
+    protected abstract void handleResponse(@Nullable Result result);
+
+    /**
+     * concrete implementation has to prepare the requests with additional parameters, etc
+     *
+     * @param requestToPrepare the request to prepare
+     * @return prepared Request object
+     */
+    protected abstract Request prepareRequest(Request requestToPrepare);
+
+    /**
+     * concrete implementation has to provide the URL
+     *
+     * @return Url
+     */
+    protected abstract String getURL();
+
+    /**
+     * just a wrapper as fromJson could return null. This will avoid warnings as eclipse otherwise assumes unnecessary
+     * null checks which are not unnecessary
+     *
+     * @param <T>
+     * @param json
+     * @param classOfT
+     * @return
+     * @throws JsonSyntaxException
+     */
+    protected <T> @Nullable T fromJson(String json, Class<T> classOfT) throws JsonSyntaxException {
+        return gson.fromJson(json, classOfT);
+    }
+}

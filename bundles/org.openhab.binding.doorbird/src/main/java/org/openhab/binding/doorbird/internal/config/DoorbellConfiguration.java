@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,11 +12,13 @@
  */
 package org.openhab.binding.doorbird.internal.config;
 
+import java.util.List;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 
 /**
- * The {@link DoorbellConfig} class contains fields mapping thing configuration parameters
+ * The {@link DoorbellConfiguration} class contains fields mapping thing configuration parameters
  * for doorbell thing types.
  *
  * @author Mark Hilbush - Initial contribution
@@ -62,4 +64,9 @@ public class DoorbellConfiguration {
      * Scale factor for montages
      */
     public @Nullable Integer montageScaleFactor;
+
+    /**
+     * List of IPs that are allowed to trigger webhooks.
+     */
+    public List<String> webhookIpWhitelist = List.of();
 }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,8 +13,8 @@
 package org.openhab.binding.draytonwiser.internal.handler;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -71,7 +71,7 @@ public class HeatHubHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(DraytonWiserDiscoveryService.class);
+        return Set.of(DraytonWiserDiscoveryService.class);
     }
 
     public void setDiscoveryService(final DraytonWiserRefreshListener discoveryService) {
@@ -109,8 +109,7 @@ public class HeatHubHandler extends BaseBridgeHandler {
                 final DomainDTO domain = api.getDomain();
 
                 if (domain == null) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
-                            "No data received");
+                    updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, "No data received");
                 } else {
                     if (getThing().getStatus() != ThingStatus.ONLINE) {
                         updateStatus(ThingStatus.ONLINE);
@@ -124,7 +123,7 @@ public class HeatHubHandler extends BaseBridgeHandler {
             }
         } catch (final RuntimeException | DraytonWiserApiException e) {
             logger.debug("Exception occurred during execution: {}", e.getMessage(), e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
             return null;
         }
         return Boolean.TRUE;

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -216,6 +216,7 @@ public abstract class VerisureBaseThingDTO implements VerisureThingDTO {
             return result;
         }
 
+        @SuppressWarnings("PMD.SimplifyBooleanReturns")
         @Override
         public boolean equals(@Nullable Object obj) {
             if (this == obj) {
@@ -343,6 +344,7 @@ public abstract class VerisureBaseThingDTO implements VerisureThingDTO {
             return result;
         }
 
+        @SuppressWarnings("PMD.SimplifyBooleanReturns")
         @Override
         public boolean equals(@Nullable Object obj) {
             if (this == obj) {
@@ -409,7 +411,7 @@ public abstract class VerisureBaseThingDTO implements VerisureThingDTO {
 
         private @Nullable String deviceLabel;
         private @Nullable String area;
-        private Gui gui = new Gui();
+        private @Nullable Gui gui = new Gui();
         @SerializedName("__typename")
         private @Nullable String typename;
 
@@ -421,7 +423,7 @@ public abstract class VerisureBaseThingDTO implements VerisureThingDTO {
             return area;
         }
 
-        public Gui getGui() {
+        public @Nullable Gui getGui() {
             return gui;
         }
 
@@ -437,7 +439,8 @@ public abstract class VerisureBaseThingDTO implements VerisureThingDTO {
             result = prime * result + ((localArea == null) ? 0 : localArea.hashCode());
             String localDeviceLabel = deviceLabel;
             result = prime * result + ((localDeviceLabel == null) ? 0 : localDeviceLabel.hashCode());
-            result = prime * result + gui.hashCode();
+            Gui localGui = gui;
+            result = prime * result + ((localGui == null) ? 0 : localGui.hashCode());
             String localTypeName = typename;
             result = prime * result + ((localTypeName == null) ? 0 : localTypeName.hashCode());
             return result;
@@ -471,7 +474,12 @@ public abstract class VerisureBaseThingDTO implements VerisureThingDTO {
             } else if (!localDeviceLabel.equals(other.deviceLabel)) {
                 return false;
             }
-            if (!gui.equals(other.gui)) {
+            Gui localGui = gui;
+            if (localGui == null) {
+                if (other.gui != null) {
+                    return false;
+                }
+            } else if (!localGui.equals(other.gui)) {
                 return false;
             }
             String localTypeName = typename;

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -122,7 +122,12 @@ public class RoombaHandler extends BaseThingHandler {
                 updateStatus(ThingStatus.ONLINE);
             } else {
                 String message = (error != null) ? error.getMessage() : "Unknown reason";
-                updateStatus(OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, message);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, message);
+                if (error instanceof SecurityException) {
+                    logger.warn(
+                            "TLS_RSA_WITH_AES_256_CBC_SHA is disabled by Java TLS policy (jdk.tls.disabledAlgorithms), canceling reconnection attempts. Please consult binding documentation.");
+                    dispose();
+                }
             }
         }
     };
@@ -137,7 +142,7 @@ public class RoombaHandler extends BaseThingHandler {
 
         if (UNKNOWN.equals(config.getPassword()) || UNKNOWN.equals(config.getBlid())) {
             final String message = "Robot authentication is required";
-            updateStatus(OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, message);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, message);
             scheduler.execute(this::getCredentials);
         } else {
             scheduler.execute(this::connect);
@@ -148,7 +153,7 @@ public class RoombaHandler extends BaseThingHandler {
     public void dispose() {
         Future<?> requester = credentialRequester;
         if (requester != null) {
-            requester.cancel(false);
+            requester.cancel(true);
             credentialRequester = null;
         }
 
@@ -189,9 +194,38 @@ public class RoombaHandler extends BaseThingHandler {
                         String[] params = cmds[1].split(";");
 
                         String mapId = params[0];
-                        String[] regionIds = params[1].split(",");
+                        String userPmapvId;
+                        if (params.length >= 3) {
+                            userPmapvId = params[2];
+                        } else {
+                            userPmapvId = null;
+                        }
 
-                        MQTTProtocol.Request request = new MQTTProtocol.CleanRoomsRequest("start", mapId, regionIds);
+                        String[] regions = params[1].split(",");
+                        String regionIds[] = new String[regions.length];
+                        String regionTypes[] = new String[regions.length];
+
+                        for (int i = 0; i < regions.length; i++) {
+                            String[] regionDetails = regions[i].split("=");
+
+                            if (regionDetails.length >= 2) {
+                                if (regionDetails[0].equals("r")) {
+                                    regionIds[i] = regionDetails[1];
+                                    regionTypes[i] = "rid";
+                                } else if (regionDetails[0].equals("z")) {
+                                    regionIds[i] = regionDetails[1];
+                                    regionTypes[i] = "zid";
+                                } else {
+                                    regionIds[i] = regionDetails[0];
+                                    regionTypes[i] = "rid";
+                                }
+                            } else {
+                                regionIds[i] = regionDetails[0];
+                                regionTypes[i] = "rid";
+                            }
+                        }
+                        MQTTProtocol.Request request = new MQTTProtocol.CleanRoomsRequest("start", mapId, regionIds,
+                                regionTypes, userPmapvId);
                         connection.send(request.getTopic(), gson.toJson(request));
                     } else {
                         logger.warn("Invalid request: {}", cmd);
@@ -272,7 +306,7 @@ public class RoombaHandler extends BaseThingHandler {
                 try {
                     blid = LoginRequester.getBlid(config.getIpAddress());
                 } catch (IOException exception) {
-                    updateStatus(OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, exception.toString());
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, exception.toString());
                 }
 
                 if (blid != null) {
@@ -288,10 +322,10 @@ public class RoombaHandler extends BaseThingHandler {
                 try {
                     password = LoginRequester.getPassword(config.getIpAddress());
                 } catch (KeyManagementException | NoSuchAlgorithmException exception) {
-                    updateStatus(OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, exception.toString());
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, exception.toString());
                     return; // This is internal system error, no retry
                 } catch (IOException exception) {
-                    updateStatus(OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, exception.toString());
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, exception.toString());
                 }
 
                 if (password != null) {
@@ -321,11 +355,10 @@ public class RoombaHandler extends BaseThingHandler {
         final String password = config.getPassword();
         if (UNKNOWN.equals(blid) || UNKNOWN.equals(password)) {
             final String message = "Robot authentication is required";
-            updateStatus(OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, message);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, message);
             scheduler.execute(this::getCredentials);
         } else {
-            final String message = "Robot authentication is successful";
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.CONFIGURATION_PENDING, message);
+            updateStatus(ThingStatus.UNKNOWN);
             connection.connect(address, blid, password);
         }
     }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,16 +14,18 @@ package org.openhab.binding.homematic.internal.converter.type;
 
 import static org.openhab.binding.homematic.internal.misc.HomematicConstants.DATAPOINT_NAME_SENSOR;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.homematic.internal.converter.ConverterException;
 import org.openhab.binding.homematic.internal.model.HmDatapoint;
 import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.types.Type;
 
 /**
- * Converts between a Homematic datapoint value and a openHAB OpenClosedType.
+ * Converts between a Homematic datapoint value and an openHAB OpenClosedType.
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 public class OpenClosedTypeConverter extends AbstractTypeConverter<OpenClosedType> {
     @Override
     protected boolean toBindingValidation(HmDatapoint dp, Class<? extends Type> typeClass) {

@@ -7,16 +7,23 @@
 	<thing-type id="projector-serial">
 		<label>Epson Projector - Serial</label>
 		<description>An Epson projector which supports the ESC/VP21 protocol via a serial port connection</description>
+		<semantic-equipment-tag>Projector</semantic-equipment-tag>
 
 		<channels>
-			<channel id="power" typeId="system.power"/>
+			<channel id="power" typeId="system.power">
+				<label>Power</label>
+				<description>Powers the projector on or off</description>
+			</channel>
 			<channel id="powerstate" typeId="powerstate"/>
 			<channel id="source" typeId="source"/>
 			<channel id="aspectratio" typeId="aspectratio"/>
 			<channel id="colormode" typeId="colormode"/>
 			<channel id="freeze" typeId="freeze"/>
 			<channel id="mute" typeId="mute"/>
-			<channel id="volume" typeId="system.volume"/>
+			<channel id="volume" typeId="system.volume">
+				<label>Volume</label>
+				<description>Retrieve or set the volume</description>
+			</channel>
 			<channel id="luminance" typeId="luminance"/>
 			<channel id="brightness" typeId="brightness"/>
 			<channel id="contrast" typeId="contrast"/>
@@ -39,16 +46,28 @@
 			<channel id="errmessage" typeId="errmessage"/>
 		</channels>
 
+		<properties>
+			<property name="thingTypeVersion">2</property>
+			<property name="modelId">Unknown</property>
+			<property name="serialNumber">Unknown</property>
+		</properties>
+
 		<config-description>
 			<parameter name="serialPort" type="text" required="true">
 				<label>Serial Port</label>
 				<context>serial-port</context>
+				<limitToOptions>false</limitToOptions>
 				<description>Serial Port to Use for Connecting to the Epson Projector</description>
 			</parameter>
 			<parameter name="pollingInterval" type="integer" min="5" max="60" unit="s" required="false">
 				<label>Polling Interval</label>
 				<description>Configures How Often to Poll the Projector for Updates (5-60; Default 10)</description>
 				<default>10</default>
+			</parameter>
+			<parameter name="loadSourceList" type="boolean">
+				<label>Load Source List</label>
+				<description>Attempt to load source list options from the Projector when True</description>
+				<default>true</default>
 			</parameter>
 			<parameter name="maxVolume" type="integer">
 				<label>Volume Range</label>
@@ -68,16 +87,23 @@
 		<label>Epson Projector - TCP/IP</label>
 		<description>An Epson projector which supports the ESC/VP21 protocol via the built-in ethernet port or a serial over
 			IP connection</description>
+		<semantic-equipment-tag>Projector</semantic-equipment-tag>
 
 		<channels>
-			<channel id="power" typeId="system.power"/>
+			<channel id="power" typeId="system.power">
+				<label>Power</label>
+				<description>Powers the projector on or off</description>
+			</channel>
 			<channel id="powerstate" typeId="powerstate"/>
 			<channel id="source" typeId="source"/>
 			<channel id="aspectratio" typeId="aspectratio"/>
 			<channel id="colormode" typeId="colormode"/>
 			<channel id="freeze" typeId="freeze"/>
 			<channel id="mute" typeId="mute"/>
-			<channel id="volume" typeId="system.volume"/>
+			<channel id="volume" typeId="system.volume">
+				<label>Volume</label>
+				<description>Retrieve or set the volume</description>
+			</channel>
 			<channel id="luminance" typeId="luminance"/>
 			<channel id="brightness" typeId="brightness"/>
 			<channel id="contrast" typeId="contrast"/>
@@ -100,6 +126,12 @@
 			<channel id="errmessage" typeId="errmessage"/>
 		</channels>
 
+		<properties>
+			<property name="thingTypeVersion">2</property>
+			<property name="modelId">Unknown</property>
+			<property name="serialNumber">Unknown</property>
+		</properties>
+
 		<representation-property>macAddress</representation-property>
 
 		<config-description>
@@ -118,6 +150,11 @@
 				<description>Configures How Often to Poll the Projector for Updates (5-60; Default 10)</description>
 				<default>10</default>
 			</parameter>
+			<parameter name="loadSourceList" type="boolean">
+				<label>Load Source List</label>
+				<description>Attempt to load source list options from the Projector when True</description>
+				<default>true</default>
+			</parameter>
 			<parameter name="maxVolume" type="integer">
 				<label>Volume Range</label>
 				<description>Set to Match the Volume Range Seen in the Projector's OSD</description>
@@ -128,6 +165,11 @@
 				</options>
 				<default>20</default>
 			</parameter>
+			<parameter name="password" type="text" required="false" pattern="[A-Za-z0-9@]{0,16}">
+				<context>password</context>
+				<label>Password</label>
+				<description>Projector 'Monitor' password - must be &lt;= 16 alpha numeric or @ characters (optional)</description>
+			</parameter>
 		</config-description>
 
 	</thing-type>
@@ -136,18 +178,77 @@
 		<item-type>String</item-type>
 		<label>Power State</label>
 		<description>Retrieves the Textual Power State of the Projector</description>
+		<tags>
+			<tag>Status</tag>
+			<tag>Mode</tag>
+		</tags>
 		<state readOnly="true"/>
 	</channel-type>
 	<channel-type id="lamptime">
 		<item-type>Number</item-type>
 		<label>Lamp Time</label>
-		<description>Retrieves the Lamp Hours</description>
+		<description>Retrieves the number of hours the lamp has been used</description>
+		<tags>
+			<tag>Status</tag>
+			<tag>Duration</tag>
+		</tags>
 		<state readOnly="true" pattern="%d h"/>
 	</channel-type>
 	<channel-type id="keycode" advanced="true">
 		<item-type>String</item-type>
 		<label>KeyCode</label>
 		<description>Send a KEY Operation Command to the Projector</description>
+		<state>
+			<options>
+				<option value="03">Menu</option>
+				<option value="04">Home</option>
+				<option value="05">Esc</option>
+				<option value="35">Up</option>
+				<option value="36">Down</option>
+				<option value="37">Left</option>
+				<option value="38">Right</option>
+				<option value="16">Enter</option>
+				<option value="14">Source Auto</option>
+				<option value="48">Source Search</option>
+				<option value="10">Comp 1/2</option>
+				<option value="11">Video/S-Video</option>
+				<option value="41">Computer</option>
+				<option value="42">Video</option>
+				<option value="E8">BNC</option>
+				<option value="E9">DVI-D</option>
+				<option value="EA">HDMI/HDBase-T</option>
+				<option value="EB">LAN</option>
+				<option value="EC">SDI</option>
+				<option value="ED">Slot 1</option>
+				<option value="EE">Slot 2</option>
+				<option value="12">Freeze</option>
+				<option value="15">A/V Mute</option>
+				<option value="13">Blank</option>
+				<option value="17">Aspect</option>
+				<option value="18">Lock</option>
+				<option value="19">Color Mode</option>
+				<option value="1A">Pattern</option>
+				<option value="21">Volume +</option>
+				<option value="22">Volume -</option>
+				<option value="23">Sync +</option>
+				<option value="24">Sync -</option>
+				<option value="25">Tracking +</option>
+				<option value="26">Tracking -</option>
+				<option value="31">Brightness +</option>
+				<option value="32">Brightness -</option>
+				<option value="33">Contrast +</option>
+				<option value="34">Contrast -</option>
+				<option value="06">VKeystone +</option>
+				<option value="07">VKeystone -</option>
+				<option value="08">HKeystone +</option>
+				<option value="09">HKeystone -</option>
+				<option value="39">Zoom +</option>
+				<option value="3A">Zoom -</option>
+				<option value="1B">Wide</option>
+				<option value="1C">Tele</option>
+			</options>
+		</state>
+		<autoUpdatePolicy>veto</autoUpdatePolicy>
 	</channel-type>
 	<channel-type id="verticalkeystone" advanced="true">
 		<item-type>Number</item-type>
@@ -170,6 +271,10 @@
 		<item-type>Switch</item-type>
 		<label>Freeze Image</label>
 		<description>Turn the Freeze Screen Mode On or Off</description>
+		<tags>
+			<tag>Switch</tag>
+			<tag>Mode</tag>
+		</tags>
 	</channel-type>
 	<channel-type id="aspectratio">
 		<item-type>String</item-type>
@@ -197,6 +302,10 @@
 		<item-type>String</item-type>
 		<label>Luminance</label>
 		<description>Retrieve or Set the Lamp Mode</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Mode</tag>
+		</tags>
 		<state>
 			<options>
 				<option value="NORMAL">NORMAL</option>
@@ -217,6 +326,9 @@
 				<option value="20">PC DSUB</option>
 				<option value="41">Video</option>
 				<option value="42">S-Video</option>
+				<option value="52">USB</option>
+				<option value="53">LAN</option>
+				<option value="56">Wi-Fi Direct</option>
 			</options>
 		</state>
 	</channel-type>
@@ -260,6 +372,10 @@
 		<item-type>String</item-type>
 		<label>Color Mode</label>
 		<description>Retrieve or Set the Color Mode</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Color</tag>
+		</tags>
 		<state>
 			<options>
 				<option value="DYNAMIC">DYNAMIC</option>
@@ -321,6 +437,10 @@
 		<item-type>Switch</item-type>
 		<label>AV Mute</label>
 		<description>Turn the AV Mute On or Off</description>
+		<tags>
+			<tag>Switch</tag>
+			<tag>Mode</tag>
+		</tags>
 	</channel-type>
 	<channel-type id="horizontalreverse" advanced="true">
 		<item-type>Switch</item-type>

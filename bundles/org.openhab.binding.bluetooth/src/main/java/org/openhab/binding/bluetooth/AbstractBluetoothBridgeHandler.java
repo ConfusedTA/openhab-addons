@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,6 +13,7 @@
 package org.openhab.binding.bluetooth;
 
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -20,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -34,7 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This is a abstract superclass for BluetoothAdapter implementations. This class takes care of inactive device cleanup
+ * This is an abstract superclass for BluetoothAdapter implementations. This class takes care of inactive device cleanup
  * as well as handling background and active discovery logic.
  *
  * Subclasses will primarily be responsible for device discovery
@@ -131,6 +133,21 @@ public abstract class AbstractBluetoothBridgeHandler<BD extends BaseBluetoothDev
             devices.remove(device.getAddress());
         }
         discoveryListeners.forEach(listener -> listener.deviceRemoved(device));
+    }
+
+    /**
+     * Performs the given action on every device currently known to this bridge. Subclasses use this
+     * to propagate adapter-wide events (e.g. the adapter going away) to all of their devices without
+     * needing their own copy of the device registry.
+     *
+     * @param action the action to perform on each known device
+     */
+    protected void forEachDevice(Consumer<BD> action) {
+        List<BD> deviceSnapshot;
+        synchronized (devices) {
+            deviceSnapshot = List.copyOf(devices.values());
+        }
+        deviceSnapshot.forEach(action);
     }
 
     private boolean shouldRemove(BD device) {

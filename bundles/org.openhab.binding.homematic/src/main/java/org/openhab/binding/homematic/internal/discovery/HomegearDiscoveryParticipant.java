@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,11 +14,12 @@ package org.openhab.binding.homematic.internal.discovery;
 
 import static org.openhab.binding.homematic.internal.HomematicBindingConstants.THING_TYPE_BRIDGE;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.jupnp.model.meta.DeviceDetails;
 import org.jupnp.model.meta.RemoteDevice;
 import org.openhab.core.config.discovery.DiscoveryResult;
@@ -35,17 +36,18 @@ import org.slf4j.LoggerFactory;
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 @Component
 public class HomegearDiscoveryParticipant implements UpnpDiscoveryParticipant {
     private final Logger logger = LoggerFactory.getLogger(HomegearDiscoveryParticipant.class);
 
     @Override
     public Set<ThingTypeUID> getSupportedThingTypeUIDs() {
-        return Collections.singleton(THING_TYPE_BRIDGE);
+        return Set.of(THING_TYPE_BRIDGE);
     }
 
     @Override
-    public DiscoveryResult createResult(RemoteDevice device) {
+    public @Nullable DiscoveryResult createResult(RemoteDevice device) {
         ThingUID uid = getThingUID(device);
         if (uid != null) {
             DeviceDetails details = device.getDetails();
@@ -60,7 +62,7 @@ public class HomegearDiscoveryParticipant implements UpnpDiscoveryParticipant {
     }
 
     @Override
-    public ThingUID getThingUID(RemoteDevice device) {
+    public @Nullable ThingUID getThingUID(RemoteDevice device) {
         DeviceDetails details = device.getDetails();
         String modelName = details.getModelDetails().getModelName();
         if ("HOMEGEAR".equalsIgnoreCase(modelName)) {

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -30,6 +30,7 @@ import org.openhab.binding.icalendar.internal.handler.PullJob.CalendarUpdateList
 import org.openhab.binding.icalendar.internal.logic.AbstractPresentableCalendar;
 import org.openhab.binding.icalendar.internal.logic.Event;
 import org.openhab.binding.icalendar.internal.logic.EventTextFilter;
+import org.openhab.binding.icalendar.internal.logic.EventTimeFilter;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.StringType;
@@ -57,6 +58,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Michael Wodniok - Initial Contribution
  * @author Michael Wodniok - Fixed subsecond search if rounding to unit
+ * @author Christian Heinemann - Introduction of configuration 'datetimeMode'
  */
 @NonNullByDefault
 public class EventFilterHandler extends BaseThingHandler implements CalendarUpdateListener {
@@ -76,7 +78,7 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
     @Override
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
         if (bridgeStatusInfo.getStatus() == ThingStatus.OFFLINE) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         } else if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE) {
             updateStates();
         } else {
@@ -103,8 +105,7 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
     public void initialize() {
         Bridge iCalendarBridge = getBridge();
         if (iCalendarBridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "This thing requires a bridge configured to work.");
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
 
@@ -119,7 +120,7 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
 
         updateChannelSet(config);
         if (iCalendarBridge.getStatus() != ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             return;
         }
 
@@ -139,12 +140,15 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
         ChannelUID beginChannel;
         ChannelUID endChannel;
         ChannelUID titleChannel;
+        ChannelUID locationChannel;
 
-        public ResultChannelSet(ChannelGroupUID group, ChannelUID begin, ChannelUID end, ChannelUID title) {
+        public ResultChannelSet(ChannelGroupUID group, ChannelUID begin, ChannelUID end, ChannelUID title,
+                ChannelUID location) {
             resultGroup = group;
             beginChannel = begin;
             endChannel = end;
             titleChannel = title;
+            locationChannel = location;
         }
     }
 
@@ -189,7 +193,8 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
                         RESULT_GROUP_ID_PREFIX + position);
                 ResultChannelSet current = new ResultChannelSet(currentGroup,
                         new ChannelUID(currentGroup, RESULT_BEGIN_ID), new ChannelUID(currentGroup, RESULT_END_ID),
-                        new ChannelUID(currentGroup, RESULT_TITLE_ID));
+                        new ChannelUID(currentGroup, RESULT_TITLE_ID),
+                        new ChannelUID(currentGroup, RESULT_LOCATION_ID));
                 resultChannels.add(current);
             }
         }
@@ -232,18 +237,19 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
                 thingBuilder.withoutChannel(toDelete.getUID());
             });
 
-            resultChannels.stream().filter((ResultChannelSet current) -> {
-                return (getThing().getChannelsOfGroup(current.resultGroup.toString()).size() == 0);
-            }).forEach((ResultChannelSet current) -> {
-                for (ChannelBuilder builder : handlerCallback.createChannelBuilders(current.resultGroup,
-                        GROUP_TYPE_UID)) {
-                    Channel currentChannel = builder.build();
-                    Channel existingChannel = getThing().getChannel(currentChannel.getUID());
-                    if (existingChannel == null) {
-                        thingBuilder.withChannel(currentChannel);
-                    }
-                }
-            });
+            resultChannels
+                    .stream().filter((ResultChannelSet current) -> (getThing()
+                            .getChannelsOfGroup(current.resultGroup.toString()).isEmpty()))
+                    .forEach((ResultChannelSet current) -> {
+                        for (ChannelBuilder builder : handlerCallback.createChannelBuilders(current.resultGroup,
+                                GROUP_TYPE_UID)) {
+                            Channel currentChannel = builder.build();
+                            Channel existingChannel = getThing().getChannel(currentChannel.getUID());
+                            if (existingChannel == null) {
+                                thingBuilder.withChannel(currentChannel);
+                            }
+                        }
+                    });
         }
         updateThing(thingBuilder.build());
     }
@@ -277,10 +283,11 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
 
             Instant reference = Instant.now();
             TimeMultiplicator multiplicator = null;
-            EventTextFilter filter = null;
+            EventTextFilter eventTextFilter = null;
             int maxEvents;
             Instant begin = Instant.EPOCH;
             Instant end = Instant.ofEpochMilli(Long.MAX_VALUE);
+            final EventTimeFilter eventTimeFilter;
 
             try {
                 String textFilterValue = config.textEventValue;
@@ -294,7 +301,7 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
                         EventTextFilter.Field textFilterField = EventTextFilter.Field.valueOf(textEventField);
                         EventTextFilter.Type textFilterType = EventTextFilter.Type.valueOf(textValueType);
 
-                        filter = new EventTextFilter(textFilterField, textFilterValue, textFilterType);
+                        eventTextFilter = new EventTextFilter(textFilterField, textFilterValue, textFilterType);
                     } catch (IllegalArgumentException e2) {
                         throw new ConfigBrokenException("textEventField or textValueType are not set properly.");
                     }
@@ -351,13 +358,16 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
                     }
                     end = reference.plusSeconds(datetimeEnd.longValue() * multiplicator.getMultiplier());
                 }
+
+                eventTimeFilter = selectEventTimeFilterByConfigValue(config.datetimeMode);
             } catch (ConfigBrokenException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
                 return;
             }
 
             synchronized (resultChannels) {
-                List<Event> results = cal.getFilteredEventsBetween(begin, end, filter, maxEvents);
+                List<Event> results = cal.getFilteredEventsBetween(begin, end, eventTimeFilter, eventTextFilter,
+                        maxEvents);
                 for (int position = 0; position < resultChannels.size(); position++) {
                     ResultChannelSet channels = resultChannels.get(position);
                     if (position < results.size()) {
@@ -374,8 +384,7 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
                 }
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "Calendar has not been retrieved yet.");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Calendar has not been retrieved yet.");
         }
 
         int refreshTime = DEFAULT_FILTER_REFRESH;
@@ -391,5 +400,19 @@ public class EventFilterHandler extends BaseThingHandler implements CalendarUpda
             currentUpdateFuture.cancel(true);
         }
         updateFuture = scheduler.scheduleWithFixedDelay(this::updateStates, refreshTime, refreshTime, TimeUnit.MINUTES);
+    }
+
+    private EventTimeFilter selectEventTimeFilterByConfigValue(@Nullable String datetimeMode)
+            throws ConfigBrokenException {
+        if (datetimeMode == null) {
+            return EventTimeFilter.searchByStart();
+        }
+
+        return switch (datetimeMode) {
+            case "START" -> EventTimeFilter.searchByStart();
+            case "END" -> EventTimeFilter.searchByEnd();
+            case "ACTIVE" -> EventTimeFilter.searchByActive();
+            default -> throw new ConfigBrokenException("datetimeMode is not set properly.");
+        };
     }
 }

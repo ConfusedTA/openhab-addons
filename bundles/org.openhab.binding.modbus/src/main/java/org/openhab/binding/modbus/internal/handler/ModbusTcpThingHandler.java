@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,8 +13,8 @@
 package org.openhab.binding.modbus.internal.handler;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Optional;
+import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.modbus.discovery.internal.ModbusEndpointDiscoveryService;
@@ -54,12 +54,14 @@ public class ModbusTcpThingHandler
         endpoint = new ModbusTCPSlaveEndpoint(host, config.getPort(), config.getRtuEncoded());
 
         EndpointPoolConfiguration poolConfiguration = new EndpointPoolConfiguration();
-        this.poolConfiguration = poolConfiguration;
         poolConfiguration.setConnectMaxTries(config.getConnectMaxTries());
+        poolConfiguration.setAfterConnectionDelayMillis(config.getAfterConnectionDelayMillis());
         poolConfiguration.setConnectTimeoutMillis(config.getConnectTimeoutMillis());
         poolConfiguration.setInterConnectDelayMillis(config.getTimeBetweenReconnectMillis());
         poolConfiguration.setInterTransactionDelayMillis(config.getTimeBetweenTransactionsMillis());
         poolConfiguration.setReconnectAfterMillis(config.getReconnectAfterMillis());
+        poolConfiguration.setReceiveTimeoutMillis(config.getReceiveTimeoutMillis());
+        this.poolConfiguration = poolConfiguration;
     }
 
     @SuppressWarnings("null") // since Optional.map is always called with NonNull argument
@@ -100,6 +102,6 @@ public class ModbusTcpThingHandler
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(ModbusEndpointDiscoveryService.class);
+        return Set.of(ModbusEndpointDiscoveryService.class);
     }
 }

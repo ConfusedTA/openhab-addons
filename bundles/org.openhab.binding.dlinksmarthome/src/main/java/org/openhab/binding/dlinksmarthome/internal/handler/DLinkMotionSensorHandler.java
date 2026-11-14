@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -64,17 +64,20 @@ public class DLinkMotionSensorHandler extends BaseThingHandler implements DLinkM
             case ONLINE:
                 updateStatus(ThingStatus.ONLINE);
                 break;
+            case REBOOTING:
+                updateStatus(ThingStatusDetail.DUTY_CYCLE, "Device rebooting");
+                break;
             case COMMUNICATION_ERROR:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
                 break;
             case INVALID_PIN:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Invalid pin code");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Invalid pin code");
                 break;
             case INTERNAL_ERROR:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "System error");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "System error");
                 break;
             case UNSUPPORTED_FIRMWARE:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Unsupported firmware");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Unsupported firmware");
                 break;
             default:
                 break;

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon:addon id="chatgpt" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:addon="https://openhab.org/schemas/addon/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/addon/v1.0.0 https://openhab.org/schemas/addon-1.0.0.xsd">
+
+	<type>binding</type>
+	<name>ChatGPT Binding</name>
+	<description>Integrates with OpenAI API-compatible AI services for AI-powered chat and smart home control.</description>
+	<keywords>Anthropic,ChatGPT,Claude,DeepSeek,Mistral,Ollama,OpenAI,OpenRouter,SpaceXAI,human language interpreter</keywords>
+	<connection>cloud</connection>
+
+</addon:addon>

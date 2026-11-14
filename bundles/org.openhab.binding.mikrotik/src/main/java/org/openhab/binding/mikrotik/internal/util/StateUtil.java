@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -52,6 +52,10 @@ public class StateUtil {
         return value == null ? UnDefType.NULL : new QuantityType<>(value, Units.BYTE);
     }
 
+    public static State qtyBytesOrNull(@Nullable Long value) {
+        return value == null ? UnDefType.NULL : new QuantityType<>(value, Units.BYTE);
+    }
+
     public static State intOrNull(@Nullable Integer value) {
         return value == null ? UnDefType.NULL : new DecimalType(value.floatValue());
     }
@@ -64,11 +68,15 @@ public class StateUtil {
         return value == null ? UnDefType.NULL : new DecimalType(value);
     }
 
+    public static State powerOrNull(@Nullable Float value) {
+        return value == null ? UnDefType.NULL : new QuantityType<>(value, Units.WATT);
+    }
+
     public static State boolSwitchOrNull(@Nullable Boolean value) {
         if (value == null) {
             return UnDefType.NULL;
         }
-        return value ? OnOffType.ON : OnOffType.OFF;
+        return OnOffType.from(value);
     }
 
     public static State boolContactOrNull(@Nullable Boolean value) {

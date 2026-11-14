@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -28,7 +28,6 @@ import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.types.Command;
@@ -62,7 +61,7 @@ public class VelbusDimmerHandler extends VelbusThingHandler {
     public void handleCommand(ChannelUID channelUID, Command command) {
         VelbusBridgeHandler velbusBridgeHandler = getVelbusBridgeHandler();
         if (velbusBridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             return;
         }
 
@@ -72,17 +71,16 @@ public class VelbusDimmerHandler extends VelbusThingHandler {
 
             byte[] packetBytes = packet.getBytes();
             velbusBridgeHandler.sendPacket(packetBytes);
-        } else if (command instanceof PercentType) {
+        } else if (command instanceof PercentType percentCommand) {
             byte commandByte = COMMAND_SET_VALUE;
 
             VelbusDimmerPacket packet = new VelbusDimmerPacket(getModuleAddress().getChannelIdentifier(channelUID),
-                    commandByte, ((PercentType) command).byteValue(), this.dimmerConfig.dimspeed,
-                    isFirstGenerationDevice());
+                    commandByte, percentCommand.byteValue(), this.dimmerConfig.dimspeed, isFirstGenerationDevice());
 
             byte[] packetBytes = packet.getBytes();
             velbusBridgeHandler.sendPacket(packetBytes);
-        } else if (command instanceof OnOffType) {
-            byte commandByte = determineCommandByte((OnOffType) command);
+        } else if (command instanceof OnOffType onOffCommand) {
+            byte commandByte = determineCommandByte(onOffCommand);
 
             VelbusDimmerPacket packet = new VelbusDimmerPacket(getModuleAddress().getChannelIdentifier(channelUID),
                     commandByte, (byte) 0x00, this.dimmerConfig.dimspeed, isFirstGenerationDevice());
@@ -105,8 +103,10 @@ public class VelbusDimmerHandler extends VelbusThingHandler {
     }
 
     @Override
-    public void onPacketReceived(byte[] packet) {
-        logger.trace("onPacketReceived() was called");
+    public boolean onPacketReceived(byte[] packet) {
+        if (!super.onPacketReceived(packet)) {
+            return false;
+        }
 
         if (packet[0] == VelbusPacket.STX && packet.length >= 5) {
             byte address = packet[2];
@@ -127,5 +127,7 @@ public class VelbusDimmerHandler extends VelbusThingHandler {
                 updateState(getModuleAddress().getChannelId(velbusChannelIdentifier), state);
             }
         }
+
+        return true;
     }
 }

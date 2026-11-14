@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,7 +16,7 @@ import static org.openhab.binding.lutron.internal.LutronBindingConstants.CHANNEL
 
 import java.math.BigDecimal;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.openhab.binding.lutron.internal.action.DimmerActions;
@@ -56,7 +56,7 @@ public class DimmerHandler extends LutronHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singletonList(DimmerActions.class);
+        return List.of(DimmerActions.class);
     }
 
     @Override
@@ -70,9 +70,9 @@ public class DimmerHandler extends LutronHandler {
 
     @Override
     public void initialize() {
-        config = getThing().getConfiguration().as(DimmerConfig.class);
+        config = getConfigAs(DimmerConfig.class);
         if (config.integrationId <= 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId configured");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId configured");
             return;
         }
         fadeInTime = new LutronDuration(config.fadeInTime);
@@ -87,14 +87,14 @@ public class DimmerHandler extends LutronHandler {
         logger.debug("Initializing device state for Dimmer {}", getIntegrationId());
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
         } else if (bridge.getStatus() == ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Awaiting initial response");
+            updateStatus(ThingStatus.UNKNOWN, "Awaiting initial response");
             queryOutput(TargetType.DIMMER, OutputCommand.ACTION_ZONELEVEL);
             // handleUpdate() will set thing status to online when response arrives
             lastLightLevel.set(config.onLevel);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -109,8 +109,8 @@ public class DimmerHandler extends LutronHandler {
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         if (channelUID.getId().equals(CHANNEL_LIGHTLEVEL)) {
-            if (command instanceof Number) {
-                int level = ((Number) command).intValue();
+            if (command instanceof Number number) {
+                int level = number.intValue();
                 output(TargetType.DIMMER, OutputCommand.ACTION_ZONELEVEL, level, new LutronDuration("0.25"), null);
             } else if (command.equals(OnOffType.ON)) {
                 if (config.onToLast) {

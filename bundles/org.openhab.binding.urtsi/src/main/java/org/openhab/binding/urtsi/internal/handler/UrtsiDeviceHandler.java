@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -91,8 +91,7 @@ public class UrtsiDeviceHandler extends BaseBridgeHandler {
         }
         String urtsiCommand = new StringBuilder(address).append(mappedChannel).append(rtsCommand.getActionKey())
                 .toString();
-        boolean executedSuccessfully = writeString(urtsiCommand);
-        return executedSuccessfully;
+        return writeString(urtsiCommand);
     }
 
     /**
@@ -181,7 +180,7 @@ public class UrtsiDeviceHandler extends BaseBridgeHandler {
                     .collect(Collectors.joining(System.lineSeparator()));
             String description = String.format("Serial port '%s' could not be found. Available ports are:%n%s", port,
                     availablePorts);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, description);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, description);
             return;
         }
 
@@ -192,11 +191,11 @@ public class UrtsiDeviceHandler extends BaseBridgeHandler {
             outputStream = serialPort.getOutputStream();
             updateStatus(ThingStatus.ONLINE);
         } catch (IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Error: " + e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Error: " + e.getMessage());
         } catch (PortInUseException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Port already used: " + port);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Port already used: " + port);
         } catch (UnsupportedCommOperationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                     "Unsupported operation on port '" + port + "': " + e.getMessage());
         }
     }

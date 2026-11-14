@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -50,12 +50,14 @@ public abstract class ADThingHandler extends BaseThingHandler {
         logger.trace("Initializing device state");
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
-        } else if (bridge.getStatus() == ThingStatus.ONLINE) {
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
+            return;
+        }
+        if (bridge.getStatus() == ThingStatus.ONLINE) {
             initChannelState();
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -85,9 +87,8 @@ public abstract class ADThingHandler extends BaseThingHandler {
         if (bridgeStatus == ThingStatus.ONLINE
                 && getThing().getStatusInfo().getStatusDetail() == ThingStatusDetail.BRIDGE_OFFLINE) {
             initDeviceState();
-
         } else if (bridgeStatus == ThingStatus.OFFLINE) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -97,11 +98,12 @@ public abstract class ADThingHandler extends BaseThingHandler {
      * @param command command to send
      */
     protected void sendCommand(ADCommand command) {
-        Bridge bridge = getBridge();
-        ADBridgeHandler bridgeHandler = bridge == null ? null : (ADBridgeHandler) bridge.getHandler();
-
+        if (!(getBridge() instanceof Bridge bridge && bridge.getHandler() instanceof ADBridgeHandler bridgeHandler)) {
+            logger.debug("Bridge unavailable while sending a command for Thing: {}", thing.getUID());
+            return;
+        }
         if (bridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_MISSING_ERROR, "No bridge associated");
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         } else {
             bridgeHandler.sendADCommand(command);
         }

@@ -6,11 +6,11 @@ Binding for Doorbird D101 and D210x video doorbells.
 
 The following thing types are supported:
 
-| Device                           | Thing ID  |
-|----------------------------------|-----------|
-| Doorbird D101/D201/D205/D1101V  Doorbell | d101      |
-| Doorbird D210x Doorbell          | d210x     |
-| Doorbird A1081 Controller        | a1081     |
+| Device                                   | Thing ID |
+|------------------------------------------|----------|
+| Doorbird D101/D201/D205/D1101V  Doorbell | d101     |
+| Doorbird D210x Doorbell                  | d210x    |
+| Doorbird A1081 Controller                | a1081    |
 
 ## Thing Configuration
 
@@ -18,27 +18,28 @@ The following thing types are supported:
 
 The following configuration parameters are available on the Doorbird D101/D201/D205/D1101V and D210x Doorbell things:
 
-| Parameter                | Parameter ID       | Required/Optional | Description |
-|--------------------------|--------------------|-------------------|-------------|
-| Hostname                 | doorbirdHost       | Required          | The hostname or IP address of the Doorbird device. |
+| Parameter                | Parameter ID       | Required/Optional | Description                                                                                                                                             |
+|--------------------------|--------------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Hostname                 | doorbirdHost       | Required          | The hostname or IP address of the Doorbird device.                                                                                                      |
 | User ID                  | userId             | Required          | User Id of a Doorbird user that has permissions to access the API. The User ID and Password must be created using the Doorbird smart phone application. |
-| Password                 | userPassword       | Required          | Password of a Doorbird user. |
-| Image Refresh Rate       | imageRefreshRate   | Optional          | Rate at which image channel should be automatically updated. Leave field blank (default) to disable refresh. |
-| Doorbell Off Delay       | doorbellOffDelay   | Optional          | Number of seconds to wait before setting doorbell channel OFF after a doorbell event. Leave field blank to disable. |
-| Motion Off Delay         | motionOffDelay     | Optional          | Number of seconds to wait before setting motion channel OFF after a motion event. Leave field blank to disable. |
-| Montage Number of Images | montageNumImages   | Required          | Number of images to include in the doorbell and motion montage images. Default is 0. |
-| Montage Scale Factor     | montageScaleFactor | Required          | Percent scaling factor for montage image. Default is 100. |
+| Password                 | userPassword       | Required          | Password of a Doorbird user.                                                                                                                            |
+| Webhook IP Whitelist     | webhookIpWhitelist | Optional          | Whitelist of IP addresses allowed to trigger webhooks. By default includes IP address of the Doorbird device.                                           |
+| Image Refresh Rate       | imageRefreshRate   | Optional          | Rate at which image channel should be automatically updated. Leave field blank (default) to disable refresh.                                            |
+| Doorbell Off Delay       | doorbellOffDelay   | Optional          | Number of seconds to wait before setting doorbell channel OFF after a doorbell event. Leave field blank to disable.                                     |
+| Motion Off Delay         | motionOffDelay     | Optional          | Number of seconds to wait before setting motion channel OFF after a motion event. Leave field blank to disable.                                         |
+| Montage Number of Images | montageNumImages   | Required          | Number of images to include in the doorbell and motion montage images. Default is 0.                                                                    |
+| Montage Scale Factor     | montageScaleFactor | Required          | Percent scaling factor for montage image. Default is 100.                                                                                               |
 
 ### A1081 Controller
 
 The following configuration parameters are available on the Doorbird A1081 Controller thing:
 
-| Parameter                | Parameter ID | Required/Optional | Description |
-|--------------------------|--------------|-------------------|-------------|
-| Hostname                 | doorbirdHost | Required          | The hostname or IP address of the Doorbird device. |
-| User ID                  | userId       | Required          | User Id of a Doorbird user that has permissions to access the API. The User ID and Password must be created using the Doorbird smart phone application. |
-| Password                 | userPassword | Required          | Password of a Doorbird user. |
-| Controller Id            | controllerId | Optional          | Doorbird Id of the controller to reliable target the relays of this device. E.g. "gggaaa" |
+| Parameter     | Parameter ID | Required/Optional | Description                                                                                                                                             |
+|---------------|--------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Hostname      | doorbirdHost | Required          | The hostname or IP address of the Doorbird device.                                                                                                      |
+| User ID       | userId       | Required          | User Id of a Doorbird user that has permissions to access the API. The User ID and Password must be created using the Doorbird smart phone application. |
+| Password      | userPassword | Required          | Password of a Doorbird user.                                                                                                                            |
+| Controller Id | controllerId | Optional          | Doorbird Id of the controller to reliable target the relays of this device. E.g. "gggaaa"                                                               |
 
 ## Discovery
 
@@ -78,19 +79,23 @@ The following channels are supported by the binding for the Doorbird A1081 Contr
 | openDoor2                | Switch    | Activates the door 2 relay                        |
 | openDoor3                | Switch    | Activates the door 3 relay                        |
 
+## Audio sink
+
+A doorbird thing automatically registers itself as an audio sink in openHAB. Your rules in openHAB can then play audio or text-to-speech sounds to it. It currently supports only ulaw or wav audio data (the later by converting it to ulaw, adding latency).
+
 ## Profiles
 
-Using the system default switch profile *rawbutton-on-off-switch* in a *doorbell* channel item definition will cause ON/OFF 
+Using the system default switch profile _rawbutton-on-off-switch_ in a _doorbell_ channel item definition will cause ON/OFF
 states to be set when the doorbell is pressed and released.
-See *Items* example below.
+See _Items_ example below.
 
 ## Rule Actions
 
 The binding supports the following actions.
 In classic rules these are accessible as shown in this example (adjust getActions with your ThingId):
- 
+
 ### void restart()
- 
+
 Restarts the Doorbird device.
 
 ### void sipHangup()
@@ -115,29 +120,37 @@ Get the value of the SIP status parameter LASTERRORTEXT.
 
 Example
 
-```
+```java
 val actions = getActions("doorbird","doorbird:d101:doorbell")
 if(actions === null) {
     logInfo("actions", "Actions not found, check thing ID")
     return
  }
  actions.sipHangup()
- 
+
  var String ringTimeLimit = actions.getRingTimeLimit()
  ```
 
 ## Known Issues
 
 The Doorbird uses the UDP protocol on port 6524 to broadcast events for Doorbird actions, such as doorbell pressed, motion detected, etc.
-If the Doorbord is on a separate subnet or VLAN from openHAB, those UDP packets will not route by default.
+If the Doorbird is on a separate subnet or VLAN from openHAB, those UDP packets will not route by default.
 In that case, the Doorbird binding will not receive those events.
 Either put the Doorbird and openHAB on the same subnet/VLAN, or set up your network to explicitly route those UDP packets.
+
+Alternatively to UDP broadcast, you can configure the following webhooks in your doorbell:
+
+- Doorbell webhook (when pressed): `http[s]://<openhab-ip>:<openhab-port>/doorbird/<thing-uid>/doorbell`
+- Motion webhook: `http[s]://<openhab-ip>:<openhab-port>/doorbird/<thing-uid>/motion`
+
+For security reasons, you have to specify a whitelist of allowed IP addresses in the thing configuration (`webhookIpWhitelist`) to restrict which devices can trigger these webhooks.
+The whitelist by default includes the IP address of the Doorbird device.
 
 ## Example
 
 ### Things
 
-```
+```java
 Thing doorbird:d101:doorbell "Doorbird D101 Doorbell" [doorbirdHost="192.168.1.100",userId="dtfubb0004",userPassword="HG7afc5TvN",imageRefreshRate=60,doorbellOffDelay=3,motionOffDelay=30,montageNumImages=3,montageScaleFactor=35]
 
 Thing doorbird:a1081:controller "Doorbird A1081 Controller" [doorbirdHost="192.168.1.100",userId="dtfubb0004",userPassword="HG7afc5TvN"]
@@ -145,7 +158,7 @@ Thing doorbird:a1081:controller "Doorbird A1081 Controller" [doorbirdHost="192.1
 
 ### Items
 
-```
+```java
 Switch Doorbell_Pressed "Doorbell Pressed [%s]" <switch> ["Switch"] { channel="doorbird:d101:doorbell:doorbell" [profile="rawbutton-on-off-switch"] }
 DateTime Doorbell_PressedTimestamp "Doorbell Pressed Timestamp [%1$tA, %1$tm/%1$td/%1$tY %1$tl:%1$tM %1$tp]" <time> { channel="doorbird:d101:doorbell:doorbellTimestamp" }
 Image Doorbell_PressedImage "Doorbell Pressed Image [%s]" { channel="doorbird:d101:doorbell:doorbellImage" }
@@ -167,7 +180,7 @@ Image Doorbell_MotionMontage "Motion History Montage [%s]" { channel="doorbird:d
 
 ### Sitemap
 
-```
+```perl
 Frame {
     Text label="Doorbird" {
         Frame label="Image" {
@@ -209,7 +222,7 @@ Frame {
 
 Using the doorbell trigger channel to detect if the doorbell has been pressed:
 
-```
+```java
 rule "Doorbell Button Pressed"
 when
     Channel "doorbird:d101:doorbell:doorbell" triggered PRESSED
@@ -218,9 +231,9 @@ then
 end
 ```
 
-Alternatively, detecting a doorbell press using an item that references the *rawbutton-on-off-switch* profile:
+Alternatively, detecting a doorbell press using an item that references the _rawbutton-on-off-switch_ profile:
 
-```
+```java
 rule "Doorbell Button Pressed"
 when
     Item Doorbell_Pressed received command ON
@@ -231,7 +244,7 @@ end
 
 Using the doorbell motion channel to detect motion:
 
-```
+```java
 rule "Motion Detected"
 when
     Item Doorbell_Motion received command ON

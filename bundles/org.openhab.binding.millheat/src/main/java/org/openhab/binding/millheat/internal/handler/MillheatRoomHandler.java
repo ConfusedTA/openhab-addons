@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,6 +17,7 @@ import static org.openhab.binding.millheat.internal.MillheatBindingConstants.*;
 import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.millheat.internal.config.MillheatRoomConfiguration;
 import org.openhab.binding.millheat.internal.model.MillheatModel;
 import org.openhab.binding.millheat.internal.model.ModeType;
@@ -31,6 +32,7 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,11 +42,13 @@ import org.slf4j.LoggerFactory;
  * sent to one of the channels.
  *
  * @author Arne Seime - Initial contribution
+ * @author Petter L. H. Eide - Cloud API identifiers and nullable measurements
  */
 @NonNullByDefault
 public class MillheatRoomHandler extends MillheatBaseThingHandler {
     private final Logger logger = LoggerFactory.getLogger(MillheatRoomHandler.class);
     private @NonNullByDefault({}) MillheatRoomConfiguration config;
+    private String roomId = "";
 
     public MillheatRoomHandler(final Thing thing) {
         super(thing);
@@ -55,79 +59,91 @@ public class MillheatRoomHandler extends MillheatBaseThingHandler {
         handleCommand(channelUID, command, getMillheatModel());
     }
 
-    private void updateRoomTemperature(final Long roomId, final Command command, final ModeType modeType) {
-        getAccountHandler().ifPresent(handler -> {
-            handler.updateRoomTemperature(config.roomId, command, modeType);
-        });
+    private void updateRoomTemperature(final Command command, final ModeType modeType) {
+        getAccountHandler().ifPresent(handler -> handler.updateRoomTemperature(roomId, command, modeType));
+    }
+
+    private static State temperatureState(final @Nullable Double celsius) {
+        return celsius == null ? UnDefType.UNDEF : new QuantityType<>(celsius, SIUnits.CELSIUS);
     }
 
     @Override
     protected void handleCommand(final ChannelUID channelUID, final Command command, final MillheatModel model) {
-        final Optional<Room> optionalRoom = model.findRoomById(config.roomId);
-        if (optionalRoom.isPresent()) {
-            updateStatus(ThingStatus.ONLINE);
-            final Room room = optionalRoom.get();
-            if (CHANNEL_CURRENT_TEMPERATURE.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    updateState(channelUID, new QuantityType<>(room.getCurrentTemp(), SIUnits.CELSIUS));
+        final Optional<Room> optionalRoom = model.findRoomById(roomId);
+        if (optionalRoom.isEmpty()) {
+            updateStatus(ThingStatusDetail.GONE);
+            return;
+        }
+        updateStatus(ThingStatus.ONLINE);
+        final Room room = optionalRoom.get();
+        final String channelId = channelUID.getId();
+        final boolean refresh = command instanceof RefreshType;
+
+        switch (channelId) {
+            case CHANNEL_CURRENT_TEMPERATURE -> {
+                if (refresh) {
+                    updateState(channelUID, temperatureState(room.getCurrentTemp()));
                 }
-            } else if (CHANNEL_CURRENT_MODE.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    updateState(channelUID, new StringType(room.getMode().toString()));
-                }
-            } else if (CHANNEL_PROGRAM.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    updateState(channelUID, new StringType(room.getRoomProgramName()));
-                }
-            } else if (CHANNEL_COMFORT_TEMPERATURE.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    updateState(channelUID, new QuantityType<>(room.getComfortTemp(), SIUnits.CELSIUS));
-                } else {
-                    updateRoomTemperature(config.roomId, command, ModeType.COMFORT);
-                }
-            } else if (CHANNEL_SLEEP_TEMPERATURE.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    updateState(channelUID, new QuantityType<>(room.getSleepTemp(), SIUnits.CELSIUS));
-                } else {
-                    updateRoomTemperature(config.roomId, command, ModeType.SLEEP);
-                }
-            } else if (CHANNEL_AWAY_TEMPERATURE.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    updateState(channelUID, new QuantityType<>(room.getAwayTemp(), SIUnits.CELSIUS));
-                } else {
-                    updateRoomTemperature(config.roomId, command, ModeType.AWAY);
-                }
-            } else if (CHANNEL_TARGET_TEMPERATURE.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    final Integer targetTemperature = room.getTargetTemperature();
-                    if (targetTemperature != null) {
-                        updateState(channelUID, new QuantityType<>(targetTemperature, SIUnits.CELSIUS));
-                    } else {
-                        updateState(channelUID, UnDefType.UNDEF);
-                    }
-                }
-            } else if (CHANNEL_HEATING_ACTIVE.equals(channelUID.getId())) {
-                if (command instanceof RefreshType) {
-                    updateState(channelUID, room.isHeatingActive() ? OnOffType.ON : OnOffType.OFF);
-                }
-            } else {
-                logger.debug("Received command {} on channel {}, but this channel is not handled or supported by {}",
-                        channelUID.getId(), command.toString(), this.getThing().getUID());
             }
-        } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.GONE);
+            case CHANNEL_CURRENT_MODE -> {
+                if (refresh) {
+                    updateState(channelUID, new StringType(room.getMode().getApiValue()));
+                }
+            }
+            case CHANNEL_PROGRAM -> {
+                if (refresh) {
+                    final String program = room.getRoomProgramName();
+                    updateState(channelUID, program == null ? UnDefType.UNDEF : new StringType(program));
+                }
+            }
+            case CHANNEL_COMFORT_TEMPERATURE -> {
+                if (refresh) {
+                    updateState(channelUID, temperatureState(room.getComfortTemp()));
+                } else {
+                    updateRoomTemperature(command, ModeType.COMFORT);
+                }
+            }
+            case CHANNEL_SLEEP_TEMPERATURE -> {
+                if (refresh) {
+                    updateState(channelUID, temperatureState(room.getSleepTemp()));
+                } else {
+                    updateRoomTemperature(command, ModeType.SLEEP);
+                }
+            }
+            case CHANNEL_AWAY_TEMPERATURE -> {
+                if (refresh) {
+                    updateState(channelUID, temperatureState(room.getAwayTemp()));
+                } else {
+                    updateRoomTemperature(command, ModeType.AWAY);
+                }
+            }
+            case CHANNEL_TARGET_TEMPERATURE -> {
+                if (refresh) {
+                    updateState(channelUID, temperatureState(room.getTargetTemperature()));
+                }
+            }
+            case CHANNEL_HEATING_ACTIVE -> {
+                if (refresh) {
+                    updateState(channelUID, OnOffType.from(room.isHeatingActive()));
+                }
+            }
+            default ->
+                logger.debug("Received command {} on channel {}, but this channel is not handled or supported by {}",
+                        command, channelId, getThing().getUID());
         }
     }
 
     @Override
     public void initialize() {
         config = getConfigAs(MillheatRoomConfiguration.class);
-        logger.debug("Initializing Millheat room using config {}", config);
-        final Optional<Room> room = getMillheatModel().findRoomById(config.roomId);
-        if (room.isPresent()) {
-            updateStatus(ThingStatus.ONLINE);
-        } else {
-            updateStatus(ThingStatus.OFFLINE);
+        logger.debug("Initializing Mill room using config {}", config);
+        final String configuredRoomId = config.roomId;
+        if (configuredRoomId == null || configuredRoomId.isBlank()) {
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
+                    "Room ID is required. Identifiers changed to UUIDs with the new Mill cloud API, so a numeric ID from an older configuration will not work; re-run discovery.");
+            return;
         }
+        roomId = configuredRoomId;
+        updateStatus(getMillheatModel().findRoomById(roomId).isPresent() ? ThingStatus.ONLINE : ThingStatus.OFFLINE);
     }
 }

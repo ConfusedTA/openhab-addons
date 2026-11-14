@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,9 +14,9 @@ package org.openhab.binding.rfxcom.internal.handler;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
@@ -133,7 +133,7 @@ public class RFXComBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(RFXComDeviceDiscoveryService.class);
+        return Set.of(RFXComDeviceDiscoveryService.class);
     }
 
     @Override
@@ -172,8 +172,7 @@ public class RFXComBridgeHandler extends BaseBridgeHandler {
 
         if (configuration.serialPort != null && configuration.serialPort.startsWith("rfc2217")) {
             logger.debug("Please use the Transceiver over TCP/IP bridge type for a serial over IP connection.");
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.config-error-invalid-thing-type");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.config-error-invalid-thing-type");
             return;
         }
 
@@ -226,11 +225,14 @@ public class RFXComBridgeHandler extends BaseBridgeHandler {
             logger.error("Connection to RFXCOM transceiver failed", e);
             if ("device not opened (3)".equalsIgnoreCase(e.getMessage())) {
                 if (connector instanceof RFXComJD2XXConnector) {
-                    logger.info("Automatically Discovered RFXCOM bridges use FTDI chip driver (D2XX)."
-                            + " Reason for this error normally is related to operating system native FTDI drivers,"
-                            + " which prevent D2XX driver to open device."
-                            + " To solve this problem, uninstall OS FTDI native drivers or add manually universal bridge 'RFXCOM USB Transceiver',"
-                            + " which use normal serial port driver rather than D2XX.");
+                    logger.info(
+                            """
+                                    Automatically Discovered RFXCOM bridges use FTDI chip driver (D2XX).\
+                                     Reason for this error normally is related to operating system native FTDI drivers,\
+                                     which prevent D2XX driver to open device.\
+                                     To solve this problem, uninstall OS FTDI native drivers or add manually universal bridge 'RFXCOM USB Transceiver',\
+                                     which use normal serial port driver rather than D2XX.\
+                                    """);
                 }
             }
         } catch (Exception e) {
@@ -247,7 +249,7 @@ public class RFXComBridgeHandler extends BaseBridgeHandler {
             transmitQueue.enqueue(baseMsg);
         } catch (IOException e) {
             logger.error("I/O Error", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -259,8 +261,7 @@ public class RFXComBridgeHandler extends BaseBridgeHandler {
                 RFXComMessage message = messageFactory.createMessage(packet);
                 logger.debug("Message received: {}", message);
 
-                if (message instanceof RFXComInterfaceMessage) {
-                    RFXComInterfaceMessage msg = (RFXComInterfaceMessage) message;
+                if (message instanceof RFXComInterfaceMessage msg) {
                     if (msg.subType == SubType.RESPONSE) {
                         if (msg.command == Commands.GET_STATUS) {
                             logger.debug("RFXCOM transceiver/receiver type: {}, hw version: {}.{}, fw version: {}",
@@ -322,25 +323,24 @@ public class RFXComBridgeHandler extends BaseBridgeHandler {
                         logger.debug("Interface response received: {}", msg);
                         transmitQueue.sendNext();
                     }
-                } else if (message instanceof RFXComTransmitterMessage) {
-                    RFXComTransmitterMessage resp = (RFXComTransmitterMessage) message;
-
+                } else if (message instanceof RFXComTransmitterMessage resp) {
                     logger.debug("Transmitter response received: {}", resp);
 
                     transmitQueue.sendNext();
-                } else if (message instanceof RFXComDeviceMessage) {
+                } else if (message instanceof RFXComDeviceMessage deviceMessage) {
                     for (DeviceMessageListener deviceStatusListener : deviceStatusListeners) {
                         try {
-                            deviceStatusListener.onDeviceMessageReceived(getThing().getUID(),
-                                    (RFXComDeviceMessage) message);
+                            deviceStatusListener.onDeviceMessageReceived(getThing().getUID(), deviceMessage);
                         } catch (Exception e) {
                             // catch all exceptions give all handlers a fair chance of handling the messages
                             logger.error("An exception occurred while calling the DeviceStatusListener", e);
                         }
                     }
                 } else {
-                    logger.warn("The received message cannot be processed, please create an "
-                            + "issue at the relevant tracker. Received message: {}", message);
+                    logger.warn("""
+                            The received message cannot be processed, please create an \
+                            issue at the relevant tracker. Received message: {}\
+                            """, message);
                 }
             } catch (RFXComMessageNotImplementedException e) {
                 logger.debug("Message not supported, data: {}", HexUtils.bytesToHex(packet));
@@ -354,7 +354,7 @@ public class RFXComBridgeHandler extends BaseBridgeHandler {
         @Override
         public void errorOccurred(String error) {
             logger.error("Error occurred: {}", error);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
     }
 

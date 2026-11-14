@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,8 +15,6 @@ package org.openhab.binding.foobot.internal.handler;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Map;
 
 import javax.measure.Unit;
@@ -26,9 +24,9 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.foobot.internal.FoobotApiConnector;
 import org.openhab.binding.foobot.internal.FoobotApiException;
 import org.openhab.binding.foobot.internal.FoobotBindingConstants;
-import org.openhab.binding.foobot.internal.json.FoobotDevice;
-import org.openhab.binding.foobot.internal.json.FoobotJsonData;
-import org.openhab.binding.foobot.internal.json.FoobotSensor;
+import org.openhab.binding.foobot.internal.dto.FoobotDevice;
+import org.openhab.binding.foobot.internal.dto.FoobotJsonData;
+import org.openhab.binding.foobot.internal.dto.FoobotSensor;
 import org.openhab.core.cache.ExpiringCache;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
@@ -93,8 +91,7 @@ public class FoobotDeviceHandler extends BaseThingHandler {
         uuid = (String) getConfig().get(FoobotBindingConstants.CONFIG_UUID);
 
         if (uuid.isBlank()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Parameter 'uuid' is mandatory and must be configured");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Parameter 'uuid' is mandatory and must be configured");
             return;
         }
         final FoobotAccountHandler bridgeHandler = getBridgeHandler();
@@ -130,15 +127,15 @@ public class FoobotDeviceHandler extends BaseThingHandler {
         try {
             sensorData = connector.getSensorData(uuid);
             if (sensorData == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "No sensor data received");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "No sensor data received");
                 return sensorData;
             }
         } catch (FoobotApiException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             return null;
         } catch (RuntimeException e) {
             logger.debug("Error requesting sensor data: ", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, e.getMessage());
             return null;
         }
         if (getThing().getStatus() != ThingStatus.ONLINE) {
@@ -201,8 +198,7 @@ public class FoobotDeviceHandler extends BaseThingHandler {
         } else {
             final Unit<?> stateUnit = sensor.getUnit(unit);
             if (sensor == FoobotSensor.TIME) {
-                return new DateTimeType(
-                        ZonedDateTime.ofInstant(Instant.ofEpochSecond(Long.parseLong(value)), ZoneId.systemDefault()));
+                return new DateTimeType(Instant.ofEpochSecond(Long.parseLong(value)));
             } else if (stateUnit == null) {
                 return new DecimalType(value);
             } else {
@@ -212,8 +208,11 @@ public class FoobotDeviceHandler extends BaseThingHandler {
     }
 
     private @Nullable FoobotAccountHandler getBridgeHandler() {
-        return getBridge() != null && getBridge().getHandler() instanceof FoobotAccountHandler
-                ? (FoobotAccountHandler) getBridge().getHandler()
-                : null;
+        var bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
+            return null;
+        }
+        return bridge.getHandler() instanceof FoobotAccountHandler handler ? handler : null;
     }
 }

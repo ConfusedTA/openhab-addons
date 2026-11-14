@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,20 +13,22 @@
 package org.openhab.binding.yioremote.internal.utils;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 
 /**
- * The {@link WebsocketInterface} is responsible for interfacing the Websocket.
+ * The {@link WebsocketInterface} receives the events of a {@link Websocket} connection. The source connection is
+ * passed along so that events of an outdated connection can be ignored.
  *
  * @author Michael Loercher - Initial contribution
  */
 @NonNullByDefault
 public interface WebsocketInterface {
 
-    public void onConnect(boolean connected);
+    void onConnect(Websocket source);
 
-    public void onClose();
+    void onClose(Websocket source, int statusCode, @Nullable String reason);
 
-    public void onMessage(String decodedmessage);
+    void onMessage(Websocket source, String message);
 
-    public void onError(Throwable cause);
+    void onError(Websocket source, Throwable cause);
 }

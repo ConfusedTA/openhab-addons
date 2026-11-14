@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -24,7 +24,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
-import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.phc.internal.PHCBindingConstants;
@@ -48,6 +47,7 @@ import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.util.HexUtils;
+import org.openhab.core.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,9 +77,9 @@ public class PHCBridgeHandler extends BaseBridgeHandler implements SerialPortEve
     private final BlockingQueue<QueueObject> sendQueue = new LinkedBlockingQueue<>();
     private final ScheduledThreadPoolExecutor threadPoolExecutor = new ScheduledThreadPoolExecutor(3);
 
-    private final byte emLedOutputState[] = new byte[32];
-    private final byte amOutputState[] = new byte[32];
-    private final byte dmOutputState[] = new byte[32];
+    private final byte[] emLedOutputState = new byte[32];
+    private final byte[] amOutputState = new byte[32];
+    private final byte[] dmOutputState = new byte[32];
 
     private final List<Byte> modules = new ArrayList<>();
 
@@ -96,8 +96,7 @@ public class PHCBridgeHandler extends BaseBridgeHandler implements SerialPortEve
         SerialPortIdentifier portId = serialPortManager.getIdentifier(port);
 
         if (portId == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Serial port '" + port + "' could not be found.");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Serial port '" + port + "' could not be found.");
             return;
         }
 
@@ -153,13 +152,13 @@ public class PHCBridgeHandler extends BaseBridgeHandler implements SerialPortEve
                 }
             });
         } catch (PortInUseException | TooManyListenersException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "Could not open serial port " + port + ": " + e.getMessage());
         } catch (UnsupportedCommOperationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "Could not configure serial port " + port + ": " + e.getMessage());
         } catch (IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                     "Failed to get input or output stream for serialPort: " + e.getMessage());
             logger.debug("Failed to get inputstream for serialPort", e);
         }
@@ -438,7 +437,7 @@ public class PHCBridgeHandler extends BaseBridgeHandler implements SerialPortEve
             amOutputState[qo.getModuleAddress() & 0x1F] = -1;
         } else if (PHCBindingConstants.CHANNELS_DIM.equals(qo.getModuleType())) {
             // state ist the same for every dim level except zero/off -> inizialize state
-            // with 0x0F after sending an command.
+            // with 0x0F after sending a command.
             dmOutputState[qo.getModuleAddress() & 0x1F] |= (0x0F << (qo.getChannel() * 4));
         }
 
@@ -570,7 +569,8 @@ public class PHCBridgeHandler extends BaseBridgeHandler implements SerialPortEve
 
     private void sendDim(byte moduleAddress, byte channel, Command command, short dimTime) {
         byte module = (byte) (moduleAddress | 0xA0);
-        byte[] cmd = new byte[(command instanceof PercentType && !(((PercentType) command).byteValue() == 0)) ? 3 : 1];
+        byte[] cmd = new byte[(command instanceof PercentType percentCommand && percentCommand.byteValue() != 0) ? 3
+                : 1];
 
         cmd[0] = (byte) (channel << 5);
 
@@ -712,7 +712,7 @@ public class PHCBridgeHandler extends BaseBridgeHandler implements SerialPortEve
     private void handleIncomingCommand(byte moduleAddress, int channel, OnOffType onOff) {
         ThingUID uid = PHCHelper.getThingUIDreverse(PHCBindingConstants.THING_TYPE_EM, moduleAddress);
         Thing thing = getThing().getThing(uid);
-        String channelId = "em#" + StringUtils.leftPad(Integer.toString(channel), 2, '0');
+        String channelId = "em#" + StringUtils.padLeft(Integer.toString(channel), 2, "0");
 
         if (thing != null && thing.getHandler() != null) {
             logger.debug("Input: {}, {}, {}", thing.getUID(), channelId, onOff);
@@ -736,7 +736,7 @@ public class PHCBridgeHandler extends BaseBridgeHandler implements SerialPortEve
                 serialOut.write(msg);
                 serialOut.flush();
             } catch (IOException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         "Error writing '" + msg + "' to serial port : " + e.getMessage());
             }
 

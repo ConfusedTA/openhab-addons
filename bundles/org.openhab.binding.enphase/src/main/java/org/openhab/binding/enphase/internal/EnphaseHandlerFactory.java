@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,19 +12,23 @@
  */
 package org.openhab.binding.enphase.internal;
 
-import static org.openhab.binding.enphase.internal.EnphaseBindingConstants.*;
+import static org.openhab.binding.enphase.internal.EnphaseBindingConstants.THING_TYPE_ENPHASE_BATTERY;
+import static org.openhab.binding.enphase.internal.EnphaseBindingConstants.THING_TYPE_ENPHASE_ENVOY;
+import static org.openhab.binding.enphase.internal.EnphaseBindingConstants.THING_TYPE_ENPHASE_INVERTER;
+import static org.openhab.binding.enphase.internal.EnphaseBindingConstants.THING_TYPE_ENPHASE_RELAY;
 
 import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.openhab.binding.enphase.internal.handler.EnphaseBatteryHandler;
 import org.openhab.binding.enphase.internal.handler.EnphaseInverterHandler;
 import org.openhab.binding.enphase.internal.handler.EnphaseRelayHandler;
 import org.openhab.binding.enphase.internal.handler.EnvoyBridgeHandler;
 import org.openhab.core.i18n.LocaleProvider;
 import org.openhab.core.i18n.TranslationProvider;
-import org.openhab.core.io.net.http.HttpClientFactory;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
@@ -33,11 +37,11 @@ import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 
 /**
- * The {@link EnphaseHandlerFactory} is responsible for creating things and thing
- * handlers.
+ * The {@link EnphaseHandlerFactory} is responsible for creating things and thing handlers.
  *
  * @author Hilbrand Bouwkamp - Initial contribution
  */
@@ -46,19 +50,36 @@ import org.osgi.service.component.annotations.Reference;
 public class EnphaseHandlerFactory extends BaseThingHandlerFactory {
 
     private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_ENPHASE_ENVOY,
-            THING_TYPE_ENPHASE_INVERTER, THING_TYPE_ENPHASE_RELAY);
+            THING_TYPE_ENPHASE_INVERTER, THING_TYPE_ENPHASE_RELAY, THING_TYPE_ENPHASE_BATTERY);
 
     private final MessageTranslator messageTranslator;
-    private final HttpClient commonHttpClient;
     private final EnvoyHostAddressCache envoyHostAddressCache;
+    private final HttpClient httpClient;
 
     @Activate
     public EnphaseHandlerFactory(final @Reference LocaleProvider localeProvider,
-            final @Reference TranslationProvider i18nProvider, final @Reference HttpClientFactory httpClientFactory,
-            @Reference final EnvoyHostAddressCache envoyHostAddressCache) {
+            final @Reference TranslationProvider i18nProvider,
+            final @Reference EnvoyHostAddressCache envoyHostAddressCache) {
         messageTranslator = new MessageTranslator(localeProvider, i18nProvider);
-        commonHttpClient = httpClientFactory.getCommonHttpClient();
         this.envoyHostAddressCache = envoyHostAddressCache;
+        // Note: Had to switch to using a locally generated httpClient as
+        // the Envoy server went to a self-signed SSL connection and this
+        // was the only way to set the client to ignore SSL errors
+        this.httpClient = new HttpClient(new SslContextFactory.Client(true));
+        startHttpClient();
+    }
+
+    private void startHttpClient() {
+        try {
+            httpClient.start();
+        } catch (final Exception ex) {
+            throw new IllegalStateException("Could not start HttpClient.", ex);
+        }
+    }
+
+    @Deactivate
+    public void deactivate() {
+        httpClient.destroy();
     }
 
     @Override
@@ -71,11 +92,13 @@ public class EnphaseHandlerFactory extends BaseThingHandlerFactory {
         final ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (THING_TYPE_ENPHASE_ENVOY.equals(thingTypeUID)) {
-            return new EnvoyBridgeHandler((Bridge) thing, commonHttpClient, envoyHostAddressCache);
+            return new EnvoyBridgeHandler((Bridge) thing, httpClient, envoyHostAddressCache);
         } else if (THING_TYPE_ENPHASE_INVERTER.equals(thingTypeUID)) {
             return new EnphaseInverterHandler(thing, messageTranslator);
         } else if (THING_TYPE_ENPHASE_RELAY.equals(thingTypeUID)) {
             return new EnphaseRelayHandler(thing, messageTranslator);
+        } else if (THING_TYPE_ENPHASE_BATTERY.equals(thingTypeUID)) {
+            return new EnphaseBatteryHandler(thing, messageTranslator);
         }
 
         return null;

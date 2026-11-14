@@ -1,10 +1,19 @@
 {
 	"deviceMapping": {
 		"id": [
+			"philips.light.bceil",
+			"philips.light.bceil1",
+			"philips.light.bceil2",
+			"philips.light.boc1",
+			"philips.light.boc2",
+			"philips.light.boc3",
 			"philips.light.dlight",
 			"philips.light.mceil",
 			"philips.light.mceilm",
 			"philips.light.mceils",
+			"philips.light.mm1",
+			"philips.light.mm2",
+			"philips.light.mm3",
 			"philips.light.obceil",
 			"philips.light.obceim",
 			"philips.light.obceis",
@@ -13,7 +22,10 @@
 			"philips.light.sceils",
 			"philips.light.xzceil",
 			"philips.light.xzceim",
-			"philips.light.xzceis"
+			"philips.light.xzceis",
+			"philips.light.yb1",
+			"philips.light.yb2",
+			"philips.light.yb3"
 		],
 		"propertyMethod": "get_properties",
 		"maxProperties": 4,
@@ -24,7 +36,6 @@
 				"piid": 1,
 				"friendlyName": "Power",
 				"channel": "on",
-				"channelType": "miot_bool",
 				"type": "Switch",
 				"refresh": true,
 				"actions": [
@@ -33,18 +44,14 @@
 						"parameterType": "ONOFFBOOL"
 					}
 				],
-				"category": "switch",
-				"tags": [
-					"Switch"
-				]
+				"category": "switch"
 			},
 			{
 				"property": "mode",
 				"siid": 2,
 				"piid": 2,
-				"friendlyName": "Mode",
+				"friendlyName": "Scene",
 				"channel": "mode",
-				"channelType": "miot_uint8",
 				"type": "Number",
 				"refresh": true,
 				"actions": [
@@ -54,8 +61,39 @@
 					}
 				],
 				"tags": [
-					"Control"
-				]
+					"Control",
+					"Mode"
+				],
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 4,
+					"step": 1,
+					"pattern": "%.0f",
+					"options": [
+						{
+							"value": "0",
+							"label": "Manual"
+						},
+						{
+							"value": "1",
+							"label": "Bright"
+						},
+						{
+							"value": "2",
+							"label": "TV"
+						},
+						{
+							"value": "3",
+							"label": "Warm"
+						},
+						{
+							"value": "4",
+							"label": "Midnight"
+						}
+					]
+				},
+				"category": "light",
+				"readmeComment": "Value mapping `[\"0\"\u003d\"Manual\",\"1\"\u003d\"Bright\",\"2\"\u003d\"TV\",\"3\"\u003d\"Warm\",\"4\"\u003d\"Midnight\"]`"
 			},
 			{
 				"property": "brightness",
@@ -74,7 +112,7 @@
 				"category": "light",
 				"tags": [
 					"Control",
-					"Light"
+					"Brightness"
 				]
 			},
 			{
@@ -83,15 +121,22 @@
 				"piid": 4,
 				"friendlyName": "Color Temperature",
 				"channel": "cct",
-				"channelType": "miot_uint32",
-				"type": "Number",
+				"type": "Number:Temperature",
+				"unit": "kelvin",
 				"refresh": true,
 				"actions": [
 					{
 						"command": "set_properties",
-						"parameterType": "STRING"
+						"parameterType": "NUMBER"
 					}
-				]
+				],
+				"stateDescription": {
+					"minimum": 2700,
+					"maximum": 5700,
+					"step": 1,
+					"pattern": "%.0f K"
+				},
+				"category": "colorlight"
 			},
 			{
 				"property": "dvalue",
@@ -99,23 +144,33 @@
 				"piid": 1,
 				"friendlyName": "Delayed Turn-off",
 				"channel": "dv",
-				"channelType": "miot_uint16",
-				"type": "Number",
+				"type": "Number:Time",
+				"unit": "seconds",
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 21600,
+					"step": 1,
+					"pattern": "%.0f %unit%"
+				},
 				"refresh": true,
 				"actions": [
 					{
 						"command": "set_properties",
-						"parameterType": "STRING"
+						"parameterType": "NUMBER"
 					}
+				],
+				"category": "time",
+				"tags": [
+					"Setpoint",
+					"Duration"
 				]
 			},
 			{
 				"property": "wall-scene-en",
 				"siid": 3,
 				"piid": 2,
-				"friendlyName": "Wall Scene Enable",
+				"friendlyName": "Wall Switch Scenes",
 				"channel": "WallSceneEn",
-				"channelType": "miot_bool",
 				"type": "Switch",
 				"refresh": true,
 				"actions": [
@@ -123,15 +178,19 @@
 						"command": "set_properties",
 						"parameterType": "ONOFFBOOL"
 					}
+				],
+				"category": "switch",
+				"tags": [
+					"Switch",
+					"Enabled"
 				]
 			},
 			{
 				"property": "wall-scene",
 				"siid": 3,
 				"piid": 3,
-				"friendlyName": "Wall Scene",
+				"friendlyName": "Wall Switch Scene List",
 				"channel": "WallScene",
-				"channelType": "miot_string",
 				"type": "String",
 				"refresh": true,
 				"actions": [
@@ -139,23 +198,12 @@
 						"command": "set_properties",
 						"parameterType": "STRING"
 					}
-				]
-			},
-			{
-				"property": "auto-cct",
-				"siid": 3,
-				"piid": 4,
-				"friendlyName": "Auto CCT",
-				"channel": "autoCct",
-				"channelType": "miot_string",
-				"type": "String",
-				"refresh": true,
-				"actions": [
-					{
-						"command": "set_properties",
-						"parameterType": "STRING"
-					}
-				]
+				],
+				"category": "text",
+				"tags": [
+					"Setpoint"
+				],
+				"readmeComment": "The 3 scenes the wall switch cycles through, as `[[0,scene],[brightness,color temperature],...]`."
 			},
 			{
 				"property": "dimming-period",
@@ -163,15 +211,62 @@
 				"piid": 6,
 				"friendlyName": "Dimming Period",
 				"channel": "dimmingPeriod",
-				"channelType": "miot_uint16",
 				"type": "Number",
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 65535,
+					"step": 1,
+					"pattern": "%.0f"
+				},
 				"refresh": true,
 				"actions": [
 					{
 						"command": "set_properties",
-						"parameterType": "STRING"
+						"parameterType": "NUMBER"
 					}
+				],
+				"category": "time",
+				"tags": [
+					"Setpoint",
+					"Duration"
 				]
+			},
+			{
+				"property": "auto-cct",
+				"siid": 3,
+				"piid": 4,
+				"friendlyName": "Automatic Color Temperature",
+				"channel": "autoCct",
+				"type": "String",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "CUSTOMSTRING",
+						"parameters": [
+							"[$value$,0,0]"
+						]
+					}
+				],
+				"transformation": "getJsonElement-[0]",
+				"stateDescription": {
+					"options": [
+						{
+							"value": "true",
+							"label": "On"
+						},
+						{
+							"value": "false",
+							"label": "Off"
+						}
+					]
+				},
+				"category": "colorlight",
+				"tags": [
+					"Control",
+					"ColorTemperature"
+				],
+				"readmeComment": "Follows the time of day. Value mapping `[\"true\"\u003d\"On\",\"false\"\u003d\"Off\"]`"
 			},
 			{
 				"property": "miband-status",
@@ -179,10 +274,90 @@
 				"piid": 12,
 				"friendlyName": "Mi Band Status",
 				"channel": "MibandStatus",
-				"channelType": "miot_string",
 				"type": "String",
 				"refresh": true,
-				"actions": []
+				"actions": [],
+				"stateDescription": {
+					"readOnly": true
+				},
+				"category": "text",
+				"tags": [
+					"Status",
+					"Info"
+				]
+			},
+			{
+				"property": "",
+				"friendlyName": "Actions",
+				"channel": "actions",
+				"type": "String",
+				"stateDescription": {
+					"options": [
+						{
+							"value": "light-brightness-down",
+							"label": "Light Brightness Down"
+						},
+						{
+							"value": "light-brightness-up",
+							"label": "Light Brightness Up"
+						},
+						{
+							"value": "light-toggle",
+							"label": "Light Toggle"
+						}
+					]
+				},
+				"refresh": false,
+				"actions": [
+					{
+						"command": "action",
+						"parameterType": "EMPTY",
+						"siid": 2,
+						"aiid": 1,
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "light-brightness-down"
+								}
+							]
+						}
+					},
+					{
+						"command": "action",
+						"parameterType": "EMPTY",
+						"siid": 2,
+						"aiid": 2,
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "light-brightness-up"
+								}
+							]
+						}
+					},
+					{
+						"command": "action",
+						"parameterType": "EMPTY",
+						"siid": 2,
+						"aiid": 3,
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "light-toggle"
+								}
+							]
+						}
+					}
+				],
+				"category": "light",
+				"tags": [
+					"Control",
+					"Light"
+				],
+				"readmeComment": "Value mapping `[\"light-brightness-down\"\u003d\"Light Brightness Down\",\"light-brightness-up\"\u003d\"Light Brightness Up\",\"light-toggle\"\u003d\"Light Toggle\"]`"
 			}
 		],
 		"experimental": true

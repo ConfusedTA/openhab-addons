@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -70,7 +70,7 @@ public class WebserviceHandler extends BaseBridgeHandler {
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         if (channelUID.getId().equals(TankerkoenigBindingConstants.CHANNEL_HOLIDAY)) {
-            logger.debug("HandleCommand recieved: {}", channelUID.getId());
+            logger.debug("HandleCommand received: {}", channelUID.getId());
             isHoliday = (command == OnOffType.ON);
         }
     }
@@ -115,7 +115,7 @@ public class WebserviceHandler extends BaseBridgeHandler {
 
     @Override
     public void updateStatus(ThingStatus status) {
-        updateStatus(status, ThingStatusDetail.NONE, null);
+        super.updateStatus(status);
     }
 
     /***
@@ -146,7 +146,7 @@ public class WebserviceHandler extends BaseBridgeHandler {
                 // web-request!"
                 // in both cases the Webservice and the Station(s) will go OFFLINE
                 // only in case A the pollingJob gets canceled!
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, result.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, result.getMessage());
                 // if the Bridge goes OFFLINE, all connected Stations will go OFFLINE as well.
                 // The bridge reports its statusUpdate and the things react using the bridgeStatusChanged-Method!
                 // Only if the message is NOT "No valid response from the web-request!" the scheduled job gets stopped!
@@ -165,7 +165,7 @@ public class WebserviceHandler extends BaseBridgeHandler {
             }
         } catch (ParseException e) {
             logger.error("ParseException: ", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
     }
 

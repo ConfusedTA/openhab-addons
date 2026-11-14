@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -20,6 +20,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.teleinfo.internal.reader.io.serialport.InvalidFrameException;
 import org.openhab.binding.teleinfo.internal.reader.io.serialport.Label;
+import org.openhab.binding.teleinfo.internal.serial.TeleinfoTicMode;
 
 /**
  * The {@link Frame} class defines common attributes for any Teleinfo frames.
@@ -32,9 +33,14 @@ public class Frame implements Serializable {
     private static final long serialVersionUID = -1934715078822532494L;
 
     private Map<Label, String> labelToValues = new EnumMap<>(Label.class);
+    private Map<Label, String> labelToTimestamp = new EnumMap<>(Label.class);
 
     public void put(Label label, String value) {
         labelToValues.put(label, value);
+    }
+
+    public void putTimestamp(Label label, String timestamp) {
+        labelToTimestamp.put(label, timestamp);
     }
 
     public @Nullable String get(Label label) {
@@ -49,11 +55,43 @@ public class Frame implements Serializable {
         return null;
     }
 
+    public String getAsDateTime(Label label) {
+        String timestamp = labelToTimestamp.get(label);
+        if (timestamp == null) {
+            return "";
+        }
+
+        if (timestamp.isBlank()) {
+            return "";
+        }
+
+        if (timestamp.length() > 9) {
+            return "20" + timestamp.substring(1, 3) + "-" + timestamp.substring(3, 5) + "-" + timestamp.substring(5, 7)
+                    + "T" + timestamp.substring(7, 9) + ":" + timestamp.substring(9, 11) + ":"
+                    + timestamp.substring(11, 13);
+        } else {
+            return "20" + timestamp.substring(1, 3) + "-" + timestamp.substring(3, 5) + "-" + timestamp.substring(5, 7)
+                    + "T" + timestamp.substring(7, 9) + ":00:00";
+        }
+    }
+
     public Frame() {
         // default constructor
     }
 
     public FrameType getType() throws InvalidFrameException {
+        TeleinfoTicMode ticMode = getTicMode();
+        switch (ticMode) {
+            case HISTORICAL:
+                return getHistoricalType();
+            case STANDARD:
+                return getStandardType();
+            default:
+                throw new InvalidFrameException();
+        }
+    }
+
+    public FrameType getHistoricalType() throws InvalidFrameException {
         Phase phase = getPhase();
         Pricing pricing = getPricing();
         Evolution evolution = getEvolution();
@@ -112,21 +150,32 @@ public class Frame implements Serializable {
         }
     }
 
+    public boolean containsInitializedKey(Label label) {
+        if (labelToValues.containsKey(label)) {
+            String value = labelToValues.get(label);
+            if (value != null && !value.isBlank()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public Phase getPhase() throws InvalidFrameException {
-        if (labelToValues.containsKey(Label.IINST)) {
+        if (containsInitializedKey(Label.IINST)) {
             return Phase.ONE_PHASED;
-        } else if (labelToValues.containsKey(Label.IINST1)) {
+        } else if (containsInitializedKey(Label.IINST1)) {
             return Phase.THREE_PHASED;
         }
         throw new InvalidFrameException();
     }
 
     public boolean isShortFrame() {
-        return !labelToValues.containsKey(Label.ISOUSC);
+        return !containsInitializedKey(Label.ISOUSC);
     }
 
     public Evolution getEvolution() {
-        if (labelToValues.containsKey(Label.PAPP)) {
+        if (containsInitializedKey(Label.PAPP)) {
             return Evolution.ICC;
         }
         return Evolution.NONE;
@@ -152,12 +201,41 @@ public class Frame implements Serializable {
         }
     }
 
+    public TeleinfoTicMode getTicMode() throws InvalidFrameException {
+        if (containsInitializedKey(Label.ADCO)) {
+            return TeleinfoTicMode.HISTORICAL;
+        } else if (containsInitializedKey(Label.ADSC)) {
+            return TeleinfoTicMode.STANDARD;
+        }
+        throw new InvalidFrameException();
+    }
+
+    public FrameType getStandardType() throws InvalidFrameException {
+        boolean isProd = containsInitializedKey(Label.EAIT);
+        boolean isThreePhase = containsInitializedKey(Label.IRMS2);
+        if (isProd && isThreePhase) {
+            return FrameType.LSMT_PROD;
+        }
+        if (isProd) {
+            return FrameType.LSMM_PROD;
+        }
+        if (isThreePhase) {
+            return FrameType.LSMT;
+        }
+        return FrameType.LSMM;
+    }
+
     public void clear() {
         labelToValues.clear();
+        labelToTimestamp.clear();
     }
 
     public Map<Label, String> getLabelToValues() {
         return labelToValues;
+    }
+
+    public Map<Label, String> getLabelToTimestamp() {
+        return labelToTimestamp;
     }
 
     private char getProgrammeChar() {

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -159,15 +159,13 @@ public class RFXComHandlerTest {
                 .thenReturn(new Configuration(Map.of("deviceId", "RAW", "subType", "RAW_PACKET1")));
 
         handler.initialize();
-        verifyStatusUpdated(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+        verifyStatusUpdated(ThingStatus.UNKNOWN, ThingStatusDetail.NONE);
     }
 
     @Test
     public void testWithoutBridge() {
-        when(thing.getConfiguration()).thenReturn(new Configuration(Map.of("deviceId", "1088338.11", "subType", "AC")));
-
         handler.initialize();
-        verifyStatusUpdated(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_UNINITIALIZED);
+        verify(callback, never()).statusUpdated(eq(thing), any());
     }
 
     @Test

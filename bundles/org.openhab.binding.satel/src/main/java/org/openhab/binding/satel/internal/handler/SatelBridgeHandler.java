@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -64,7 +64,7 @@ public abstract class SatelBridgeHandler extends ConfigStatusBridgeHandler imple
                 updateStatus(ThingStatus.ONLINE);
                 satelModule.sendCommand(new NewStatesCommand(satelModule.hasExtPayloadSupport()));
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, event.getReason());
+                updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, event.getReason());
             }
         }
     }

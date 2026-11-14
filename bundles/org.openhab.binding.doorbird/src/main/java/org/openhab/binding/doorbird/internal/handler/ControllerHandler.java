@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -52,17 +52,17 @@ public class ControllerHandler extends BaseThingHandler {
         ControllerConfiguration config = getConfigAs(ControllerConfiguration.class);
         String host = config.doorbirdHost;
         if (host == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Doorbird host not provided");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Doorbird host not provided");
             return;
         }
         String user = config.userId;
         if (user == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "User ID not provided");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "User ID not provided");
             return;
         }
         String password = config.userPassword;
         if (password == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "User password not provided");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "User password not provided");
             return;
         }
         api.setAuthorization(host, user, password);
@@ -72,8 +72,7 @@ public class ControllerHandler extends BaseThingHandler {
         if (controllerId != null) {
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Doorbird not configured with a Controller");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Doorbird not configured with a Controller");
         }
     }
 

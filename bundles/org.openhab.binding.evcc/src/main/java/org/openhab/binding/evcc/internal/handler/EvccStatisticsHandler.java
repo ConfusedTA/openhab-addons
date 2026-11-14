@@ -1,0 +1,134 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.evcc.internal.handler;
+
+import static org.openhab.binding.evcc.internal.EvccBindingConstants.*;
+
+import java.util.Map;
+import java.util.Optional;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.evcc.internal.handler.routing.HandlerRoute;
+import org.openhab.binding.evcc.internal.handler.routing.JsonPathExtraction;
+import org.openhab.binding.evcc.internal.handler.routing.MessageRouter;
+import org.openhab.core.thing.ChannelGroupUID;
+import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingStatus;
+import org.openhab.core.thing.type.ChannelTypeRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+/**
+ * The {@link EvccStatisticsHandler} is responsible for fetching the data from the API response for Site things
+ *
+ * @author Marcel Goerentz - Initial contribution
+ */
+@NonNullByDefault
+public class EvccStatisticsHandler extends EvccBaseThingHandler implements EvccPeriodicRefreshable {
+
+    private final Logger logger = LoggerFactory.getLogger(EvccStatisticsHandler.class);
+
+    public EvccStatisticsHandler(Thing thing, ChannelTypeRegistry channelTypeRegistry) {
+        super(thing, channelTypeRegistry);
+        type = PROPERTY_TYPE_STATISTICS;
+    }
+
+    @Override
+    public void initialize() {
+        super.initialize();
+        Optional.ofNullable(bridgeHandler).ifPresent(handler -> {
+            handler.register(this);
+            MessageRouter router = handler.getMessageRouter();
+            router.registerRoute(
+                    new HandlerRoute(JSON_KEY_STATISTICS, new JsonPathExtraction("$"), this, JSON_KEY_STATISTICS));
+        });
+    }
+
+    @Override
+    public JsonObject getStateFromCachedState(JsonObject state) {
+        return new JsonObject();
+    }
+
+    @Override
+    public void handleUpdate(String key, JsonElement value) {
+        if (JSON_KEY_STATISTICS.equals(key) && value.isJsonObject()) {
+            JsonObject statisticsUpdate = value.getAsJsonObject();
+            for (String statisticsKey : statisticsUpdate.keySet()) {
+                JsonObject statistic = statisticsUpdate.getAsJsonObject(statisticsKey);
+                logger.trace("Updating statistics for {}", statisticsKey);
+                for (Map.Entry<@Nullable String, @Nullable JsonElement> entry : statistic.entrySet()) {
+                    String entryKey = entry.getKey();
+                    JsonElement entryValue = entry.getValue();
+                    if (null != entryKey && null != entryValue) {
+                        ChannelGroupUID channelGroupUID = new ChannelGroupUID(thing.getUID(),
+                                Utils.sanitizeChannelID(statisticsKey));
+                        if ("chargedKWh".equals(entryKey)) {
+                            entryKey = "chargedEnergy";
+                        }
+                        ChannelUID channelUID = new ChannelUID(channelGroupUID, Utils.sanitizeChannelID(entryKey));
+                        resolveAndUpdateState(channelUID, channelUID.getIdWithoutGroup(), entryValue);
+                    }
+                }
+            }
+            updateStatus(ThingStatus.ONLINE);
+            return;
+        }
+        super.handleUpdate(key, value);
+    }
+
+    @Override
+    public String getIdentifier() {
+        return "";
+    }
+
+    @Override
+    public void refreshFromState(JsonObject state) {
+        if (state.has(JSON_KEY_STATISTICS)) {
+            handleUpdate(JSON_KEY_STATISTICS, state.get(JSON_KEY_STATISTICS));
+        }
+    }
+
+    @Override
+    public void initializeThingFromLatestState(JsonObject state) {
+        logger.trace("Statistics handler initializing from state");
+        state = state.has(JSON_KEY_STATISTICS) ? state.getAsJsonObject(JSON_KEY_STATISTICS) : new JsonObject();
+        if (state.isEmpty()) {
+            logger.debug("No statistics state available");
+            return;
+        }
+        for (String statisticsKey : state.keySet()) {
+            JsonObject statistic = state.getAsJsonObject(statisticsKey);
+            logger.trace("Extracting statistics for {}", statisticsKey);
+            for (Map.Entry<@Nullable String, @Nullable JsonElement> entry : statistic.entrySet()) {
+                String key = entry.getKey();
+                JsonElement value = entry.getValue();
+                if (null != key && null != value) {
+                    ChannelGroupUID channelGroupUID = new ChannelGroupUID(thing.getUID(),
+                            Utils.sanitizeChannelID(statisticsKey));
+                    if ("chargedKWh".equals(key)) {
+                        key = "chargedEnergy";
+                    }
+                    ChannelUID channelUID = new ChannelUID(channelGroupUID, Utils.sanitizeChannelID(key));
+                    resolveAndUpdateState(channelUID, channelUID.getIdWithoutGroup(), value);
+                }
+            }
+        }
+        logger.trace("Statistics handler initialized successfully");
+        updateStatus(ThingStatus.ONLINE);
+    }
+}

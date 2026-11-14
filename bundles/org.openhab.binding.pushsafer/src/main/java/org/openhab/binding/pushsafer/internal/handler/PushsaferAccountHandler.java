@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -71,14 +71,12 @@ public class PushsaferAccountHandler extends BaseThingHandler {
         boolean configValid = true;
         final String apikey = config.apikey;
         if (apikey == null || apikey.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.conf-error-missing-apikey");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-missing-apikey");
             configValid = false;
         }
         final String user = config.user;
         if (user == null || user.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.conf-error-missing-user");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.conf-error-missing-user");
             configValid = false;
         }
 
@@ -106,7 +104,7 @@ public class PushsaferAccountHandler extends BaseThingHandler {
         } catch (PushsaferCommunicationException e) {
             // do nothing, causing exception is already logged
         } catch (PushsaferConfigurationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
         }
         return List.of();
     }
@@ -122,7 +120,7 @@ public class PushsaferAccountHandler extends BaseThingHandler {
         } catch (PushsaferCommunicationException e) {
             // do nothing, causing exception is already logged
         } catch (PushsaferConfigurationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
         }
         return List.of();
     }
@@ -182,6 +180,14 @@ public class PushsaferAccountHandler extends BaseThingHandler {
         if (DEFAULT_ANSWER != config.answer) {
             builder.withAnswer(config.answer);
         }
+        // add answeroptions if defined
+        if (DEFAULT_ANSWEROPTIONS != config.answeroptions) {
+            builder.withAnswerOptions(config.answeroptions);
+        }
+        // add answerforce if defined
+        if (DEFAULT_ANSWERFORCE != config.answerforce) {
+            builder.withAnswerForce(config.answerforce);
+        }
         // add time2live if defined
         if (DEFAULT_TIME2LIVE != config.time2live) {
             builder.withTime2live(config.time2live);
@@ -196,7 +202,7 @@ public class PushsaferAccountHandler extends BaseThingHandler {
             } catch (PushsaferCommunicationException e) {
                 // do nothing, causing exception is already logged
             } catch (PushsaferConfigurationException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             }
             return false;
         } else {
@@ -211,7 +217,7 @@ public class PushsaferAccountHandler extends BaseThingHandler {
             } catch (PushsaferCommunicationException e) {
                 // do nothing, causing exception is already logged
             } catch (PushsaferConfigurationException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             }
             return "";
         } else {
@@ -226,7 +232,7 @@ public class PushsaferAccountHandler extends BaseThingHandler {
             } catch (PushsaferCommunicationException e) {
                 // do nothing, causing exception is already logged
             } catch (PushsaferConfigurationException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             }
             return false;
         } else {
@@ -240,7 +246,7 @@ public class PushsaferAccountHandler extends BaseThingHandler {
             connection.validateUser();
             updateStatus(ThingStatus.ONLINE);
         } catch (PushsaferCommunicationException | PushsaferConfigurationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
         }
     }
 }

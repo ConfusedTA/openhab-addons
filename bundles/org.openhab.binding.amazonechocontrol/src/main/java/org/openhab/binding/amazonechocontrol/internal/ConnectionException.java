@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,6 +13,7 @@
 package org.openhab.binding.amazonechocontrol.internal;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 
 /**
  * The {@link ConnectionException} is used for errors in the connection to the amazon server
@@ -20,11 +21,38 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
  * @author Michael Geramb - Initial contribution
  */
 @NonNullByDefault
-public class ConnectionException extends RuntimeException {
+public class ConnectionException extends Exception {
 
     private static final long serialVersionUID = 1L;
+    private static final int NO_HTTP_STATUS = 0;
+
+    private final int httpStatus;
+    private final String amazonErrorType;
 
     public ConnectionException(String message) {
+        this(message, NO_HTTP_STATUS, "");
+    }
+
+    public ConnectionException(@Nullable String message, @Nullable Throwable cause) {
+        super(message, cause);
+        this.httpStatus = NO_HTTP_STATUS;
+        this.amazonErrorType = "";
+    }
+
+    public ConnectionException(String message, int httpStatus, @Nullable String amazonErrorType) {
         super(message);
+        this.httpStatus = httpStatus;
+        this.amazonErrorType = amazonErrorType == null ? "" : amazonErrorType;
+    }
+
+    /**
+     * @return the HTTP status Amazon answered with, or 0 if the request never reached one
+     */
+    public int getHttpStatus() {
+        return httpStatus;
+    }
+
+    public String getAmazonErrorType() {
+        return amazonErrorType;
     }
 }

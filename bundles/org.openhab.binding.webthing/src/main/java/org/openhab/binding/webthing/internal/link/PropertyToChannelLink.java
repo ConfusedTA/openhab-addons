@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -68,8 +68,8 @@ public class PropertyToChannelLink implements BiConsumer<String, Object> {
 
     @Override
     public void accept(String propertyName, Object value) {
-        var stateCommand = typeConverter.toStateCommand(value);
-        channelHandler.updateItemState(channel.getUID(), stateCommand);
+        var state = typeConverter.toState(value);
+        channelHandler.updateItemState(channel.getUID(), state);
         logger.debug("channel {} updated with {} ({})", channel.getUID().getAsString(), value,
                 channel.getAcceptedItemType());
     }

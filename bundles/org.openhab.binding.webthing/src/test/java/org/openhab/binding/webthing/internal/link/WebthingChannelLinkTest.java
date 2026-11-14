@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,7 +12,7 @@
  */
 package org.openhab.binding.webthing.internal.link;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.net.URI;
@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.webthing.internal.ChannelHandler;
+import org.openhab.binding.webthing.internal.WebThingHandler;
 import org.openhab.binding.webthing.internal.channel.Channels;
 import org.openhab.binding.webthing.internal.client.Mocks;
 import org.openhab.binding.webthing.internal.client.WebthingTest;
@@ -35,9 +36,11 @@ import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.StringType;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingUID;
-import org.openhab.core.types.Command;
+import org.openhab.core.thing.binding.ThingHandlerCallback;
 import org.openhab.core.types.State;
 
 import com.google.gson.Gson;
@@ -101,6 +104,42 @@ public class WebthingChannelLinkTest {
     }
 
     @Test
+    public void testContactChannelIgnoresCommands() {
+        var thing = mock(Thing.class);
+        var channel = mock(Channel.class);
+        var channelUID = new ChannelUID(new ThingUID("webthing", "test"), "open");
+        when(thing.getChannel(channelUID)).thenReturn(channel);
+        when(channel.getAcceptedItemType()).thenReturn("Contact");
+
+        var handler = new WebThingHandler(thing, mock(org.eclipse.jetty.client.HttpClient.class),
+                mock(org.eclipse.jetty.websocket.client.WebSocketClient.class));
+        var listener = mock(ChannelHandler.ItemChangedListener.class);
+        handler.observeChannel(channelUID, listener);
+        handler.handleCommand(channelUID, OpenClosedType.OPEN);
+
+        verifyNoInteractions(listener);
+    }
+
+    @Test
+    public void testPropertyUpdatesUseStateForContactAndCommandForSwitch() {
+        var thing = mock(Thing.class);
+        var thingUID = new ThingUID("webthing", "test");
+        var contactChannelUID = new ChannelUID(thingUID, "open");
+        var switchChannelUID = new ChannelUID(thingUID, "onoff");
+        var callback = mock(ThingHandlerCallback.class);
+        var handler = new WebThingHandler(thing, mock(org.eclipse.jetty.client.HttpClient.class),
+                mock(org.eclipse.jetty.websocket.client.WebSocketClient.class));
+        handler.setCallback(callback);
+
+        handler.updateItemState(contactChannelUID, OpenClosedType.OPEN);
+        handler.updateItemState(switchChannelUID, OnOffType.ON);
+
+        verify(callback).stateUpdated(contactChannelUID, OpenClosedType.OPEN);
+        verify(callback).postCommand(switchChannelUID, OnOffType.ON);
+        verifyNoMoreInteractions(callback);
+    }
+
+    @Test
     public void testPropertyToChannel() throws Exception {
         var httpClient = mock(org.eclipse.jetty.client.HttpClient.class);
         var request = Mocks.mockRequest(null, load("/awning_response.json"));
@@ -140,7 +179,7 @@ public class WebthingChannelLinkTest {
         performDataTypeMappingTest("targettemp_prop", 18.6, new DecimalType(18.6), 23.2, new DecimalType(23.2));
         performDataTypeMappingTest("open_prop", true, OpenClosedType.OPEN, false, OpenClosedType.CLOSED);
         performDataTypeMappingTest("colortemp_prop", 10, new PercentType(10), 60, new PercentType(60));
-        performDataTypeMappingTest("color_prop", "#f2fe00", new HSBType("62,100,99"), "#ff0000",
+        performDataTypeMappingTest("color_prop", "#f2fe00", new HSBType("63,100,100"), "#ff0000",
                 new HSBType("0.0,100.0,100.0"));
         performDataTypeMappingTest("colormode_prop", "color", new StringType("color"), "temperature",
                 new StringType("temperature"));
@@ -185,7 +224,12 @@ public class WebthingChannelLinkTest {
         message.data = Map.of(propertyName, initialValue);
         websocketConnectionFactory.webSocketRef.get().sendToClient(message);
 
-        assertEquals(initialState, testWebthingThingHandler.itemState.get(channelUID));
+        State actualState = testWebthingThingHandler.itemState.get(channelUID);
+        if ((actualState instanceof HSBType actualHsb) && (initialState instanceof HSBType initialStateHsb)) {
+            assertTrue(actualHsb.closeTo(initialStateHsb, 0.01));
+        } else {
+            assertEquals(initialState, actualState);
+        }
 
         ChannelToPropertyLink.establish(testWebthingThingHandler, channel, webthing, propertyName);
         testWebthingThingHandler.listeners.get(channelUID).onItemStateChanged(channelUID, updatedState);
@@ -197,7 +241,7 @@ public class WebthingChannelLinkTest {
 
     private static class TestWebthingThingHandler implements ChannelHandler {
         public final Map<ChannelUID, ItemChangedListener> listeners = new ConcurrentHashMap<>();
-        public final Map<ChannelUID, Command> itemState = new ConcurrentHashMap<>();
+        public final Map<ChannelUID, State> itemState = new ConcurrentHashMap<>();
 
         @Override
         public void observeChannel(ChannelUID channelUID, ItemChangedListener listener) {
@@ -205,8 +249,8 @@ public class WebthingChannelLinkTest {
         }
 
         @Override
-        public void updateItemState(ChannelUID channelUID, Command command) {
-            itemState.put(channelUID, command);
+        public void updateItemState(ChannelUID channelUID, State state) {
+            itemState.put(channelUID, state);
         }
     }
 }

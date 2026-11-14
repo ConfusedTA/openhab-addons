@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -52,19 +52,6 @@ public class NeeoItemValueConverter {
     /** RegEx to identify format patterns. See java.util.Formatter#formatSpecifier (without the '%' at the very end). */
     private static final String IDENTIFY_FORMAT_PATTERN_PATTERN = "%(\\d+\\$)?([-#+ 0,(\\<]*)?(\\d+)?(\\.\\d+)?([tT])?([a-zA-Z])";
 
-    /** The service context */
-    private final ServiceContext context;
-
-    /**
-     * Creates the convert using the {@link ServiceContext}
-     *
-     * @param context a non-null {@link ServiceContext}
-     */
-    public NeeoItemValueConverter(ServiceContext context) {
-        Objects.requireNonNull(context, "context must not be null");
-        this.context = context;
-    }
-
     /**
      * Converts the {@link State} from the given {@link NeeoDeviceChannel} to a {@link NeeoItemValue}. This method will
      * convert enums to booleans and format string values to their associated pattern
@@ -80,8 +67,7 @@ public class NeeoItemValueConverter {
         final String format = channel.getValue();
 
         // HSBType must be done before the others since it inherits from DecimalType
-        if (state instanceof HSBType) {
-            final HSBType hsb = (HSBType) state;
+        if (state instanceof HSBType hsb) {
             switch (channel.getSubType()) {
                 case HUE:
                     return new NeeoItemValue(hsb.getHue().toBigDecimal());
@@ -106,8 +92,8 @@ public class NeeoItemValueConverter {
                 convertedState = UnDefType.UNDEF;
                 break;
             case SLIDER:
-                if (state instanceof PercentType) {
-                    convertedState = new DecimalType(((PercentType) state).toBigDecimal());
+                if (state instanceof PercentType type) {
+                    convertedState = new DecimalType(type.toBigDecimal());
                 } else {
                     convertedState = state.as(DecimalType.class);
                 }
@@ -136,9 +122,9 @@ public class NeeoItemValueConverter {
         } else if (convertedState instanceof UpDownType) {
             return new NeeoItemValue(convertedState == UpDownType.UP);
 
-        } else if (convertedState instanceof DecimalType) {
+        } else if (convertedState instanceof DecimalType type) {
             if (format == null || format.isEmpty() || channel.getType() == NeeoCapabilityType.SLIDER) {
-                return new NeeoItemValue(((DecimalType) convertedState).toBigDecimal());
+                return new NeeoItemValue(type.toBigDecimal());
             }
         } else if (convertedState instanceof UnDefType) {
             return new NeeoItemValue("-");
@@ -155,8 +141,7 @@ public class NeeoItemValueConverter {
             } else if (state instanceof Type) {
                 if (TransformationHelper.isTransform(format)) {
                     try {
-                        final String transformed = TransformationHelper
-                                .transform(context.getComponentContext().getBundleContext(), format, state.toString());
+                        final String transformed = TransformationHelper.transform(format, state.toString());
                         if (transformed != null) {
                             return new NeeoItemValue(transformed);
                         }
@@ -183,7 +168,7 @@ public class NeeoItemValueConverter {
     }
 
     /**
-     * Takes the given <code>formatPattern</code> and replaces it with a analog
+     * Takes the given <code>formatPattern</code> and replaces it with an analog
      * String-based pattern to replace all value Occurrences with a dash ("-").
      *
      * @param formatPattern the original pattern which will be replaces by a

@@ -1,0 +1,432 @@
+{
+	"deviceMapping": {
+		"id": [
+			"yeelink.light.ceilb"
+		],
+		"propertyMethod": "get_properties",
+		"maxProperties": 1,
+		"channels": [
+			{
+				"property": "",
+				"friendlyName": "Actions",
+				"channel": "actions",
+				"type": "String",
+				"stateDescription": {
+					"options": [
+						{
+							"value": "light-toggle",
+							"label": "Light Toggle"
+						},
+						{
+							"value": "light-brightness-up",
+							"label": "Light Brightness Up"
+						},
+						{
+							"value": "light-brightness-down",
+							"label": "Light Brightness Down"
+						}
+					]
+				},
+				"refresh": false,
+				"actions": [
+					{
+						"command": "action",
+						"parameterType": "EMPTY",
+						"siid": 2,
+						"aiid": 1,
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "light-toggle"
+								}
+							]
+						}
+					},
+					{
+						"command": "action",
+						"parameterType": "EMPTY",
+						"siid": 2,
+						"aiid": 2,
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "light-brightness-up"
+								}
+							]
+						}
+					},
+					{
+						"command": "action",
+						"parameterType": "EMPTY",
+						"siid": 2,
+						"aiid": 3,
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "light-brightness-down"
+								}
+							]
+						}
+					}
+				],
+				"category": "light",
+				"tags": [
+					"Control",
+					"Light"
+				],
+				"readmeComment": "Value mapping `[\"light-toggle\"\u003d\"Light Toggle\",\"light-brightness-up\"\u003d\"Light Brightness Up\",\"light-brightness-down\"\u003d\"Light Brightness Down\"]`"
+			},
+			{
+				"property": "on",
+				"siid": 2,
+				"piid": 1,
+				"friendlyName": "Light - Power",
+				"channel": "on",
+				"type": "Switch",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL"
+					}
+				],
+				"category": "switch"
+			},
+			{
+				"property": "mode",
+				"siid": 2,
+				"piid": 2,
+				"friendlyName": "Light - Mode",
+				"channel": "mode",
+				"type": "Number",
+				"stateDescription": {
+					"options": [
+						{
+							"value": "0",
+							"label": "Day"
+						},
+						{
+							"value": "1",
+							"label": "Night Light"
+						}
+					]
+				},
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER"
+					}
+				],
+				"category": "light",
+				"tags": [
+					"Control",
+					"Mode"
+				],
+				"readmeComment": "Value mapping `[\"0\"\u003d\"Day\",\"1\"\u003d\"Night Light\"]`"
+			},
+			{
+				"property": "brightness",
+				"siid": 2,
+				"piid": 3,
+				"friendlyName": "Light - Brightness",
+				"channel": "brightness",
+				"type": "Dimmer",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER",
+						"condition": {
+							"name": "BrightnessExisting"
+						}
+					},
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL",
+						"parameters": [
+							{
+								"did": "on",
+								"siid": 2,
+								"piid": 1,
+								"value": "$value$"
+							}
+						],
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "OFF|(.*,)?0(\\.0*)?",
+									"returnValue": false
+								},
+								{
+									"matchValue": "ON|[0-9.,]+",
+									"returnValue": true
+								}
+							]
+						}
+					}
+				],
+				"category": "light",
+				"tags": [
+					"Control",
+					"Brightness"
+				]
+			},
+			{
+				"property": "color-temperature",
+				"siid": 2,
+				"piid": 5,
+				"friendlyName": "Light - Color Temperature",
+				"channel": "color_temperature",
+				"type": "Number:Temperature",
+				"unit": "kelvin",
+				"stateDescription": {
+					"minimum": 2700,
+					"maximum": 6500,
+					"step": 1,
+					"pattern": "%.0f K"
+				},
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER"
+					}
+				],
+				"category": "colorlight"
+			},
+			{
+				"property": "on1",
+				"siid": 3,
+				"piid": 1,
+				"friendlyName": "Ambient Light - Power",
+				"channel": "on1",
+				"type": "Switch",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL"
+					}
+				],
+				"category": "switch"
+			},
+			{
+				"property": "mode1",
+				"siid": 3,
+				"piid": 2,
+				"friendlyName": "Ambient Light - Mode",
+				"channel": "mode1",
+				"type": "Number",
+				"stateDescription": {
+					"options": [
+						{
+							"value": "1",
+							"label": "Color"
+						},
+						{
+							"value": "3",
+							"label": "HSV"
+						}
+					]
+				},
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER"
+					}
+				],
+				"category": "light",
+				"tags": [
+					"Control",
+					"Mode"
+				],
+				"readmeComment": "Value mapping `[\"1\"\u003d\"Color\",\"3\"\u003d\"HSV\"]`"
+			},
+			{
+				"property": "brightness1",
+				"siid": 3,
+				"piid": 3,
+				"friendlyName": "Ambient Light - Brightness",
+				"channel": "brightness1",
+				"type": "Dimmer",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER",
+						"condition": {
+							"name": "BrightnessExisting"
+						}
+					},
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL",
+						"parameters": [
+							{
+								"did": "on1",
+								"siid": 3,
+								"piid": 1,
+								"value": "$value$"
+							}
+						],
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "OFF|(.*,)?0(\\.0*)?",
+									"returnValue": false
+								},
+								{
+									"matchValue": "ON|[0-9.,]+",
+									"returnValue": true
+								}
+							]
+						}
+					}
+				],
+				"category": "light",
+				"tags": [
+					"Control",
+					"Brightness"
+				]
+			},
+			{
+				"property": "color-temperature1",
+				"siid": 3,
+				"piid": 4,
+				"friendlyName": "Ambient Light - Color Temperature",
+				"channel": "color_temperature1",
+				"type": "Number:Temperature",
+				"unit": "kelvin",
+				"stateDescription": {
+					"minimum": 1700,
+					"maximum": 6500,
+					"step": 1,
+					"pattern": "%.0f K"
+				},
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER"
+					}
+				],
+				"category": "colorlight"
+			},
+			{
+				"property": "color",
+				"siid": 3,
+				"piid": 5,
+				"friendlyName": "Ambient Light - Color",
+				"channel": "color",
+				"type": "Color",
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "COLOR",
+						"condition": {
+							"name": "HSBOnly"
+						}
+					},
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER",
+						"parameters": [
+							{
+								"did": "brightness1",
+								"siid": 3,
+								"piid": 3,
+								"value": "$value$"
+							}
+						],
+						"condition": {
+							"name": "BrightnessExisting"
+						}
+					},
+					{
+						"command": "set_properties",
+						"parameterType": "ONOFFBOOL",
+						"parameters": [
+							{
+								"did": "on1",
+								"siid": 3,
+								"piid": 1,
+								"value": "$value$"
+							}
+						],
+						"condition": {
+							"name": "matchValue",
+							"parameters": [
+								{
+									"matchValue": "OFF|(.*,)?0(\\.0*)?",
+									"returnValue": false
+								},
+								{
+									"matchValue": "ON|[0-9.,]+",
+									"returnValue": true
+								}
+							]
+						}
+					}
+				],
+				"category": "colorlight",
+				"tags": [
+					"Control",
+					"Color"
+				]
+			},
+			{
+				"property": "saturability",
+				"siid": 3,
+				"piid": 6,
+				"friendlyName": "Ambient Light - Saturation",
+				"channel": "saturability",
+				"type": "Number:Dimensionless",
+				"unit": "percentage",
+				"stateDescription": {
+					"minimum": 0,
+					"maximum": 100,
+					"step": 1,
+					"pattern": "%.0f %unit%"
+				},
+				"refresh": true,
+				"actions": [
+					{
+						"command": "set_properties",
+						"parameterType": "NUMBER"
+					}
+				],
+				"category": "colorlight",
+				"tags": [
+					"Control",
+					"Color"
+				]
+			},
+			{
+				"property": "flow",
+				"siid": 3,
+				"piid": 7,
+				"friendlyName": "Ambient Light - Color Flow",
+				"channel": "flow",
+				"type": "Switch",
+				"stateDescription": {
+					"readOnly": true
+				},
+				"refresh": true,
+				"actions": [],
+				"category": "colorlight",
+				"tags": [
+					"Status"
+				]
+			}
+		],
+		"experimental": false
+	}
+}

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import javax.measure.quantity.Temperature;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -93,30 +91,25 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
         config = getConfigAs(IntesisBoxConfiguration.class);
 
         if (!config.ipAddress.isEmpty()) {
-
             updateStatus(ThingStatus.UNKNOWN);
             scheduler.submit(() -> {
-
-                String readerThreadName = "OH-binding-" + getThing().getUID().getAsString();
-
                 IntesisBoxSocketApi intesisLocalApi = intesisBoxSocketApi = new IntesisBoxSocketApi(config.ipAddress,
-                        config.port, readerThreadName);
+                        config.port, "OH-binding-" + getThing().getUID());
                 intesisLocalApi.addIntesisBoxChangeListener(this);
                 try {
                     intesisLocalApi.openConnection();
                     intesisLocalApi.sendId();
                     intesisLocalApi.sendLimitsQuery();
                     intesisLocalApi.sendAlive();
-
                 } catch (IOException e) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
                     return;
                 }
                 updateStatus(ThingStatus.ONLINE);
             });
-            pollingTask = scheduler.scheduleWithFixedDelay(this::polling, 3, 45, TimeUnit.SECONDS);
+            pollingTask = scheduler.scheduleWithFixedDelay(this::polling, 3, config.pollingInterval, TimeUnit.SECONDS);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No IP address specified)");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No IP address specified)");
         }
     }
 
@@ -144,7 +137,7 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
                 try {
                     api.openConnection();
                 } catch (IOException e) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
                 }
             }
             api.sendAlive();
@@ -176,13 +169,14 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
                 }
                 break;
             case CHANNEL_TYPE_TARGETTEMP:
-                if (command instanceof QuantityType) {
-                    QuantityType<?> celsiusTemperature = (QuantityType<?>) command;
-                    celsiusTemperature = celsiusTemperature.toUnit(SIUnits.CELSIUS);
+                if (command instanceof QuantityType quantityCommand) {
+                    QuantityType<?> celsiusTemperature = quantityCommand.toUnit(SIUnits.CELSIUS);
                     if (celsiusTemperature != null) {
                         double doubleValue = celsiusTemperature.doubleValue();
                         logger.trace("targetTemp double value = {}", doubleValue);
-                        doubleValue = Math.max(minTemp, Math.min(maxTemp, doubleValue));
+                        if (maxTemp > minTemp) {
+                            doubleValue = Math.max(minTemp, Math.min(maxTemp, doubleValue));
+                        }
                         value = String.format("%.0f", doubleValue * 10);
                         function = "SETPTEMP";
                         logger.trace("targetTemp raw string = {}", value);
@@ -237,18 +231,18 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
                 break;
 
             case "SETPTEMP":
-                if (value.equals("32768")) {
+                if ("32768".equals(value)) {
                     value = "0";
                 }
                 updateState(CHANNEL_TYPE_TARGETTEMP,
-                        new QuantityType<Temperature>(Double.valueOf(value) / 10.0d, SIUnits.CELSIUS));
+                        new QuantityType<>(Double.valueOf(value) / 10.0d, SIUnits.CELSIUS));
                 break;
             case "AMBTEMP":
                 if (Double.valueOf(value).isNaN()) {
                     value = "0";
                 }
                 updateState(CHANNEL_TYPE_AMBIENTTEMP,
-                        new QuantityType<Temperature>(Double.valueOf(value) / 10.0d, SIUnits.CELSIUS));
+                        new QuantityType<>(Double.valueOf(value) / 10.0d, SIUnits.CELSIUS));
                 break;
             case "MODE":
                 updateState(CHANNEL_TYPE_MODE, new StringType(value));
@@ -266,10 +260,9 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
                 updateState(CHANNEL_TYPE_ERRORCODE, new StringType(value));
                 break;
             case "ERRSTATUS":
-                updateState(CHANNEL_TYPE_ERRORSTATUS, new StringType(value));
+                updateState(CHANNEL_ID_ERRORSTATUS, new StringType(value));
                 if ("ERR".equals(value)) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "device reported an error");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "device reported an error");
                 }
                 break;
         }
@@ -277,7 +270,7 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
 
     private void handleMessage(String data) {
         logger.debug("handleMessage(): Message received - {}", data);
-        if (data.equals("ACK") || data.equals("")) {
+        if ("ACK".equals(data) || "".equals(data)) {
             return;
         }
         if (data.startsWith(ID + ':')) {
@@ -295,7 +288,7 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
                 case LIMITS:
                     logger.debug("handleMessage(): Limits received - {}", data);
                     String function = message.getFunction();
-                    if (function.equals("SETPTEMP")) {
+                    if ("SETPTEMP".equals(function)) {
                         List<Double> limits = message.getLimitsValue().stream().map(l -> Double.valueOf(l) / 10.0d)
                                 .collect(Collectors.toList());
                         if (limits.size() == 2) {
@@ -305,7 +298,7 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
                         logger.trace("Property target temperatures {} added", message.getValue());
                         properties.put("targetTemperature limits", "[" + minTemp + "," + maxTemp + "]");
                         addChannel(CHANNEL_TYPE_TARGETTEMP, "Number:Temperature");
-                    } else {
+                    } else if (!message.getLimitsValue().isEmpty()) {
                         switch (function) {
                             case "MODE":
                                 properties.put("supported modes", message.getValue());
@@ -328,6 +321,9 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
                                 addChannel(CHANNEL_TYPE_VANESLR, "String");
                                 break;
                         }
+                    } else {
+                        logger.trace("Property {} limits {} not added (due to missing limits)", function,
+                                message.getValue());
                     }
                     updateProperties(properties);
                     break;
@@ -367,7 +363,7 @@ public class IntesisBoxHandler extends BaseThingHandler implements IntesisBoxCha
     @Override
     public void connectionStatusChanged(ThingStatus status, @Nullable String message) {
         if (message != null) {
-            this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, message);
+            this.updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, message);
         }
         this.updateStatus(status);
     }

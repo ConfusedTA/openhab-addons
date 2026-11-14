@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,8 +17,8 @@ import static org.openhab.binding.foobot.internal.FoobotBindingConstants.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -30,7 +30,7 @@ import org.openhab.binding.foobot.internal.FoobotApiException;
 import org.openhab.binding.foobot.internal.FoobotBindingConstants;
 import org.openhab.binding.foobot.internal.config.FoobotAccountConfiguration;
 import org.openhab.binding.foobot.internal.discovery.FoobotAccountDiscoveryService;
-import org.openhab.binding.foobot.internal.json.FoobotDevice;
+import org.openhab.binding.foobot.internal.dto.FoobotDevice;
 import org.openhab.core.cache.ExpiringCache;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.thing.Bridge;
@@ -79,7 +79,7 @@ public class FoobotAccountHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(FoobotAccountDiscoveryService.class);
+        return Set.of(FoobotAccountDiscoveryService.class);
     }
 
     public List<FoobotDevice> getDeviceList() throws FoobotApiException {
@@ -110,7 +110,7 @@ public class FoobotAccountHandler extends BaseBridgeHandler {
                     "Parameter%s [%s] %s mandatory and must be configured and not be empty", oneParam ? "" : "s",
                     String.join(", ", missingParams), oneParam ? "is" : "are");
 
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, errorMsg);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, errorMsg);
             return;
         }
         this.username = username;
@@ -124,7 +124,7 @@ public class FoobotAccountHandler extends BaseBridgeHandler {
         }
         logger.debug("Foobot Account bridge starting... user: {}, refreshInterval: {}", username, refreshInterval);
 
-        updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Wait to get associated devices");
+        updateStatus(ThingStatus.UNKNOWN, "Wait to get associated devices");
 
         dataCache = new ExpiringCache<>(Duration.ofMinutes(refreshInterval), this::retrieveDeviceList);
         this.refreshDeviceListJob = scheduler.scheduleWithFixedDelay(this::refreshDeviceList, 0,
@@ -176,7 +176,7 @@ public class FoobotAccountHandler extends BaseBridgeHandler {
                         .ifPresent(fh -> fh.handleUpdateProperties(d));
             });
         } catch (FoobotApiException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
         return footbotHandlers;
     }
@@ -192,14 +192,14 @@ public class FoobotAccountHandler extends BaseBridgeHandler {
 
     @Override
     public void childHandlerInitialized(ThingHandler childHandler, Thing childThing) {
-        if (childHandler instanceof FoobotDeviceHandler) {
-            final String uuid = ((FoobotDeviceHandler) childHandler).getUuid();
+        if (childHandler instanceof FoobotDeviceHandler handler) {
+            final String uuid = handler.getUuid();
 
             try {
                 getDeviceList().stream().filter(d -> d.getUuid().equals(uuid)).findAny()
-                        .ifPresent(fd -> ((FoobotDeviceHandler) childHandler).handleUpdateProperties(fd));
+                        .ifPresent(fd -> handler.handleUpdateProperties(fd));
             } catch (FoobotApiException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             }
         }
     }
@@ -221,14 +221,13 @@ public class FoobotAccountHandler extends BaseBridgeHandler {
                 handler.refreshSensors();
             }
             if (connector.getApiKeyLimitRemaining() == FoobotApiConnector.API_RATE_LIMIT_EXCEEDED) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE,
-                        FoobotApiConnector.API_RATE_LIMIT_EXCEEDED_MESSAGE);
+                updateStatus(ThingStatus.OFFLINE, FoobotApiConnector.API_RATE_LIMIT_EXCEEDED_MESSAGE);
             } else if (getThing().getStatus() != ThingStatus.ONLINE) {
                 updateStatus(ThingStatus.ONLINE);
             }
         } catch (RuntimeException e) {
             logger.debug("Error updating sensor data ", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, e.getMessage());
         }
     }
 

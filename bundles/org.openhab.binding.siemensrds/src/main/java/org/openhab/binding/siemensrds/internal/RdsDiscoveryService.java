@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,6 +15,8 @@ package org.openhab.binding.siemensrds.internal;
 import static org.openhab.binding.siemensrds.internal.RdsBindingConstants.*;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -162,7 +164,7 @@ public class RdsDiscoveryService extends AbstractDiscoveryService {
             }
 
             String plantId = plant.getId();
-            String url = String.format(URL_POINTS, plantId);
+            String url = URL_POINTS.formatted(URLEncoder.encode(ARG_PARENT.formatted(plantId), StandardCharsets.UTF_8));
 
             if (logger.isTraceEnabled()) {
                 logger.trace(LOG_HTTP_COMMAND, HTTP_GET, url.length());
@@ -201,7 +203,6 @@ public class RdsDiscoveryService extends AbstractDiscoveryService {
                     bridgeUID, label, plantId);
 
             thingDiscovered(disco);
-            ;
         } catch (RdsCloudException e) {
             logger.warn(LOG_SYSTEM_EXCEPTION, "publishPlant()", e.getClass().getName(), e.getMessage());
         } catch (JsonParseException | IOException e) {

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -102,13 +102,11 @@ public class SenseBoxHandler extends BaseThingHandler {
         }
 
         if (senseBoxId != null && validConfig) {
-            cache.put(CACHE_KEY_DATA, () -> {
-                return connection.reallyFetchDataFromServer(senseBoxId);
-            });
+            cache.put(CACHE_KEY_DATA, () -> connection.reallyFetchDataFromServer(senseBoxId));
             updateStatus(ThingStatus.UNKNOWN);
             startAutomaticRefresh();
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, offlineReason);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, offlineReason);
         }
         logger.debug("Thing {} initialized {}", getThing().getUID(), getThing().getStatus());
     }
@@ -122,7 +120,7 @@ public class SenseBoxHandler extends BaseThingHandler {
 
                 updateStatus(ThingStatus.ONLINE);
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
             }
         } else {
             logger.debug("Unsupported command {}! Supported commands: REFRESH", command);
@@ -149,9 +147,9 @@ public class SenseBoxHandler extends BaseThingHandler {
             publishChannels();
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
-    };
+    }
 
     private void startAutomaticRefresh() {
         stopAutomaticRefresh();

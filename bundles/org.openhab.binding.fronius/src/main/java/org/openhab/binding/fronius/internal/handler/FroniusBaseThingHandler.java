@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,16 +12,20 @@
  */
 package org.openhab.binding.fronius.internal.handler;
 
-import java.io.IOException;
-import java.math.BigDecimal;
+import static org.openhab.binding.fronius.internal.FroniusBindingConstants.API_TIMEOUT;
 
+import java.util.Map;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.http.HttpMethod;
 import org.openhab.binding.fronius.internal.FroniusBridgeConfiguration;
-import org.openhab.binding.fronius.internal.api.BaseFroniusResponse;
-import org.openhab.binding.fronius.internal.api.ValueUnit;
-import org.openhab.core.io.net.http.HttpUtil;
-import org.openhab.core.library.types.DecimalType;
-import org.openhab.core.library.types.QuantityType;
-import org.openhab.core.library.types.StringType;
+import org.openhab.binding.fronius.internal.api.FroniusCommunicationException;
+import org.openhab.binding.fronius.internal.api.FroniusHttpUtil;
+import org.openhab.binding.fronius.internal.api.FroniusPollingSkipException;
+import org.openhab.binding.fronius.internal.api.dto.BaseFroniusResponse;
+import org.openhab.binding.fronius.internal.api.dto.Head;
+import org.openhab.binding.fronius.internal.api.dto.HeadStatus;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
@@ -33,10 +37,13 @@ import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
+import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
 /**
@@ -45,19 +52,21 @@ import com.google.gson.JsonSyntaxException;
  * @author Gerrit Beine - Initial contribution
  * @author Thomas Rokohl - Refactoring to merge the concepts
  * @author Thomas Kordelle - Added inverter power, battery state of charge and PV solar yield
+ * @author Jimmy Tanagra - Implement connection retry
+ *         Convert ValueUnit to QuantityType
+ *         Support NULL value
  */
+@NonNullByDefault
 public abstract class FroniusBaseThingHandler extends BaseThingHandler {
 
-    private static final int API_TIMEOUT = 5000;
     private final Logger logger = LoggerFactory.getLogger(FroniusBaseThingHandler.class);
     private final String serviceDescription;
-    private FroniusBridgeHandler bridgeHandler;
     private final Gson gson;
 
     public FroniusBaseThingHandler(Thing thing) {
         super(thing);
-        gson = new Gson();
         serviceDescription = getDescription();
+        gson = new Gson();
     }
 
     @Override
@@ -69,29 +78,25 @@ public abstract class FroniusBaseThingHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        if (getFroniusBridgeHandler() == null) {
-            logger.debug("Initializing {} Service is only supported within a bridge", serviceDescription);
-            updateStatus(ThingStatus.OFFLINE);
-            return;
-        }
         logger.debug("Initializing {} Service", serviceDescription);
-        getFroniusBridgeHandler().registerService(this);
+        // this is important so FroniusBridgeHandler::childHandlerInitialized gets called
+        Bridge bridge = getBridge();
+        if (bridge == null || bridge.getHandler() == null) {
+            logger.debug("Bridge unavailable while initializing {}", thing.getUID());
+            return;
+        } else if (bridge.getStatus() == ThingStatus.ONLINE) {
+            updateStatus(ThingStatus.UNKNOWN);
+        } else {
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
+        }
     }
 
-    private synchronized FroniusBridgeHandler getFroniusBridgeHandler() {
-        if (this.bridgeHandler == null) {
-            Bridge bridge = getBridge();
-            if (bridge == null) {
-                return null;
-            }
-            ThingHandler handler = bridge.getHandler();
-            if (handler instanceof FroniusBridgeHandler) {
-                this.bridgeHandler = (FroniusBridgeHandler) handler;
-            } else {
-                return null;
-            }
-        }
-        return this.bridgeHandler;
+    /**
+     * Called by the bridge to handle a bridge configuration update.
+     *
+     * @param configurationParameters map of changed bridge configuration parameters
+     */
+    protected void handleBridgeConfigurationUpdate(Map<String, Object> configurationParameters) {
     }
 
     /**
@@ -113,35 +118,16 @@ public abstract class FroniusBaseThingHandler extends BaseThingHandler {
             return;
         }
 
-        Object value = getValue(channelId);
-        if (value == null) {
-            logger.debug("Value retrieved for channel '{}' was null. Can't update.", channelId);
-            return;
+        State state = getValue(channelId);
+        if (state == null) {
+            state = UnDefType.NULL;
         }
 
-        State state = null;
-        if (value instanceof BigDecimal) {
-            state = new DecimalType((BigDecimal) value);
-        } else if (value instanceof Integer) {
-            state = new DecimalType(BigDecimal.valueOf(((Integer) value).longValue()));
-        } else if (value instanceof Double) {
-            state = new DecimalType((double) value);
-        } else if (value instanceof ValueUnit) {
-            state = new DecimalType(((ValueUnit) value).getValue());
-        } else if (value instanceof String) {
-            state = new StringType((String) value);
-        } else if (value instanceof QuantityType) {
-            state = (QuantityType) value;
-        } else {
-            logger.warn("Update channel {}: Unsupported value type {}", channelId, value.getClass().getSimpleName());
+        if (logger.isTraceEnabled()) {
+            logger.trace("Update channel {} with state {} ({})", channelId, state.toString(),
+                    state.getClass().getSimpleName());
         }
-        logger.debug("Update channel {} with state {} ({})", channelId, (state == null) ? "null" : state.toString(),
-                value.getClass().getSimpleName());
-
-        // Update the channel
-        if (state != null) {
-            updateState(channelId, state);
-        }
+        updateState(channelId, state);
     }
 
     /**
@@ -157,62 +143,177 @@ public abstract class FroniusBaseThingHandler extends BaseThingHandler {
      * @param channelId the id identifying the channel
      * @return the "new" associated value
      */
-    protected abstract Object getValue(String channelId);
+    protected abstract @Nullable State getValue(String channelId);
 
     /**
-     * do whatever a thing must do to update the values
+     * Called by the bridge to fetch data and update channels
+     *
+     * @param bridgeConfiguration the connected bridge configuration
+     */
+    public void refresh(FroniusBridgeConfiguration bridgeConfiguration) {
+        try {
+            handleRefresh(bridgeConfiguration);
+            if (getThing().getStatus() != ThingStatus.ONLINE) {
+                updateStatus(ThingStatus.ONLINE);
+            }
+        } catch (FroniusPollingSkipException e) {
+            logger.debug("Skipping refresh for {} because another request is already in progress.",
+                    getThing().getUID().getId());
+        } catch (FroniusCommunicationException | RuntimeException e) {
+            logger.debug("Exception caught in refresh() for {}", getThing().getUID().getId(), e);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+        }
+    }
+
+    /**
+     * This method should be overridden to do whatever a thing must do to update its channels
      * this function is called from the bridge in a given interval
      *
      * @param bridgeConfiguration the connected bridge configuration
      */
-    public abstract void refresh(FroniusBridgeConfiguration bridgeConfiguration);
+    protected abstract void handleRefresh(FroniusBridgeConfiguration bridgeConfiguration)
+            throws FroniusCommunicationException;
+
+    protected @Nullable FroniusBridgeHandler getFroniusBridgeHandler() {
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            return null;
+        }
+        ThingHandler bridgeHandler = bridge.getHandler();
+        return bridgeHandler instanceof FroniusBridgeHandler froniusBridgeHandler ? froniusBridgeHandler : null;
+    }
+
+    protected FroniusHttpUtil getHttpUtil() throws FroniusCommunicationException {
+        FroniusBridgeHandler bridgeHandler = getFroniusBridgeHandler();
+        if (bridgeHandler == null) {
+            throw new FroniusCommunicationException("Bridge handler is not available");
+        }
+        return bridgeHandler.getHttpUtil();
+    }
 
     /**
+     * Get the firmware version of the inverter from its <code>/api/status/version</code> or
+     * <code>/status/version</code>
+     * endpoint.
+     *
+     * @param scheme http or https
+     * @param hostname the hostname or IP address of the inverter
+     * @return the firmware version, or null if it could not be determined
+     */
+    protected @Nullable String getFirmwareVersion(String scheme, String hostname) {
+        final String host = scheme + "://" + hostname;
+        final String versionPath = "/status/version";
+        FroniusHttpUtil httpUtil;
+        try {
+            httpUtil = getHttpUtil();
+        } catch (FroniusCommunicationException e) {
+            logger.warn("Failed to get bridge HTTP utility for Fronius inverter at {}: {}", hostname, e.getMessage());
+            return null;
+        }
+
+        String url = host + "/api" + versionPath; // try the new API path first
+        String response;
+        try {
+            response = httpUtil.executeUrl(HttpMethod.GET, url, API_TIMEOUT);
+        } catch (FroniusCommunicationException e) {
+            url = host + versionPath; // fallback to the old API path
+            try {
+                response = httpUtil.executeUrl(HttpMethod.GET, url, API_TIMEOUT);
+            } catch (FroniusCommunicationException ex) {
+                logger.debug("Failed to get version info from Fronius inverter at {}: {}", hostname, ex.getMessage());
+                return null;
+            }
+        }
+        try {
+            JsonElement jsonElement = JsonParser.parseString(response);
+            if (!jsonElement.isJsonObject()) {
+                logger.debug("Invalid JSON response for version info from Fronius inverter at {}: {}", hostname,
+                        response);
+                return null;
+            }
+            try {
+                return jsonElement.getAsJsonObject().get("swrevisions").getAsJsonObject().get("GEN24").getAsString();
+            } catch (IllegalStateException | UnsupportedOperationException e) {
+                logger.debug("Failed to parse version info from Fronius inverter at {}: {}", hostname, e.getMessage());
+                return null;
+            }
+        } catch (JsonSyntaxException e) {
+            // 404 errors go here, as the response is not valid JSON
+            logger.debug("Invalid JSON response for version info from Fronius inverter at {}: {}", hostname, response,
+                    e);
+        }
+        return null;
+    }
+
+    /**
+     * Collect data for periodic polling. Requests are skipped when another request for the same bridge is in progress.
      *
      * @param type response class type
      * @param url to request
      * @return the object representation of the json response
      */
-    protected <T extends BaseFroniusResponse> T collectDataFormUrl(Class<T> type, String url) {
-        T result = null;
-        boolean resultOk = false;
-        String errorMsg = null;
+    protected <T extends BaseFroniusResponse> T collectDataFromUrl(Class<T> type, String url)
+            throws FroniusCommunicationException {
+        return collectDataFromUrl(type, url, true);
+    }
 
+    /**
+     * Collect data and choose whether the request may be skipped while another request for the same bridge is active.
+     *
+     * @param type response class type
+     * @param url to request
+     * @param usePollingRequest true when the request may be skipped, false when it must wait for the active request
+     * @return the object representation of the json response
+     */
+    protected <T extends BaseFroniusResponse> T collectDataFromUrl(Class<T> type, String url, boolean usePollingRequest)
+            throws FroniusCommunicationException {
         try {
-            logger.debug("URL = {}", url);
-            String response = HttpUtil.executeUrl("GET", url, API_TIMEOUT);
+            FroniusHttpUtil httpUtil = getHttpUtil();
+            int attempts = 1;
+            while (true) {
+                logger.trace("Fetching URL = {}", url);
+                String response = usePollingRequest ? httpUtil.executePollingUrl(HttpMethod.GET, url, API_TIMEOUT)
+                        : httpUtil.executeUrl(HttpMethod.GET, url, API_TIMEOUT);
+                logger.trace("aqiResponse = {}", response);
 
-            if (response != null) {
-                logger.debug("aqiResponse = {}", response);
-                result = gson.fromJson(response, type);
-            }
-
-            if (result == null) {
-                errorMsg = "no data returned";
-            } else {
-                if (result.getHead().getStatus().getCode() == 0) {
-                    resultOk = true;
-                } else {
-                    errorMsg = result.getHead().getStatus().getReason();
+                @Nullable
+                T result = gson.fromJson(response, type);
+                if (result == null) {
+                    throw new FroniusCommunicationException("Empty json result");
                 }
-            }
-            if (!resultOk) {
-                logger.debug("Error in fronius response: {}", errorMsg);
+
+                Head head = result.getHead();
+                if (head == null) {
+                    throw new FroniusCommunicationException("Empty head in json result");
+                }
+                HeadStatus status = head.getStatus();
+                if (status != null && status.getCode() == 0) {
+                    return result;
+                }
+
+                // Sometimes Fronius would return a HTTP status 200 with a proper JSON data
+                // with Reason: Transfer timeout.
+                //
+                // "Status" : {
+                // "Code" : 8,
+                // "Reason" : "Transfer timeout.",
+                // "UserMessage" : ""
+                // },
+                int code = status != null ? status.getCode() : 255;
+                String reason = status != null ? status.getReason() : "undefined runtime error";
+                logger.debug("Error from Fronius attempt #{}: {} - {}", attempts, code, reason);
+                if (attempts >= 3) {
+                    throw new FroniusCommunicationException(reason);
+                }
+                Thread.sleep(500 * attempts);
+                attempts++;
             }
         } catch (JsonSyntaxException | NumberFormatException e) {
-            errorMsg = "Invalid JSON data received";
-            logger.debug("Error running fronius request: {}", e.getMessage());
-        } catch (IOException | IllegalStateException e) {
-            errorMsg = e.getMessage();
-            logger.debug("Error running fronius request: {}", errorMsg);
+            logger.debug("Received Invalid JSON Data", e);
+            throw new FroniusCommunicationException("Invalid JSON data received", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new FroniusCommunicationException("Data collection interrupted", e);
         }
-
-        // Update the thing status
-        if (resultOk) {
-            updateStatus(ThingStatus.ONLINE);
-        } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, errorMsg);
-        }
-        return resultOk ? result : null;
     }
 }

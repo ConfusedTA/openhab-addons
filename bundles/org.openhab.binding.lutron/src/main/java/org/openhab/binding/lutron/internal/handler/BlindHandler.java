@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -61,15 +61,14 @@ public class BlindHandler extends LutronHandler {
 
     @Override
     public void initialize() {
-        config = getThing().getConfiguration().as(BlindConfig.class);
+        config = getConfigAs(BlindConfig.class);
         if (config.integrationId <= 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId configured");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No integrationId configured");
             return;
         }
         if (config.type == null || (!(BLIND_TYPE_SHEER.equalsIgnoreCase(config.type))
                 && !(BLIND_TYPE_VENETIAN.equalsIgnoreCase(config.type)))) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Parameter type not set to valid value");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Parameter type not set to valid value");
             return;
         }
         String blindType = config.type;
@@ -85,14 +84,14 @@ public class BlindHandler extends LutronHandler {
         logger.debug("Initializing device state for Shade {}", getIntegrationId());
         Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No bridge configured");
+            logger.debug("Bridge unavailable for Thing: {}", thing.getUID());
         } else if (bridge.getStatus() == ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Awaiting initial response");
+            updateStatus(ThingStatus.UNKNOWN, "Awaiting initial response");
             queryOutput(TargetType.BLIND, OutputCommand.ACTION_LIFTLEVEL);
             // handleUpdate() will set thing status to online when response arrives
             queryOutput(TargetType.BLIND, OutputCommand.ACTION_TILTLEVEL);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 
@@ -116,8 +115,8 @@ public class BlindHandler extends LutronHandler {
     }
 
     private void handleLiftCommand(Command command) {
-        if (command instanceof PercentType) {
-            int level = ((PercentType) command).intValue();
+        if (command instanceof PercentType liftPercent) {
+            int level = liftPercent.intValue();
             output(TargetType.BLIND, OutputCommand.ACTION_LIFTLEVEL, level, null, null);
         } else if (command.equals(UpDownType.UP)) {
             output(TargetType.BLIND, OutputCommand.ACTION_STARTRAISINGLIFT, null, null, null);
@@ -131,8 +130,8 @@ public class BlindHandler extends LutronHandler {
     }
 
     private void handleTiltCommand(Command command) {
-        if (command instanceof PercentType) {
-            int level = ((PercentType) command).intValue();
+        if (command instanceof PercentType tiltPercent) {
+            int level = tiltPercent.intValue();
             output(TargetType.BLIND, OutputCommand.ACTION_TILTLEVEL, Math.min(level, tiltMax), null, null);
         } else if (command.equals(UpDownType.UP)) {
             output(TargetType.BLIND, OutputCommand.ACTION_STARTRAISINGTILT, null, null, null);

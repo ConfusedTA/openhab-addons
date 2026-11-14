@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -139,31 +139,31 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
         }
 
         if (id.equals(RioConstants.CHANNEL_ZONEBASS)) {
-            if (command instanceof DecimalType) {
-                getProtocolHandler().setZoneBass(((DecimalType) command).intValue());
+            if (command instanceof DecimalType decimalCommand) {
+                getProtocolHandler().setZoneBass(decimalCommand.intValue());
             } else {
                 logger.debug("Received a ZONE BASS channel command with a non DecimalType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONETREBLE)) {
-            if (command instanceof DecimalType) {
-                getProtocolHandler().setZoneTreble(((DecimalType) command).intValue());
+            if (command instanceof DecimalType decimalCommand) {
+                getProtocolHandler().setZoneTreble(decimalCommand.intValue());
             } else {
                 logger.debug("Received a ZONE TREBLE channel command with a non DecimalType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONEBALANCE)) {
-            if (command instanceof DecimalType) {
-                getProtocolHandler().setZoneBalance(((DecimalType) command).intValue());
+            if (command instanceof DecimalType decimalCommand) {
+                getProtocolHandler().setZoneBalance(decimalCommand.intValue());
             } else {
                 logger.debug("Received a ZONE BALANCE channel command with a non DecimalType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONETURNONVOLUME)) {
-            if (command instanceof PercentType) {
-                getProtocolHandler().setZoneTurnOnVolume(((PercentType) command).intValue() / 100d);
-            } else if (command instanceof DecimalType) {
-                getProtocolHandler().setZoneTurnOnVolume(((DecimalType) command).doubleValue());
+            if (command instanceof PercentType percentCommand) {
+                getProtocolHandler().setZoneTurnOnVolume(percentCommand.intValue() / 100d);
+            } else if (command instanceof DecimalType decimalCommand) {
+                getProtocolHandler().setZoneTurnOnVolume(decimalCommand.doubleValue());
             } else {
                 logger.debug("Received a ZONE TURN ON VOLUME channel command with a non PercentType/DecimalType: {}",
                         command);
@@ -177,15 +177,15 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONESLEEPTIMEREMAINING)) {
-            if (command instanceof DecimalType) {
-                getProtocolHandler().setZoneSleepTimeRemaining(((DecimalType) command).intValue());
+            if (command instanceof DecimalType decimalCommand) {
+                getProtocolHandler().setZoneSleepTimeRemaining(decimalCommand.intValue());
             } else {
                 logger.debug("Received a ZONE SLEEP TIME REMAINING channel command with a non DecimalType: {}",
                         command);
             }
         } else if (id.equals(RioConstants.CHANNEL_ZONESOURCE)) {
-            if (command instanceof DecimalType) {
-                getProtocolHandler().setZoneSource(((DecimalType) command).intValue());
+            if (command instanceof DecimalType decimalCommand) {
+                getProtocolHandler().setZoneSource(decimalCommand.intValue());
             } else {
                 logger.debug("Received a ZONE SOURCE channel command with a non DecimalType: {}", command);
             }
@@ -197,15 +197,15 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
                 logger.debug("Received a ZONE STATUS channel command with a non OnOffType: {}", command);
             }
         } else if (id.equals(RioConstants.CHANNEL_ZONEPARTYMODE)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().setZonePartyMode(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().setZonePartyMode(stringCommand.toString());
             } else {
                 logger.debug("Received a ZONE PARTY MODE channel command with a non StringType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONEDONOTDISTURB)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().setZoneDoNotDisturb(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().setZoneDoNotDisturb(stringCommand.toString());
             } else {
                 logger.debug("Received a ZONE DO NOT DISTURB channel command with a non StringType: {}", command);
             }
@@ -236,10 +236,10 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
                 getProtocolHandler().setZoneStatus(command == OnOffType.ON);
             } else if (command instanceof IncreaseDecreaseType) {
                 getProtocolHandler().setZoneVolume(command == IncreaseDecreaseType.INCREASE);
-            } else if (command instanceof PercentType) {
-                getProtocolHandler().setZoneVolume(((PercentType) command).intValue() / 100d);
-            } else if (command instanceof DecimalType) {
-                getProtocolHandler().setZoneVolume(((DecimalType) command).doubleValue());
+            } else if (command instanceof PercentType percentCommand) {
+                getProtocolHandler().setZoneVolume(percentCommand.intValue() / 100d);
+            } else if (command instanceof DecimalType decimalCommand) {
+                getProtocolHandler().setZoneVolume(decimalCommand.doubleValue());
             } else {
                 logger.debug(
                         "Received a ZONE VOLUME channel command with a non OnOffType/IncreaseDecreaseType/PercentType/DecimalTye: {}",
@@ -254,36 +254,36 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONEKEYPRESS)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().sendKeyPress(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().sendKeyPress(stringCommand.toString());
             } else {
                 logger.debug("Received a ZONE KEYPRESS channel command with a non StringType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONEKEYRELEASE)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().sendKeyRelease(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().sendKeyRelease(stringCommand.toString());
             } else {
                 logger.debug("Received a ZONE KEYRELEASE channel command with a non StringType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONEKEYHOLD)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().sendKeyHold(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().sendKeyHold(stringCommand.toString());
             } else {
                 logger.debug("Received a ZONE KEYHOLD channel command with a non StringType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONEKEYCODE)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().sendKeyCode(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().sendKeyCode(stringCommand.toString());
             } else {
                 logger.debug("Received a ZONE KEYCODE channel command with a non StringType: {}", command);
             }
 
         } else if (id.equals(RioConstants.CHANNEL_ZONEEVENT)) {
-            if (command instanceof StringType) {
-                getProtocolHandler().sendEvent(((StringType) command).toString());
+            if (command instanceof StringType stringCommand) {
+                getProtocolHandler().sendEvent(stringCommand.toString());
             } else {
                 logger.debug("Received a ZONE EVENT channel command with a non StringType: {}", command);
             }
@@ -398,44 +398,41 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
     /**
      * Initializes the bridge. Confirms the configuration is valid and that our parent bridge is a
      * {@link RioControllerHandler}. Once validated, a {@link RioZoneProtocol} is set via
-     * {@link #setProtocolHandler(RioZoneProtocol)} and the bridge comes online.
+     * {@link #setProtocolHandler(AbstractRioProtocol)} and the bridge comes online.
      */
     @Override
     public void initialize() {
         final Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Cannot be initialized without a bridge");
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
         if (bridge.getStatus() != ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             return;
         }
 
         final ThingHandler handler = bridge.getHandler();
         if (handler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "No handler specified (null) for the bridge!");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No handler specified (null) for the bridge!");
             return;
         }
 
         if (!(handler instanceof RioControllerHandler)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "Source must be attached to a controller bridge: " + handler.getClass());
             return;
         }
 
-        final RioZoneConfig config = getThing().getConfiguration().as(RioZoneConfig.class);
+        final RioZoneConfig config = getConfigAs(RioZoneConfig.class);
         if (config == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
             return;
         }
 
         final int configZone = config.getZone();
         if (configZone < 1 || configZone > 8) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Source must be between 1 and 8: " + configZone);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Source must be between 1 and 8: " + configZone);
             return;
         }
         zone.set(configZone);
@@ -446,7 +443,7 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
         // Get the socket session from the
         final SocketSession socketSession = getSocketSession();
         if (socketSession == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "No socket session found");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "No socket session found");
             return;
         }
 
@@ -454,7 +451,11 @@ public class RioZoneHandler extends AbstractThingHandler<RioZoneProtocol>
                 getPresetsProtocol(), socketSession, new StatefulHandlerCallback(new AbstractRioHandlerCallback() {
                     @Override
                     public void statusChanged(ThingStatus status, ThingStatusDetail detail, String msg) {
-                        updateStatus(status, detail, msg);
+                        if (detail == ThingStatusDetail.NONE) {
+                            updateStatus(status, msg);
+                        } else {
+                            updateStatus(detail, msg);
+                        }
                     }
 
                     @Override

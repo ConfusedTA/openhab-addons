@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,21 +19,23 @@ import org.openhab.core.automation.annotation.RuleAction;
 import org.openhab.core.thing.binding.ThingActions;
 import org.openhab.core.thing.binding.ThingActionsScope;
 import org.openhab.core.thing.binding.ThingHandler;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.ServiceScope;
 
 /**
  * The {@link YIOremoteDockActions} is responsible for handling the action commands
  *
- *
  * @author Michael Loercher - Initial contribution
  */
+@Component(scope = ServiceScope.PROTOTYPE, service = YIOremoteDockActions.class)
 @ThingActionsScope(name = "yioremote")
 @NonNullByDefault
 public class YIOremoteDockActions implements ThingActions {
     private @Nullable YIOremoteDockHandler dockHandler;
 
     @Override
-    public void setThingHandler(@Nullable ThingHandler yiremotedockhandler) {
-        dockHandler = (YIOremoteDockHandler) yiremotedockhandler;
+    public void setThingHandler(@Nullable ThingHandler handler) {
+        dockHandler = handler instanceof YIOremoteDockHandler yioHandler ? yioHandler : null;
     }
 
     @Override
@@ -41,12 +43,12 @@ public class YIOremoteDockActions implements ThingActions {
         return dockHandler;
     }
 
-    @RuleAction(label = "@text/actionLabel", description = "@text/actionDesc")
+    @RuleAction(label = "@text/action.sendIRCode.label", description = "@text/action.sendIRCode.description")
     public void sendIRCode(
-            @ActionInput(name = "IRCode", label = "@text/actionInputTopicLabel", description = "@text/actionInputTopicDesc") @Nullable String irCode) {
-        YIOremoteDockHandler dockHandlerLocal = dockHandler;
-        if (dockHandlerLocal != null) {
-            dockHandlerLocal.sendIRCode(irCode);
+            @ActionInput(name = "IRCode", label = "@text/action.sendIRCode.IRCode.label", description = "@text/action.sendIRCode.IRCode.description") @Nullable String irCode) {
+        YIOremoteDockHandler handler = dockHandler;
+        if (handler != null) {
+            handler.sendIRCode(irCode);
         }
     }
 

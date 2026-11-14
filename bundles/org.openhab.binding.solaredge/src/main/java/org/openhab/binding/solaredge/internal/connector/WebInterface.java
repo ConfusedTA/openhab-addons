@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,11 +14,15 @@ package org.openhab.binding.solaredge.internal.connector;
 
 import static org.openhab.binding.solaredge.internal.SolarEdgeBindingConstants.*;
 
-import java.io.UnsupportedEncodingException;
+import java.time.Clock;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -28,7 +32,10 @@ import org.eclipse.jetty.util.BlockingArrayQueue;
 import org.openhab.binding.solaredge.internal.AtomicReferenceTrait;
 import org.openhab.binding.solaredge.internal.command.PrivateApiTokenCheck;
 import org.openhab.binding.solaredge.internal.command.PublicApiKeyCheck;
+import org.openhab.binding.solaredge.internal.command.PublicApiV2KeyCheck;
 import org.openhab.binding.solaredge.internal.command.SolarEdgeCommand;
+import org.openhab.binding.solaredge.internal.config.PublicApiAuthentication;
+import org.openhab.binding.solaredge.internal.config.PublicApiVersion;
 import org.openhab.binding.solaredge.internal.config.SolarEdgeConfiguration;
 import org.openhab.binding.solaredge.internal.handler.SolarEdgeHandler;
 import org.openhab.core.thing.ThingStatus;
@@ -40,19 +47,22 @@ import org.slf4j.LoggerFactory;
  * The connector is responsible for communication with the solaredge webportal
  *
  * @author Alexander Friese - initial contribution
+ * @author Ronny Grun - Monitoring API V2 authentication and rate-limit handling
  */
 @NonNullByDefault
 public class WebInterface implements AtomicReferenceTrait {
 
     private static final int API_KEY_THRESHOLD = 40;
     private static final int TOKEN_THRESHOLD = 80;
+    private static final long DEFAULT_RATE_LIMIT_PAUSE_MILLIS = TimeUnit.MINUTES.toMillis(1);
+    private static final long MAX_RATE_LIMIT_PAUSE_MILLIS = TimeUnit.DAYS.toMillis(1);
 
     private final Logger logger = LoggerFactory.getLogger(WebInterface.class);
 
     /**
      * Configuration
      */
-    private SolarEdgeConfiguration config;
+    private volatile SolarEdgeConfiguration config;
 
     /**
      * handler for updating thing status
@@ -62,7 +72,7 @@ public class WebInterface implements AtomicReferenceTrait {
     /**
      * holds authentication status
      */
-    private boolean authenticated = false;
+    private volatile boolean authenticated = false;
 
     /**
      * HTTP client for asynchronous calls
@@ -74,11 +84,15 @@ public class WebInterface implements AtomicReferenceTrait {
      * existing scheduler instance.
      */
     private final ScheduledExecutorService scheduler;
+    private final Clock clock;
 
     /**
      * request executor
      */
     private final WebRequestExecutor requestExecutor;
+    private final Object requestLifecycleLock = new Object();
+    private final AtomicLong requestGeneration = new AtomicLong();
+    private final AtomicLong rateLimitPauseUntilMillis = new AtomicLong();
 
     /**
      * periodic request executor job
@@ -91,7 +105,7 @@ public class WebInterface implements AtomicReferenceTrait {
      *
      * @author afriese - initial contribution
      */
-    private class WebRequestExecutor implements Runnable {
+    private class WebRequestExecutor {
 
         /**
          * queue which holds the commands to execute
@@ -105,20 +119,132 @@ public class WebInterface implements AtomicReferenceTrait {
             this.commandQueue = new BlockingArrayQueue<>(WEB_REQUEST_QUEUE_MAX_SIZE);
         }
 
+        private void processAuthenticationResult(CommunicationStatus status) {
+            String errorMessageCodeFound;
+            String errorMessgaeCodeForbidden = STATUS_INVALID_SOLAR_ID;
+            if (config.isUsePrivateApi()) {
+                errorMessageCodeFound = STATUS_INVALID_TOKEN;
+            } else {
+                errorMessageCodeFound = STATUS_UNKNOWN_ERROR;
+            }
+
+            switch (status.getHttpCode()) {
+                case OK:
+                    handler.setStatusInfo(ThingStatus.ONLINE, null);
+                    setAuthenticated(true);
+                    break;
+                case FOUND:
+                    handler.setStatusInfo(ThingStatusDetail.CONFIGURATION_ERROR, errorMessageCodeFound);
+                    setAuthenticated(false);
+                    break;
+                case FORBIDDEN:
+                    handler.setStatusInfo(ThingStatusDetail.CONFIGURATION_ERROR, errorMessgaeCodeForbidden);
+                    setAuthenticated(false);
+                    break;
+                case SERVICE_UNAVAILABLE:
+                    handler.setStatusInfo(ThingStatusDetail.BRIDGE_OFFLINE, status.getMessage());
+                    setAuthenticated(false);
+                    break;
+                default:
+                    handler.setStatusInfo(ThingStatusDetail.COMMUNICATION_ERROR, status.getMessage());
+                    setAuthenticated(false);
+            }
+        }
+
+        /**
+         * authenticates with the Solaredge WEB interface
+         */
+        private synchronized void authenticate(long generation) {
+            if (generation != requestGeneration.get()) {
+                return;
+            }
+            setAuthenticated(false);
+
+            if (preCheck()) {
+                SolarEdgeCommand tokenCheckCommand;
+
+                if (config.isUsePrivateApi()) {
+                    tokenCheckCommand = new PrivateApiTokenCheck(handler, this::processAuthenticationResult);
+                } else if (PublicApiVersion.V2.equals(config.getPublicApiVersion())) {
+                    tokenCheckCommand = new PublicApiV2KeyCheck(handler, this::processAuthenticationResult);
+                } else {
+                    tokenCheckCommand = new PublicApiKeyCheck(handler, this::processAuthenticationResult);
+                }
+                tokenCheckCommand.bindRequestGeneration(generation, requestGeneration::get);
+                tokenCheckCommand.performAction(httpClient);
+            }
+        }
+
+        /**
+         * performs some pre cheks on configuration before attempting to login
+         *
+         * @return true on success, false otherwise
+         */
+        private boolean preCheck() {
+            String preCheckStatusMessage = "";
+            String localTokenOrApiKey = config.getTokenOrApiKey();
+
+            if (config.isUsePrivateApi() && localTokenOrApiKey.length() < TOKEN_THRESHOLD) {
+                preCheckStatusMessage = STATUS_INVALID_TOKEN_LENGTH;
+            } else if (!config.isUsePrivateApi() && PublicApiVersion.V2.equals(config.getPublicApiVersion())
+                    && PublicApiAuthentication.OAUTH.equals(config.getPublicApiAuthentication())
+                    && (config.getOAuthClientId().isBlank() || config.getOAuthClientSecret().isBlank())) {
+                preCheckStatusMessage = STATUS_MISSING_OAUTH_CLIENT_CREDENTIALS;
+            } else if (!config.isUsePrivateApi() && PublicApiVersion.V2.equals(config.getPublicApiVersion())
+                    && PublicApiAuthentication.OAUTH.equals(config.getPublicApiAuthentication())
+                    && !handler.hasPublicApiV2Credential()) {
+                return false;
+            } else if (!config.isUsePrivateApi()
+                    && (!PublicApiVersion.V2.equals(config.getPublicApiVersion())
+                            || PublicApiAuthentication.API_KEY.equals(config.getPublicApiAuthentication()))
+                    && localTokenOrApiKey.isBlank()) {
+                preCheckStatusMessage = STATUS_MISSING_API_KEY;
+            } else if (!config.isUsePrivateApi() && PublicApiVersion.V1.equals(config.getPublicApiVersion())
+                    && localTokenOrApiKey.length() > API_KEY_THRESHOLD) {
+                preCheckStatusMessage = STATUS_INVALID_API_KEY_LENGTH;
+            } else if (!config.isUsePrivateApi() && PublicApiVersion.V1.equals(config.getPublicApiVersion())
+                    && calcRequestsPerDay() > WEB_REQUEST_PUBLIC_API_DAY_LIMIT) {
+                preCheckStatusMessage = STATUS_REQUEST_LIMIT_EXCEEDED;
+            } else if (config.isUsePrivateApi() && !config.isMeterInstalled()) {
+                preCheckStatusMessage = STATUS_NO_METER_CONFIGURED;
+            } else {
+                return true;
+            }
+
+            handler.setStatusInfo(ThingStatusDetail.CONFIGURATION_ERROR, preCheckStatusMessage);
+            return false;
+        }
+
+        /**
+         * calculates requests per day. just an internal helper
+         *
+         * @return
+         */
+        private long calcRequestsPerDay() {
+            return MINUTES_PER_DAY / config.getLiveDataPollingInterval()
+                    + 4 * MINUTES_PER_DAY / config.getAggregateDataPollingInterval();
+        }
+
         /**
          * puts a command into the queue
          *
          * @param command
          */
         void enqueue(SolarEdgeCommand command) {
-            try {
-                commandQueue.add(command);
-            } catch (IllegalStateException ex) {
-                if (commandQueue.size() >= WEB_REQUEST_QUEUE_MAX_SIZE) {
-                    logger.debug(
-                            "Could not add command to command queue because queue is already full. Maybe SolarEdge is down?");
-                } else {
-                    logger.warn("Could not add command to queue - IllegalStateException");
+            synchronized (requestLifecycleLock) {
+                if (isRateLimitPaused()
+                        || !command.bindRequestGeneration(requestGeneration.get(), requestGeneration::get)) {
+                    return;
+                }
+                try {
+                    commandQueue.add(command);
+                } catch (IllegalStateException ex) {
+                    if (commandQueue.size() >= WEB_REQUEST_QUEUE_MAX_SIZE) {
+                        logger.debug(
+                                "Could not add command to command queue because queue is already full. Maybe SolarEdge is down?");
+                    } else {
+                        logger.warn("Could not add command to queue - IllegalStateException");
+                    }
                 }
             }
         }
@@ -126,36 +252,35 @@ public class WebInterface implements AtomicReferenceTrait {
         /**
          * executes the web request
          */
-        @Override
-        public void run() {
+        void run(long generation) {
+            if (generation != requestGeneration.get()) {
+                return;
+            }
+            if (isRateLimitPaused()) {
+                return;
+            }
             if (!isAuthenticated()) {
-                authenticate();
+                authenticate(generation);
             }
 
-            else if (isAuthenticated() && !commandQueue.isEmpty()) {
-                StatusUpdateListener statusUpdater = new StatusUpdateListener() {
-                    @Override
-                    public void update(CommunicationStatus status) {
-                        switch (status.getHttpCode()) {
-                            case SERVICE_UNAVAILABLE:
-                                handler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
-                                        status.getMessage());
-                                setAuthenticated(false);
-                                break;
-                            case OK:
-                                // no action needed as the thing is already online.
-                                break;
-                            default:
-                                handler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                                        status.getMessage());
-                                setAuthenticated(false);
+            if (generation == requestGeneration.get() && !isRateLimitPaused() && isAuthenticated()
+                    && !commandQueue.isEmpty()) {
+                try {
+                    executeCommand();
+                } catch (Exception ex) {
+                    logger.warn("command execution ended with exception:", ex);
+                }
+            }
+        }
 
-                        }
-                    }
-                };
-
-                SolarEdgeCommand command = commandQueue.poll();
-                command.setListener(statusUpdater);
+        /**
+         * executes the next command in the queue. requires authenticated session.
+         *
+         * @throws ValidationException
+         */
+        private void executeCommand() {
+            SolarEdgeCommand command = commandQueue.poll();
+            if (command != null) {
                 command.performAction(httpClient);
             }
         }
@@ -164,22 +289,76 @@ public class WebInterface implements AtomicReferenceTrait {
     /**
      * Constructor to set up interface
      *
-     * @param config Bridge configuration
+     * @param scheduler
+     * @param handler
+     * @param httpClient
      */
     public WebInterface(ScheduledExecutorService scheduler, SolarEdgeHandler handler, HttpClient httpClient) {
+        this(scheduler, handler, httpClient, Clock.systemUTC());
+    }
+
+    WebInterface(ScheduledExecutorService scheduler, SolarEdgeHandler handler, HttpClient httpClient, Clock clock) {
         this.config = handler.getConfiguration();
         this.handler = handler;
         this.scheduler = scheduler;
         this.httpClient = httpClient;
+        this.clock = clock;
         this.requestExecutor = new WebRequestExecutor();
         this.requestExecutorJobReference = new AtomicReference<>(null);
     }
 
+    /** Pause V2 requests after HTTP 429; queued data will be refreshed by the next polling cycle. */
+    public void pausePublicApiV2Requests(@Nullable String retryAfter) {
+        long now = clock.millis();
+        long delay = retryAfterDelayMillis(retryAfter, now);
+        long pauseUntil = now + delay;
+        synchronized (requestLifecycleLock) {
+            rateLimitPauseUntilMillis.accumulateAndGet(pauseUntil, Math::max);
+            requestExecutor.commandQueue.clear();
+        }
+        logger.debug("Pausing Monitoring API V2 requests for {} seconds after HTTP 429", delay / 1000);
+    }
+
+    private boolean isRateLimitPaused() {
+        return !config.isUsePrivateApi() && PublicApiVersion.V2.equals(config.getPublicApiVersion())
+                && clock.millis() < rateLimitPauseUntilMillis.get();
+    }
+
+    static long retryAfterDelayMillis(@Nullable String retryAfter, long nowMillis) {
+        if (retryAfter == null || retryAfter.isBlank()) {
+            return DEFAULT_RATE_LIMIT_PAUSE_MILLIS;
+        }
+        try {
+            long seconds = Long.parseLong(retryAfter.trim());
+            if (seconds < 0) {
+                return DEFAULT_RATE_LIMIT_PAUSE_MILLIS;
+            }
+            return Math.max(TimeUnit.SECONDS.toMillis(1),
+                    Math.min(MAX_RATE_LIMIT_PAUSE_MILLIS, TimeUnit.SECONDS.toMillis(seconds)));
+        } catch (NumberFormatException e) {
+            try {
+                long deadline = ZonedDateTime.parse(retryAfter, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
+                        .toEpochMilli();
+                return Math.max(TimeUnit.SECONDS.toMillis(1),
+                        Math.min(MAX_RATE_LIMIT_PAUSE_MILLIS, deadline - nowMillis));
+            } catch (DateTimeParseException dateException) {
+                return DEFAULT_RATE_LIMIT_PAUSE_MILLIS;
+            }
+        }
+    }
+
     public void start() {
-        this.config = handler.getConfiguration();
-        setAuthenticated(false);
-        updateJobReference(requestExecutorJobReference, scheduler.scheduleWithFixedDelay(requestExecutor,
-                WEB_REQUEST_INITIAL_DELAY, WEB_REQUEST_INTERVAL, TimeUnit.MILLISECONDS));
+        synchronized (requestLifecycleLock) {
+            cancelJobReference(requestExecutorJobReference);
+            long generation = requestGeneration.incrementAndGet();
+            rateLimitPauseUntilMillis.set(0);
+            requestExecutor.commandQueue.clear();
+            this.config = handler.getConfiguration();
+            setAuthenticated(false);
+            updateJobReference(requestExecutorJobReference,
+                    scheduler.scheduleWithFixedDelay(() -> requestExecutor.run(generation), WEB_REQUEST_INITIAL_DELAY,
+                            WEB_REQUEST_INTERVAL, TimeUnit.MILLISECONDS));
+        }
     }
 
     /**
@@ -192,115 +371,17 @@ public class WebInterface implements AtomicReferenceTrait {
     }
 
     /**
-     * authenticates with the Solaredge WEB interface
-     *
-     * @throws UnsupportedEncodingException
-     */
-    private synchronized void authenticate() {
-        setAuthenticated(false);
-
-        if (preCheck()) {
-            SolarEdgeCommand tokenCheckCommand;
-
-            StatusUpdateListener tokenCheckListener = new StatusUpdateListener() {
-
-                @Override
-                public void update(CommunicationStatus status) {
-                    String errorMessageCodeFound;
-                    String errorMessgaeCodeForbidden;
-                    if (config.isUsePrivateApi()) {
-                        errorMessageCodeFound = "login error with private API: invalid token";
-                        errorMessgaeCodeForbidden = "login error with private API: invalid solarId";
-                    } else {
-                        errorMessageCodeFound = "login error with public API: unknown error";
-                        errorMessgaeCodeForbidden = "login error with public API: invalid api key or solarId is not valid for this api key";
-                    }
-
-                    switch (status.getHttpCode()) {
-                        case OK:
-                            handler.setStatusInfo(ThingStatus.ONLINE, ThingStatusDetail.NONE, "logged in");
-                            setAuthenticated(true);
-                            break;
-                        case FOUND:
-                            handler.setStatusInfo(ThingStatus.UNKNOWN, ThingStatusDetail.CONFIGURATION_ERROR,
-                                    errorMessageCodeFound);
-                            setAuthenticated(false);
-                            break;
-                        case FORBIDDEN:
-                            handler.setStatusInfo(ThingStatus.UNKNOWN, ThingStatusDetail.CONFIGURATION_ERROR,
-                                    errorMessgaeCodeForbidden);
-                            setAuthenticated(false);
-                            break;
-                        case SERVICE_UNAVAILABLE:
-                            handler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE,
-                                    status.getMessage());
-                            setAuthenticated(false);
-                            break;
-                        default:
-                            handler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                                    status.getMessage());
-                            setAuthenticated(false);
-                    }
-                }
-            };
-
-            if (config.isUsePrivateApi()) {
-                tokenCheckCommand = new PrivateApiTokenCheck(handler, tokenCheckListener);
-            } else {
-                tokenCheckCommand = new PublicApiKeyCheck(handler, tokenCheckListener);
-            }
-            tokenCheckCommand.performAction(httpClient);
-        }
-    }
-
-    /**
-     * performs some pre cheks on configuration before attempting to login
-     *
-     * @return true on success, false otherwise
-     */
-    private boolean preCheck() {
-        String preCheckStatusMessage = "";
-        String localTokenOrApiKey = config.getTokenOrApiKey();
-        String localSolarId = config.getSolarId();
-
-        if (localTokenOrApiKey == null || localTokenOrApiKey.isEmpty()) {
-            preCheckStatusMessage = "please configure token/api_key first";
-        } else if (localSolarId == null || localSolarId.isEmpty()) {
-            preCheckStatusMessage = "please configure solarId first";
-        } else if (config.isUsePrivateApi() && localTokenOrApiKey.length() < TOKEN_THRESHOLD) {
-            preCheckStatusMessage = "you will have to use a 'token' and not an 'api key' when using private API";
-        } else if (!config.isUsePrivateApi() && localTokenOrApiKey.length() > API_KEY_THRESHOLD) {
-            preCheckStatusMessage = "you will have to use an 'api key' and not a 'token' when using public API";
-        } else if (!config.isUsePrivateApi() && calcRequestsPerDay() > WEB_REQUEST_PUBLIC_API_DAY_LIMIT) {
-            preCheckStatusMessage = "daily request limit (" + WEB_REQUEST_PUBLIC_API_DAY_LIMIT + ") exceeded: "
-                    + calcRequestsPerDay();
-        } else if (config.isUsePrivateApi() && !config.isMeterInstalled()) {
-            preCheckStatusMessage = "a meter must be present in order to use the private API";
-        } else {
-            return true;
-        }
-
-        this.handler.setStatusInfo(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, preCheckStatusMessage);
-        return false;
-    }
-
-    /**
-     * calculates requests per day. just an internal helper
-     *
-     * @return
-     */
-    private long calcRequestsPerDay() {
-        return MINUTES_PER_DAY / this.config.getLiveDataPollingInterval()
-                + 4 * MINUTES_PER_DAY / this.config.getAggregateDataPollingInterval();
-    }
-
-    /**
      * will be called by the ThingHandler to abort periodic jobs.
      */
     public void dispose() {
         logger.debug("Webinterface disposed.");
-        cancelJobReference(requestExecutorJobReference);
-        setAuthenticated(false);
+        synchronized (requestLifecycleLock) {
+            cancelJobReference(requestExecutorJobReference);
+            requestGeneration.incrementAndGet();
+            rateLimitPauseUntilMillis.set(0);
+            requestExecutor.commandQueue.clear();
+            setAuthenticated(false);
+        }
     }
 
     /**

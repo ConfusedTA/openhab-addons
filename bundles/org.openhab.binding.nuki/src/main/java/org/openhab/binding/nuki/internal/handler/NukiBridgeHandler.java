@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -52,7 +53,7 @@ import org.slf4j.LoggerFactory;
  * sent to one of the channels.
  *
  * @author Markus Katter - Initial contribution
- * @contributer Jan Vybíral - Improved callback handling
+ * @author Jan Vybíral - Improved callback handling
  */
 @NonNullByDefault
 public class NukiBridgeHandler extends BaseBridgeHandler {
@@ -108,11 +109,11 @@ public class NukiBridgeHandler extends BaseBridgeHandler {
         if (ip == null || port == null) {
             logger.debug("NukiBridgeHandler[{}] is not initializable, IP setting is unset in the configuration!",
                     getThing().getUID());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "IP setting is unset");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "IP setting is unset");
         } else if (apiToken == null || apiToken.isBlank()) {
             logger.debug("NukiBridgeHandler[{}] is not initializable, apiToken setting is unset in the configuration!",
                     getThing().getUID());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "apiToken setting is unset");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "apiToken setting is unset");
         } else {
             NukiLinkBuilder linkBuilder = new NukiLinkBuilder(ip, port, apiToken, this.config.secureToken);
             nukiHttpClient = new NukiHttpClient(httpClient, linkBuilder);
@@ -143,7 +144,7 @@ public class NukiBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(NukiDeviceDiscoveryService.class);
+        return Set.of(NukiDeviceDiscoveryService.class);
     }
 
     private synchronized void initializeHandler() {
@@ -166,8 +167,7 @@ public class NukiBridgeHandler extends BaseBridgeHandler {
             } else {
                 logger.debug("Bridge[{}] responded with status[{}]. Switching the bridge offline!", this.config.ip,
                         bridgeInfoResponse.getStatus());
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        bridgeInfoResponse.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, bridgeInfoResponse.getMessage());
             }
         });
     }
@@ -175,7 +175,6 @@ public class NukiBridgeHandler extends BaseBridgeHandler {
     public void checkBridgeOnline() {
         logger.debug("checkBridgeOnline():bridgeIp[{}] status[{}]", this.config.ip, getThing().getStatus());
         if (getThing().getStatus().equals(ThingStatus.ONLINE)) {
-
             withHttpClient(client -> {
                 logger.debug("Requesting BridgeInfo to ensure Bridge[{}] is online.", this.config.ip);
                 BridgeInfoResponse bridgeInfoResponse = client.getBridgeInfo();
@@ -189,8 +188,7 @@ public class NukiBridgeHandler extends BaseBridgeHandler {
                 } else {
                     logger.debug("Bridge[{}] responded with status[{}]. Switching the bridge offline!", this.config.ip,
                             status);
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            bridgeInfoResponse.getMessage());
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, bridgeInfoResponse.getMessage());
                 }
             });
         } else {
@@ -202,7 +200,7 @@ public class NukiBridgeHandler extends BaseBridgeHandler {
         NukiHttpClient httpClient = getNukiHttpClient();
         if (httpClient == null) {
             logger.debug("HTTP Client not configured, switching bridge to OFFLINE");
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "HTTP Client not configured");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "HTTP Client not configured");
             return true;
         } else {
             return false;

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -24,7 +24,6 @@ import org.openhab.binding.avmfritz.internal.callmonitor.CallMonitor;
 import org.openhab.binding.avmfritz.internal.config.AVMFritzBoxConfiguration;
 import org.openhab.binding.avmfritz.internal.hardware.FritzAhaWebInterface;
 import org.openhab.core.thing.Bridge;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.State;
 
@@ -65,12 +64,14 @@ public class BoxHandler extends AVMFritzBaseBridgeHandler {
         }
         if (this.connection == null) {
             if (config.password != null) {
-                this.connection = new FritzAhaWebInterface(config, this, httpClient);
+                FritzAhaWebInterface webInterface = new FritzAhaWebInterface(config, this, httpClient);
+                this.connection = webInterface;
+                webInterface.authenticate();
                 stopPolling();
                 startPolling();
             } else {
                 if (!callChannelsLinked()) {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                             "The 'password' parameter must be configured to use the AHA features.");
                 }
             }
@@ -84,8 +85,9 @@ public class BoxHandler extends AVMFritzBaseBridgeHandler {
 
     @Override
     public void dispose() {
-        if (callMonitor != null) {
-            callMonitor.dispose();
+        CallMonitor cm = callMonitor;
+        if (cm != null) {
+            cm.dispose();
             callMonitor = null;
         }
         super.dispose();

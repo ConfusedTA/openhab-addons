@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -78,7 +78,7 @@ public class TeleinfoSerialControllerHandler extends TeleinfoAbstractControllerH
                 logger.debug("receiveThread.isAlive() = {}", receiveThreadRef.isAlive());
             }
             if (isInitialized() && (receiveThreadRef == null || !receiveThreadRef.isAlive())) {
-                updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, ERROR_UNKNOWN_RETRY_IN_PROGRESS);
+                updateStatus(ThingStatus.UNKNOWN, ERROR_UNKNOWN_RETRY_IN_PROGRESS);
                 logger.info("Try to restart Teleinfo receiving...");
                 stopReceivingAndCloseSerialPort();
                 openSerialPortAndStartReceiving();
@@ -116,12 +116,12 @@ public class TeleinfoSerialControllerHandler extends TeleinfoAbstractControllerH
 
     @Override
     public void onSerialPortInputStreamIOException(TeleinfoReceiveThread receiveThread, IOException e) {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, ERROR_UNKNOWN_RETRY_IN_PROGRESS);
+        updateStatus(ThingStatus.OFFLINE, ERROR_UNKNOWN_RETRY_IN_PROGRESS);
     }
 
     @Override
     public void continueOnReadNextFrameTimeoutException() {
-        updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, ERROR_UNKNOWN_RETRY_IN_PROGRESS);
+        updateStatus(ThingStatus.UNKNOWN, ERROR_UNKNOWN_RETRY_IN_PROGRESS);
     }
 
     private void openSerialPortAndStartReceiving() {
@@ -138,8 +138,7 @@ public class TeleinfoSerialControllerHandler extends TeleinfoAbstractControllerH
             final SerialPortIdentifier portIdentifier = serialPortManager.getIdentifier(config.serialport);
             logger.debug("portIdentifier = {}", portIdentifier);
             if (portIdentifier == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
-                        ERROR_OFFLINE_SERIAL_NOT_FOUND);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, ERROR_OFFLINE_SERIAL_NOT_FOUND);
                 return;
             }
             logger.debug("Opening portIdentifier");
@@ -148,7 +147,9 @@ public class TeleinfoSerialControllerHandler extends TeleinfoAbstractControllerH
             SerialPort commPort = portIdentifier.open("org.openhab.binding.teleinfo", 5000);
             serialPort = commPort;
 
-            commPort.setSerialPortParams(1200, SerialPort.DATABITS_7, SerialPort.STOPBITS_1, SerialPort.PARITY_EVEN);
+            TeleinfoTicMode ticMode = TeleinfoTicMode.valueOf(config.ticMode);
+            commPort.setSerialPortParams(ticMode.getBitrate(), SerialPort.DATABITS_7, SerialPort.STOPBITS_1,
+                    SerialPort.PARITY_EVEN);
             try {
                 commPort.enableReceiveThreshold(1);
             } catch (UnsupportedCommOperationException e) {
@@ -161,17 +162,15 @@ public class TeleinfoSerialControllerHandler extends TeleinfoAbstractControllerH
             }
             logger.debug("Starting receive thread");
             TeleinfoReceiveThread receiveThread = new TeleinfoReceiveThread(commPort, this,
-                    config.autoRepairInvalidADPSgroupLine);
+                    config.autoRepairInvalidADPSgroupLine, ticMode, config.verifyChecksum);
             this.receiveThread = receiveThread;
             receiveThread.start();
 
             logger.debug("Connected to serial port '{}'", config.serialport);
         } catch (PortInUseException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
-                    ERROR_OFFLINE_SERIAL_INUSE);
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, ERROR_OFFLINE_SERIAL_INUSE);
         } catch (UnsupportedCommOperationException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR,
-                    ERROR_OFFLINE_SERIAL_UNSUPPORTED);
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, ERROR_OFFLINE_SERIAL_UNSUPPORTED);
         }
     }
 

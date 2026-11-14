@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,6 +17,7 @@ import static org.openhab.binding.mielecloud.internal.webservice.api.PowerStatus
 import static org.openhab.binding.mielecloud.internal.webservice.api.ProgramStatus.*;
 import static org.openhab.binding.mielecloud.internal.webservice.api.json.ProcessAction.*;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -27,7 +28,6 @@ import org.openhab.binding.mielecloud.internal.discovery.ThingInformationExtract
 import org.openhab.binding.mielecloud.internal.handler.channel.ActionsChannelState;
 import org.openhab.binding.mielecloud.internal.handler.channel.DeviceChannelState;
 import org.openhab.binding.mielecloud.internal.handler.channel.TransitionChannelState;
-import org.openhab.binding.mielecloud.internal.webservice.ActionStateFetcher;
 import org.openhab.binding.mielecloud.internal.webservice.MieleWebservice;
 import org.openhab.binding.mielecloud.internal.webservice.UnavailableMieleWebservice;
 import org.openhab.binding.mielecloud.internal.webservice.api.ActionsState;
@@ -59,7 +59,6 @@ import org.slf4j.LoggerFactory;
  */
 @NonNullByDefault
 public abstract class AbstractMieleThingHandler extends BaseThingHandler {
-    protected final ActionStateFetcher actionFetcher;
     protected DeviceState latestDeviceState = new DeviceState(getDeviceId(), null);
     protected TransitionState latestTransitionState = new TransitionState(null, latestDeviceState);
     protected ActionsState latestActionsState = new ActionsState(getDeviceId(), null);
@@ -73,7 +72,6 @@ public abstract class AbstractMieleThingHandler extends BaseThingHandler {
      */
     public AbstractMieleThingHandler(Thing thing) {
         super(thing);
-        this.actionFetcher = new ActionStateFetcher(this::getWebservice, scheduler);
     }
 
     private Optional<MieleBridgeHandler> getMieleBridgeHandler() {
@@ -83,7 +81,7 @@ public abstract class AbstractMieleThingHandler extends BaseThingHandler {
         }
 
         BridgeHandler handler = bridge.getHandler();
-        if (handler == null || !(handler instanceof MieleBridgeHandler)) {
+        if (!(handler instanceof MieleBridgeHandler)) {
             return Optional.empty();
         }
 
@@ -91,8 +89,8 @@ public abstract class AbstractMieleThingHandler extends BaseThingHandler {
     }
 
     protected MieleWebservice getWebservice() {
-        return getMieleBridgeHandler().map(MieleBridgeHandler::getWebservice)
-                .orElse(UnavailableMieleWebservice.INSTANCE);
+        return Objects.requireNonNull(getMieleBridgeHandler().map(MieleBridgeHandler::getWebservice)
+                .orElse(UnavailableMieleWebservice.INSTANCE));
     }
 
     @Override
@@ -163,15 +161,13 @@ public abstract class AbstractMieleThingHandler extends BaseThingHandler {
      * Invoked when the device managed by this handler was removed from the Miele cloud.
      */
     public final void onDeviceRemoved() {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.GONE, I18NKeys.THING_STATUS_DESCRIPTION_REMOVED);
+        updateStatus(ThingStatusDetail.GONE, I18NKeys.THING_STATUS_DESCRIPTION_REMOVED);
     }
 
     /**
      * Invoked when a device state update for the device managed by this handler is received from the Miele cloud.
      */
     public final void onDeviceStateUpdated(DeviceState deviceState) {
-        actionFetcher.onDeviceStateUpdated(deviceState);
-
         latestTransitionState = new TransitionState(latestTransitionState, deviceState);
         latestDeviceState = deviceState;
 
@@ -206,8 +202,7 @@ public abstract class AbstractMieleThingHandler extends BaseThingHandler {
             try {
                 action.run();
             } catch (TooManyRequestsException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        I18NKeys.THING_STATUS_DESCRIPTION_RATELIMIT);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, I18NKeys.THING_STATUS_DESCRIPTION_RATELIMIT);
                 onError.accept(e);
             } catch (Exception e) {
                 onError.accept(e);
@@ -234,8 +229,7 @@ public abstract class AbstractMieleThingHandler extends BaseThingHandler {
      */
     private void updateThingStatus(DeviceState deviceState) {
         if (deviceState.isInState(StateType.NOT_CONNECTED)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    I18NKeys.THING_STATUS_DESCRIPTION_DISCONNECTED);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, I18NKeys.THING_STATUS_DESCRIPTION_DISCONNECTED);
         } else {
             updateStatus(ThingStatus.ONLINE);
         }
@@ -287,7 +281,7 @@ public abstract class AbstractMieleThingHandler extends BaseThingHandler {
     /**
      * Updates the device action state channels.
      *
-     * @param action The {@link ActionsChannelState} information to update the action channel states with.
+     * @param actions The {@link ActionsChannelState} information to update the action channel states with.
      */
     protected abstract void updateActionState(ActionsChannelState actions);
 }

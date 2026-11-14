@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -257,7 +257,7 @@ public class LGHomBotHandler extends BaseThingHandler {
                 updateStatus(ThingStatus.ONLINE);
             }
         } catch (IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
         logger.trace("Status received: {}", status);
         return status;
@@ -584,7 +584,7 @@ public class LGHomBotHandler extends BaseThingHandler {
             int idx = htmlString.indexOf("blkfiles");
             return "/.../usr/data/blackbox/" + htmlString.substring(idx + 13, idx + 50);
         } catch (IOException e1) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e1.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e1.getMessage());
         }
         return "";
     }

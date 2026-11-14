@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,7 +13,7 @@
 package org.openhab.binding.caddx.internal.handler;
 
 import java.util.Collection;
-import java.util.Collections;
+import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.caddx.internal.CaddxBindingConstants;
@@ -55,7 +55,9 @@ public class ThingHandlerKeypad extends CaddxBaseThingHandler {
         }
 
         // Follow the bridge status
-        updateStatus(bridgeHandler.getThing().getStatus());
+        ThingStatus bridgeStatus = bridgeHandler.getThing().getStatus();
+        updateStatus((bridgeStatus == ThingStatus.ONLINE || bridgeStatus == ThingStatus.OFFLINE) ? bridgeStatus
+                : ThingStatus.UNKNOWN);
     }
 
     @Override
@@ -92,14 +94,15 @@ public class ThingHandlerKeypad extends CaddxBaseThingHandler {
     @Override
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
         // Keypad follows the status of the bridge
-        updateStatus(bridgeStatusInfo.getStatus());
+        ThingStatus status = bridgeStatusInfo.getStatus();
+        updateStatus((status == ThingStatus.ONLINE || status == ThingStatus.OFFLINE) ? status : ThingStatus.UNKNOWN);
 
         super.bridgeStatusChanged(bridgeStatusInfo);
     }
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(CaddxKeypadActions.class);
+        return Set.of(CaddxKeypadActions.class);
     }
 
     public void enterTerminalMode() {

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.miio.internal.miot;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.google.gson.annotations.Expose;
@@ -44,7 +45,7 @@ public class PropertyDTO {
     public List<OptionsValueDescriptionsListDTO> valueList = null;
     @SerializedName("value-range")
     @Expose
-    public List<Integer> valueRange = null;
+    public List<BigDecimal> valueRange = null;
     @SerializedName("unit")
     @Expose
     public String unit;

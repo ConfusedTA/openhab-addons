@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,7 +15,6 @@ package org.openhab.binding.verisure.internal.handler;
 import static org.openhab.binding.verisure.internal.VerisureBindingConstants.*;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
@@ -53,7 +52,7 @@ import org.slf4j.LoggerFactory;
 @NonNullByDefault
 public class VerisureBridgeHandler extends BaseBridgeHandler {
 
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Collections.singleton(THING_TYPE_BRIDGE);
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_BRIDGE);
 
     private static final int REFRESH_DELAY_SECONDS = 30;
     private final Logger logger = LoggerFactory.getLogger(VerisureBridgeHandler.class);
@@ -103,12 +102,10 @@ public class VerisureBridgeHandler extends BaseBridgeHandler {
 
         this.pinCode = config.pin;
         if (config.username.isBlank() || config.password.isBlank()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Configuration of username and password is mandatory");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Configuration of username and password is mandatory");
 
         } else if (config.refresh < 10) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Refresh time is lower than min value of 10!");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Refresh time is lower than min value of 10!");
         } else {
             authstring = "j_username=" + config.username;
             scheduler.execute(() -> {
@@ -120,7 +117,7 @@ public class VerisureBridgeHandler extends BaseBridgeHandler {
                 updateStatus(ThingStatus.UNKNOWN);
                 if (session != null) {
                     if (!session.initialize(authstring, pinCode, config.username, config.password)) {
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                                 "Failed to login to Verisure, please check your account settings! Is MFA activated?");
                     }
                 }
@@ -159,7 +156,7 @@ public class VerisureBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(VerisureThingDiscoveryService.class);
+        return Set.of(VerisureThingDiscoveryService.class);
     }
 
     private void refreshAndUpdateStatus() {
@@ -169,7 +166,7 @@ public class VerisureBridgeHandler extends BaseBridgeHandler {
             if (session.refresh()) {
                 updateStatus(ThingStatus.ONLINE);
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
             }
         }
     }

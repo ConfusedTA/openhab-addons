@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -67,5 +67,22 @@ public class ActionConditionTest {
         resp = ActionConditions.executeAction(condition, deviceVariables, value, null);
         assertNull(resp);
         assertNotEquals(new JsonPrimitive(-1), resp);
+    }
+
+    @Test
+    public void assertLowerCase() {
+        MiIoDeviceActionCondition condition = new MiIoDeviceActionCondition();
+        condition.setName("LowerCase");
+        Map<String, Object> deviceVariables = Collections.emptyMap();
+
+        assertEquals(new JsonPrimitive("on"),
+                ActionConditions.executeAction(condition, deviceVariables, new JsonPrimitive("ON"), null));
+        assertEquals(new JsonPrimitive("auto"),
+                ActionConditions.executeAction(condition, deviceVariables, new JsonPrimitive("auto"), null));
+        assertEquals(new JsonPrimitive(5),
+                ActionConditions.executeAction(condition, deviceVariables, new JsonPrimitive(5), null));
+        assertEquals(new JsonPrimitive(true),
+                ActionConditions.executeAction(condition, deviceVariables, new JsonPrimitive(true), null));
+        assertNull(ActionConditions.executeAction(condition, deviceVariables, null, null));
     }
 }

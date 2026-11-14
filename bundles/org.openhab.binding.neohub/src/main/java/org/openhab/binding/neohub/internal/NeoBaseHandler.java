@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -29,7 +29,6 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
-import org.openhab.core.thing.binding.BridgeHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
@@ -90,7 +89,7 @@ public class NeoBaseHandler extends BaseThingHandler {
         NeoBaseConfiguration config = getConfigAs(NeoBaseConfiguration.class);
 
         if (config.deviceNameInHub.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, MSG_DEVICE_NAME_NOT_CONFIGURED);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, MSG_DEVICE_NAME_NOT_CONFIGURED);
             return;
         }
 
@@ -98,11 +97,11 @@ public class NeoBaseHandler extends BaseThingHandler {
 
         NeoHubHandler hub = getNeoHub();
         if (hub == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, MSG_HUB_CONFIG);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, MSG_HUB_CONFIG);
             return;
         }
 
-        updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.CONFIGURATION_PENDING);
+        updateStatus(ThingStatus.UNKNOWN);
     }
 
     // ======== helper methods used by this class or descendants ===========
@@ -120,20 +119,20 @@ public class NeoBaseHandler extends BaseThingHandler {
         AbstractRecord deviceRecord = deviceData.getDeviceRecord(config.deviceNameInHub);
 
         if (deviceRecord == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR);
             logger.warn(MSG_FMT_DEVICE_CONFIG, thing.getLabel());
             return;
         }
 
         ThingStatus thingStatus = getThing().getStatus();
         if (deviceRecord.offline() && (thingStatus == ThingStatus.ONLINE)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
             logger.debug(MSG_FMT_DEVICE_COMM, thing.getLabel());
             return;
         }
 
         if ((!deviceRecord.offline()) && (thingStatus != ThingStatus.ONLINE)) {
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+            updateStatus(ThingStatus.ONLINE);
         }
 
         toOpenHabSendChannelValues(deviceRecord);
@@ -166,8 +165,7 @@ public class NeoBaseHandler extends BaseThingHandler {
             if (channel != null) {
                 Configuration config = channel.getConfiguration();
                 Object holdOnlineState = config.get(PARAM_HOLD_ONLINE_STATE);
-                if (holdOnlineState != null && (holdOnlineState instanceof Boolean)
-                        && ((Boolean) holdOnlineState).booleanValue()) {
+                if (holdOnlineState instanceof Boolean booleanValue && booleanValue.booleanValue()) {
                     /*
                      * the Configuration Parameter "holdOnlineState" is True so do NOT send a
                      * state update to OpenHAB
@@ -202,7 +200,7 @@ public class NeoBaseHandler extends BaseThingHandler {
                         logger.debug(MSG_FMT_COMMAND_OK, getThing().getLabel());
 
                         if (getThing().getStatus() != ThingStatus.ONLINE) {
-                            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+                            updateStatus(ThingStatus.ONLINE);
                         }
 
                         // initialize the de-bouncer for this channel
@@ -212,12 +210,12 @@ public class NeoBaseHandler extends BaseThingHandler {
 
                     case ERR_COMMUNICATION:
                         logger.debug(MSG_HUB_COMM, hub.getThing().getUID());
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
                         break;
 
                     case ERR_INITIALIZATION:
                         logger.warn(MSG_HUB_CONFIG, hub.getThing().getUID());
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+                        updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
                         break;
                 }
             } else {
@@ -236,11 +234,9 @@ public class NeoBaseHandler extends BaseThingHandler {
     protected @Nullable NeoHubHandler getNeoHub() {
         @Nullable
         Bridge b;
-        @Nullable
-        BridgeHandler h;
 
-        if ((b = getBridge()) != null && (h = b.getHandler()) != null && h instanceof NeoHubHandler) {
-            return (NeoHubHandler) h;
+        if ((b = getBridge()) != null && (b.getHandler() instanceof NeoHubHandler neoHubHandler)) {
+            return neoHubHandler;
         }
 
         return null;

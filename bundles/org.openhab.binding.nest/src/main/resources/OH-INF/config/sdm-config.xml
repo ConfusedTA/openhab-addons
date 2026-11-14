@@ -29,7 +29,7 @@
 		</parameter>
 		<parameter name="sdmAuthorizationCode" type="text" groupName="sdm">
 			<label>Authorization Code</label>
-			<description><![CDATA[The one time authorization code used to retrieve the refresh and access token used with the SDM API. The code is obtained by following the instructions at the following URL in your browser:<br><br>https://nestservices.google.com/partnerconnections/{{ProjectID}}/auth?redirect_uri=urn:ietf:wg:oauth:2.0:oob&access_type=offline&prompt=consent&client_id={{ClientID}}&response_type=code&scope=https://www.googleapis.com/auth/sdm.service]]></description>
+			<description><![CDATA[The one time authorization code used to retrieve the refresh and access token used with the SDM API. The code is obtained by following the instructions at the following URL in your browser:<br><br>https://nestservices.google.com/partnerconnections/{{ProjectID}}/auth?scope=https://www.googleapis.com/auth/sdm.service&access_type=offline&include_granted_scopes=true&response_type=code&redirect_uri=https://www.google.com&client_id={{ClientID}}<br><br>After your browser has been redirected to https://www.google.com, the authorization code will be set in the browser URL as value of the "code" URL query parameter.]]></description>
 		</parameter>
 
 		<parameter name="pubsubProjectId" type="text" groupName="pubsub">
@@ -39,6 +39,12 @@
 		<parameter name="pubsubSubscriptionId" type="text" groupName="pubsub">
 			<label>Subscription ID</label>
 			<description>Identifies the subscription that is created for subscribing to SDM Pub/Sub events</description>
+		</parameter>
+		<parameter name="pubsubTopicName" type="text" groupName="pubsub">
+			<label>Topic Name</label>
+			<description>The full name of the Pub/Sub topic to subscribe to, e.g. projects/my-gcp-project/topics/nest-sdm-events.
+				Leave empty to use the Google-hosted SDM topic derived from the Project ID</description>
+			<advanced>true</advanced>
 		</parameter>
 		<parameter name="pubsubClientId" type="text" groupName="pubsub">
 			<label>Client ID</label>
@@ -51,7 +57,7 @@
 		</parameter>
 		<parameter name="pubsubAuthorizationCode" type="text" groupName="pubsub">
 			<label>Authorization Code</label>
-			<description><![CDATA[The one time authorization code used to retrieve the refresh and access token used with the Pub/Sub API. The code is obtained by following the instructions at the following URL in your browser:<br><br>https://accounts.google.com/o/oauth2/auth?client_id={{ClientID}}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&scope=https://www.googleapis.com/auth/pubsub]]></description>
+			<description><![CDATA[The one time authorization code used to retrieve the refresh and access token used with the Pub/Sub API. The code is obtained by following the instructions at the following URL in your browser:<br><br>https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/pubsub&access_type=offline&include_granted_scopes=true&response_type=code&redirect_uri=https://www.google.com&client_id={{ClientID}}<br><br>After your browser has been redirected to https://www.google.com, the authorization code will be set in the browser URL as value of the "code" URL query parameter.]]></description>
 		</parameter>
 	</config-description>
 

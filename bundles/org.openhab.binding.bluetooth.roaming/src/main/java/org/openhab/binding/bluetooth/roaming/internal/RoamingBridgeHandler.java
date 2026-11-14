@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -69,8 +69,7 @@ public class RoamingBridgeHandler extends BaseBridgeHandler implements RoamingBl
         if (adapters.stream().map(BluetoothAdapter::getUID).anyMatch(this::isGroupMember)) {
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "No Physical Bluetooth adapters found");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "No Physical Bluetooth adapters found");
         }
     }
 
@@ -78,8 +77,7 @@ public class RoamingBridgeHandler extends BaseBridgeHandler implements RoamingBl
         if (adapters.stream().anyMatch(this::isRoamingMember)) {
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "No Physical Bluetooth adapters found");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "No Physical Bluetooth adapters found");
         }
     }
 
@@ -136,10 +134,7 @@ public class RoamingBridgeHandler extends BaseBridgeHandler implements RoamingBl
             return false;
         }
         Object discovery = getConfig().get(BluetoothBindingConstants.CONFIGURATION_DISCOVERY);
-        if (discovery != null && discovery.toString().equalsIgnoreCase("false")) {
-            return false;
-        }
-        return true;
+        return !(discovery != null && "false".equalsIgnoreCase(discovery.toString()));
     }
 
     @Override

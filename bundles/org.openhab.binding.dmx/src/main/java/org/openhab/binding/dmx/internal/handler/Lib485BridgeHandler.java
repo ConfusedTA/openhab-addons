@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,11 +16,12 @@ import static org.openhab.binding.dmx.internal.DmxBindingConstants.THING_TYPE_LI
 
 import java.io.IOException;
 import java.net.Socket;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.dmx.internal.DmxBridgeHandler;
 import org.openhab.binding.dmx.internal.config.Lib485BridgeHandlerConfiguration;
 import org.openhab.binding.dmx.internal.dmxoverethernet.IpNode;
@@ -38,15 +39,15 @@ import org.slf4j.LoggerFactory;
  *
  * @author Jan N. Klug - Initial contribution
  */
-
+@NonNullByDefault
 public class Lib485BridgeHandler extends DmxBridgeHandler {
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Collections.singleton(THING_TYPE_LIB485_BRIDGE);
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_LIB485_BRIDGE);
     public static final int MIN_UNIVERSE_ID = 0;
     public static final int MAX_UNIVERSE_ID = 0;
     public static final int DEFAULT_PORT = 9020;
 
     private final Logger logger = LoggerFactory.getLogger(Lib485BridgeHandler.class);
-    private final Map<IpNode, Socket> receiverNodes = new HashMap<>();
+    private final Map<IpNode, @Nullable Socket> receiverNodes = new HashMap<>();
 
     public Lib485BridgeHandler(Bridge lib485Bridge) {
         super(lib485Bridge);
@@ -63,7 +64,7 @@ public class Lib485BridgeHandler extends DmxBridgeHandler {
                     } catch (IOException e) {
                         logger.debug("Could not connect to {} in {}: {}", receiverNode, this.thing.getUID(),
                                 e.getMessage());
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                                 "could not connect to " + receiverNode.toString());
                         return;
                     }
@@ -72,7 +73,7 @@ public class Lib485BridgeHandler extends DmxBridgeHandler {
                 if (socket.isConnected()) {
                     receiverNodes.put(receiverNode, socket);
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
                     receiverNodes.put(receiverNode, null);
                     return;
                 }
@@ -104,7 +105,7 @@ public class Lib485BridgeHandler extends DmxBridgeHandler {
             universe.calculateBuffer(now);
             for (IpNode receiverNode : receiverNodes.keySet()) {
                 Socket socket = receiverNodes.get(receiverNode);
-                if (socket.isConnected()) {
+                if (socket != null && socket.isConnected()) {
                     try {
                         socket.getOutputStream().write(universe.getBuffer());
                     } catch (IOException e) {
@@ -140,13 +141,13 @@ public class Lib485BridgeHandler extends DmxBridgeHandler {
                     logger.debug("sending to {} for {}", receiverNode, this.thing.getUID());
                 }
             } catch (IllegalArgumentException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
                 return;
             }
         }
         super.updateConfiguration();
 
-        updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE);
+        updateStatus(ThingStatus.UNKNOWN);
 
         logger.debug("updated configuration for Lib485 bridge {}", this.thing.getUID());
     }

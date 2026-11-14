@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -107,6 +107,10 @@ public class NZWaterAlertsHandler extends BaseThingHandler implements NZWaterAle
 
     @Override
     public void updateBindingStatus(ThingStatus thingStatus, ThingStatusDetail thingStatusDetail, String description) {
-        updateStatus(thingStatus, thingStatusDetail, description);
+        if (thingStatusDetail == ThingStatusDetail.NONE) {
+            updateStatus(thingStatus, description);
+        } else {
+            updateStatus(thingStatusDetail, description);
+        }
     }
 }

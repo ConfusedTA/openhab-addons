@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,11 +16,12 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.library.types.HSBType;
 import org.openhab.core.library.types.PercentType;
+import org.openhab.core.util.ColorUtil;
 
 /**
  * The {@link TradfriColor} is used for conversion between color formats.
- * Use the static methods {@link TradfriColor#fromCie(int, int, int)} and {@link TradfriColor#fromHSBType(HSBType)} for
- * construction.
+ * Use the static constructors {@link #TradfriColor(Integer, Integer, Integer)} and
+ * {@link #TradfriColor(HSBType)} for construction.
  *
  * @author Holger Reichert - Initial contribution
  * @author Stefan Triller - Use conversions from HSBType
@@ -52,7 +53,7 @@ public class TradfriColor {
      *
      * @param xyX x value 0 to 65535
      * @param xyY y value 0 to 65535
-     * @param xyBrightness brightness from 0 to 254
+     * @param brightness brightness from 0 to 254
      */
     public TradfriColor(Integer xyX, Integer xyY, @Nullable Integer brightness) {
         this.xyX = xyX;
@@ -87,7 +88,7 @@ public class TradfriColor {
         float x = unnormalize(xyX);
         float y = unnormalize(xyY);
 
-        HSBType converted = HSBType.fromXY(x, y);
+        HSBType converted = ColorUtil.xyToHsb(new double[] { x, y });
 
         final Integer brightness = this.brightness;
         if (brightness == null) {

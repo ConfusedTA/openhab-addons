@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,8 +12,7 @@
  */
 package org.openhab.binding.daikin.internal.handler;
 
-import java.io.IOException;
-import java.util.Optional;
+import java.util.Locale;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -49,7 +48,7 @@ import org.slf4j.LoggerFactory;
  * Base class that handles common tasks with a Daikin air conditioning unit.
  *
  * @author Tim Waterhouse - Initial Contribution
- * @author Paul Smedley <paul@smedley.id.au> - Modifications to support Airbase Controllers
+ * @author Paul Smedley - Modifications to support Airbase Controllers
  * @author Jimmy Tanagra - Split handler classes, support Airside and DynamicStateDescription
  *
  */
@@ -57,7 +56,7 @@ import org.slf4j.LoggerFactory;
 public abstract class DaikinBaseHandler extends BaseThingHandler {
     private final Logger logger = LoggerFactory.getLogger(DaikinBaseHandler.class);
 
-    private final @Nullable HttpClient httpClient;
+    private final HttpClient httpClient;
 
     private long refreshInterval;
 
@@ -68,15 +67,15 @@ public abstract class DaikinBaseHandler extends BaseThingHandler {
     private boolean uuidRegistrationAttempted = false;
 
     // Abstract methods to be overridden by specific Daikin implementation class
-    protected abstract void pollStatus() throws IOException;
+    protected abstract void pollStatus() throws DaikinCommunicationException;
 
-    protected abstract void changePower(boolean power) throws DaikinCommunicationException;
+    protected abstract boolean changePower(boolean power) throws DaikinCommunicationException;
 
-    protected abstract void changeSetPoint(double newTemperature) throws DaikinCommunicationException;
+    protected abstract boolean changeSetPoint(double newTemperature) throws DaikinCommunicationException;
 
-    protected abstract void changeMode(String mode) throws DaikinCommunicationException;
+    protected abstract boolean changeMode(String mode) throws DaikinCommunicationException;
 
-    protected abstract void changeFanSpeed(String fanSpeed) throws DaikinCommunicationException;
+    protected abstract boolean changeFanSpeed(String fanSpeed) throws DaikinCommunicationException;
 
     // Power, Temp, Fan and Mode are handled in this base class. Override this to handle additional channels.
     protected abstract boolean handleCommandInternal(ChannelUID channelUID, Command command)
@@ -85,7 +84,7 @@ public abstract class DaikinBaseHandler extends BaseThingHandler {
     protected abstract void registerUuid(@Nullable String key);
 
     public DaikinBaseHandler(Thing thing, DaikinDynamicStateDescriptionProvider stateDescriptionProvider,
-            @Nullable HttpClient httpClient) {
+            HttpClient httpClient) {
         super(thing);
         this.stateDescriptionProvider = stateDescriptionProvider;
         this.httpClient = httpClient;
@@ -93,46 +92,73 @@ public abstract class DaikinBaseHandler extends BaseThingHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
+        if (webTargets == null) {
+            logger.warn("webTargets is null. This is possibly a bug.");
+            return;
+        }
         try {
             if (handleCommandInternal(channelUID, command)) {
                 return;
             }
             switch (channelUID.getId()) {
-                case DaikinBindingConstants.CHANNEL_AC_POWER:
-                    if (command instanceof OnOffType) {
-                        changePower(((OnOffType) command).equals(OnOffType.ON));
+                case DaikinBindingConstants.CHANNEL_AC_POWER -> {
+                    if (command instanceof OnOffType onOffCommand) {
+                        if (changePower(onOffCommand == OnOffType.ON)) {
+                            updateState(channelUID, onOffCommand);
+                        }
                         return;
                     }
-                    break;
-                case DaikinBindingConstants.CHANNEL_AC_TEMP:
-                    if (changeSetPoint(command)) {
+                }
+                case DaikinBindingConstants.CHANNEL_AC_TEMP -> {
+                    if (command instanceof DecimalType decimalCommand) {
+                        double newTemperature = Math.round(decimalCommand.doubleValue() * 2) / 2.0;
+                        if (changeSetPoint(newTemperature)) {
+                            updateState(channelUID, decimalCommand);
+                        }
+                        return;
+                    } else if (command instanceof QuantityType<?> quantityCommand) {
+                        double newTemperature = Math.round(
+                                ((QuantityType<Temperature>) quantityCommand).toUnit(SIUnits.CELSIUS).doubleValue() * 2)
+                                / 2.0;
+                        if (changeSetPoint(newTemperature)) {
+                            updateState(channelUID, (State) quantityCommand);
+                        }
                         return;
                     }
-                    break;
-                case DaikinBindingConstants.CHANNEL_AIRBASE_AC_FAN_SPEED:
-                case DaikinBindingConstants.CHANNEL_AC_FAN_SPEED:
-                    if (command instanceof StringType) {
-                        changeFanSpeed(((StringType) command).toString());
+                    // If neither, the block ends and drops to the wrong-type logger
+                }
+                case DaikinBindingConstants.CHANNEL_AIRBASE_AC_FAN_SPEED,
+                        DaikinBindingConstants.CHANNEL_AC_FAN_SPEED -> {
+                    if (command instanceof StringType stringCommand) {
+                        if (changeFanSpeed(stringCommand.toString())) {
+                            updateState(channelUID, stringCommand);
+                        }
                         return;
                     }
-                    break;
-                case DaikinBindingConstants.CHANNEL_AC_HOMEKITMODE:
-                    if (command instanceof StringType) {
-                        changeHomekitMode(command.toString());
+                }
+                case DaikinBindingConstants.CHANNEL_AC_HOMEKITMODE -> {
+                    if (command instanceof StringType stringCommand) {
+                        if (changeHomekitMode(stringCommand.toString())) {
+                            updateState(DaikinBindingConstants.CHANNEL_AC_HOMEKITMODE, stringCommand);
+                        }
                         return;
                     }
-                    break;
-                case DaikinBindingConstants.CHANNEL_AC_MODE:
-                    if (command instanceof StringType) {
-                        changeMode(((StringType) command).toString());
+                }
+                case DaikinBindingConstants.CHANNEL_AC_MODE -> {
+                    if (command instanceof StringType stringCommand) {
+                        if (changeMode(stringCommand.toString())) {
+                            updateState(channelUID, stringCommand);
+                        }
                         return;
                     }
-                    break;
+                }
             }
+
+            // If execution reaches this point, the command type did not match the expected type inside the switch
             logger.debug("Received command ({}) of wrong type for thing '{}' on channel {}", command,
                     thing.getUID().getAsString(), channelUID.getId());
-        } catch (DaikinCommunicationException ex) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, ex.getMessage());
+        } catch (DaikinCommunicationException e) {
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -140,15 +166,15 @@ public abstract class DaikinBaseHandler extends BaseThingHandler {
     public void initialize() {
         logger.debug("Initializing Daikin AC Unit");
         config = getConfigAs(DaikinConfiguration.class);
+
         if (config.host == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Host address must be set");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Host address must be set");
         } else {
             if (config.uuid != null) {
                 config.uuid = config.uuid.replaceAll("\\s|-", "");
             }
             webTargets = new DaikinWebTargets(httpClient, config.host, config.secure, config.uuid);
             refreshInterval = config.refresh;
-
             schedulePoll();
         }
     }
@@ -182,61 +208,63 @@ public abstract class DaikinBaseHandler extends BaseThingHandler {
 
     private synchronized void poll() {
         try {
-            logger.debug("Polling for state");
+            logger.trace("Polling for state");
             pollStatus();
+            if (getThing().getStatus() != ThingStatus.ONLINE) {
+                updateStatus(ThingStatus.ONLINE);
+            }
         } catch (DaikinCommunicationForbiddenException e) {
             if (!uuidRegistrationAttempted && config.key != null && config.uuid != null) {
                 logger.debug("poll: Attempting to register uuid {} with key {}", config.uuid, config.key);
                 registerUuid(config.key);
                 uuidRegistrationAttempted = true;
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "Access denied. Check uuid/key.");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Access denied. Check uuid/key.");
                 logger.warn("{} access denied by adapter. Check uuid/key.", thing.getUID());
             }
-        } catch (IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
-        } catch (RuntimeException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+        } catch (DaikinCommunicationException e) {
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
-    protected void updateTemperatureChannel(String channel, Optional<Double> maybeTemperature) {
-        updateState(channel,
-                maybeTemperature.<State> map(t -> new QuantityType<>(t, SIUnits.CELSIUS)).orElse(UnDefType.UNDEF));
-    }
-
-    /**
-     * @return true if the command was of an expected type, false otherwise
-     */
-    private boolean changeSetPoint(Command command) throws DaikinCommunicationException {
-        double newTemperature;
-        if (command instanceof DecimalType) {
-            newTemperature = ((DecimalType) command).doubleValue();
-        } else if (command instanceof QuantityType) {
-            newTemperature = ((QuantityType<Temperature>) command).toUnit(SIUnits.CELSIUS).doubleValue();
+    protected void updateTemperatureChannel(String channel, @Nullable Double maybeTemperature) {
+        if (maybeTemperature != null) {
+            updateState(channel, new QuantityType<>(maybeTemperature, SIUnits.CELSIUS));
         } else {
-            return false;
+            updateState(channel, UnDefType.UNDEF);
         }
-
-        // Only half degree increments are allowed, all others are silently rejected by the A/C units
-        newTemperature = Math.round(newTemperature * 2) / 2.0;
-        changeSetPoint(newTemperature);
-        return true;
     }
 
-    private void changeHomekitMode(String homekitmode) throws DaikinCommunicationException {
-        if (HomekitMode.OFF.getValue().equals(homekitmode)) {
-            changePower(false);
-        } else {
-            changePower(true);
-            if (HomekitMode.AUTO.getValue().equals(homekitmode)) {
-                changeMode("AUTO");
-            } else if (HomekitMode.HEAT.getValue().equals(homekitmode)) {
-                changeMode("HEAT");
-            } else if (HomekitMode.COOL.getValue().equals(homekitmode)) {
-                changeMode("COLD");
+    private boolean changeHomekitMode(String homekitmode) throws DaikinCommunicationException {
+        try {
+            HomekitMode mode = HomekitMode.valueOf(homekitmode.toUpperCase(Locale.ROOT));
+            boolean power = mode != HomekitMode.OFF;
+            if (!changePower(power)) {
+                return false;
             }
+
+            updateState(DaikinBindingConstants.CHANNEL_AC_POWER, OnOffType.from(power));
+
+            String newMode = switch (mode) {
+                case AUTO -> "AUTO";
+                case HEAT -> "HEAT";
+                case COOL -> "COLD";
+                case OFF -> null;
+            };
+
+            if (newMode == null) {
+                return true;
+            }
+
+            if (changeMode(newMode)) {
+                updateState(DaikinBindingConstants.CHANNEL_AC_MODE, new StringType(newMode));
+                return true;
+            }
+
+            return false;
+        } catch (IllegalArgumentException e) {
+            logger.warn("Invalid homekit mode: {}", homekitmode);
+            return false;
         }
     }
 }

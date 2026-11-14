@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -171,7 +171,7 @@ public class CBusNetworkHandler extends BaseBridgeHandler {
             }
         } catch (CGateException e) {
             logger.warn("Cannot load C-Bus network {}", networkID, e);
-            updateStatus(ThingStatus.UNINITIALIZED, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR);
         }
         updateStatus();
     }
@@ -207,19 +207,18 @@ public class CBusNetworkHandler extends BaseBridgeHandler {
         CBusCGateHandler cbusCGateHandler = getCBusCGateHandler();
         try {
             if (cbusCGateHandler == null || !cbusCGateHandler.getThing().getStatus().equals(ThingStatus.ONLINE)) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "CGate connection offline");
+                updateStatus(ThingStatusDetail.BRIDGE_OFFLINE, "CGate connection offline");
             } else if (network == null) {
                 logger.debug("No network - set configuration error");
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No Network object available");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No Network object available");
             } else if (network.isOnline()) {
                 updateStatus(ThingStatus.ONLINE);
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "Network is not reporting online");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Network is not reporting online");
             }
         } catch (CGateException e) {
             logger.warn("Problem checking network state for network {}", network.getNetworkID(), e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
         if (!getThing().getStatus().equals(lastStatus)) {
             ScheduledFuture<?> networkSync = this.networkSync;
@@ -235,8 +234,8 @@ public class CBusNetworkHandler extends BaseBridgeHandler {
             }
             for (Thing thing : getThing().getThings()) {
                 ThingHandler handler = thing.getHandler();
-                if (handler instanceof CBusGroupHandler) {
-                    ((CBusGroupHandler) handler).updateStatus();
+                if (handler instanceof CBusGroupHandler groupHandler) {
+                    groupHandler.updateStatus();
                 }
             }
         }
@@ -262,8 +261,8 @@ public class CBusNetworkHandler extends BaseBridgeHandler {
             return null;
         }
         ThingHandler handler = bridge.getHandler();
-        if (handler instanceof CBusCGateHandler) {
-            return (CBusCGateHandler) handler;
+        if (handler instanceof CBusCGateHandler gateHandler) {
+            return gateHandler;
         } else {
             logger.debug("No available bridge handler found for bridge: {}.", bridge.getUID());
             return null;

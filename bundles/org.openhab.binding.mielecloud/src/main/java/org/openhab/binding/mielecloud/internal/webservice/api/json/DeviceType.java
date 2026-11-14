@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -126,4 +126,7 @@ public enum DeviceType {
 
     @SerializedName("68")
     WINE_CABINET_FREEZER_COMBINATION,
+
+    @SerializedName("74")
+    HOB_WITH_VAPOR_EXTRACTION,
 }

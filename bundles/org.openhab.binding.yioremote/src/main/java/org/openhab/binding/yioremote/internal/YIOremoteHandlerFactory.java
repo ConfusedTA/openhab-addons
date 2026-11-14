@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,17 +14,20 @@ package org.openhab.binding.yioremote.internal;
 
 import static org.openhab.binding.yioremote.internal.YIOremoteBindingConstants.THING_TYPE_YIOREMOTEDOCK;
 
-import java.util.Collections;
 import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.openhab.core.io.net.http.WebSocketFactory;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 
 /**
  * The {@link YIOremoteHandlerFactory} is responsible for creating things and thing
@@ -36,7 +39,14 @@ import org.osgi.service.component.annotations.Component;
 @Component(configurationPid = "binding.yioremote", service = ThingHandlerFactory.class)
 public class YIOremoteHandlerFactory extends BaseThingHandlerFactory {
 
-    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Collections.singleton(THING_TYPE_YIOREMOTEDOCK);
+    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_YIOREMOTEDOCK);
+
+    private final WebSocketClient webSocketClient;
+
+    @Activate
+    public YIOremoteHandlerFactory(@Reference WebSocketFactory webSocketFactory) {
+        this.webSocketClient = webSocketFactory.getCommonWebSocketClient();
+    }
 
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
@@ -45,12 +55,9 @@ public class YIOremoteHandlerFactory extends BaseThingHandlerFactory {
 
     @Override
     protected @Nullable ThingHandler createHandler(Thing thing) {
-        ThingTypeUID thingTypeUID = thing.getThingTypeUID();
-
-        if (THING_TYPE_YIOREMOTEDOCK.equals(thingTypeUID)) {
-            return new YIOremoteDockHandler(thing);
+        if (THING_TYPE_YIOREMOTEDOCK.equals(thing.getThingTypeUID())) {
+            return new YIOremoteDockHandler(thing, webSocketClient);
         }
-
         return null;
     }
 }

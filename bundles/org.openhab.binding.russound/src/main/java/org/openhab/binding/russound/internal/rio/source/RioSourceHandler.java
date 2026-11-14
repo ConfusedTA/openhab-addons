@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -198,7 +198,8 @@ public class RioSourceHandler extends AbstractThingHandler<RioSourceProtocol> im
 
     /**
      * Initializes the bridge. Confirms the configuration is valid and that our parent bridge is a
-     * {@link RioSystemHandler}. Once validated, a {@link RioSystemProtocol} is set via
+     * {@link RioSystemHandler}. Once validated, a
+     * {@link org.openhab.binding.russound.internal.rio.system.RioSystemProtocol} is set via
      * {@link #setProtocolHandler(RioSystemProtocol)} and the bridge comes online.
      */
     @Override
@@ -206,38 +207,35 @@ public class RioSourceHandler extends AbstractThingHandler<RioSourceProtocol> im
         logger.debug("Initializing");
         final Bridge bridge = getBridge();
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Cannot be initialized without a bridge");
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         }
         if (bridge.getStatus() != ThingStatus.ONLINE) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
             return;
         }
 
         final ThingHandler handler = bridge.getHandler();
         if (handler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "No handler specified (null) for the bridge!");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No handler specified (null) for the bridge!");
             return;
         }
 
         if (!(handler instanceof RioSystemHandler)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "Source must be attached to a System bridge: " + handler.getClass());
             return;
         }
 
-        final RioSourceConfig config = getThing().getConfiguration().as(RioSourceConfig.class);
+        final RioSourceConfig config = getConfigAs(RioSourceConfig.class);
         if (config == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Configuration file missing");
             return;
         }
 
         final int configSource = config.getSource();
         if (configSource < 1 || configSource > 12) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Source must be between 1 and 12: " + configSource);
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Source must be between 1 and 12: " + configSource);
             return;
         }
         source.set(configSource);
@@ -245,7 +243,7 @@ public class RioSourceHandler extends AbstractThingHandler<RioSourceProtocol> im
         // Get the socket session from the
         final SocketSession socketSession = getSocketSession();
         if (socketSession == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "No socket session found");
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "No socket session found");
             return;
         }
 
@@ -254,7 +252,11 @@ public class RioSourceHandler extends AbstractThingHandler<RioSourceProtocol> im
                     new StatefulHandlerCallback(new AbstractRioHandlerCallback() {
                         @Override
                         public void statusChanged(ThingStatus status, ThingStatusDetail detail, String msg) {
-                            updateStatus(status, detail, msg);
+                            if (detail == ThingStatusDetail.NONE) {
+                                updateStatus(status, msg);
+                            } else {
+                                updateStatus(detail, msg);
+                            }
                         }
 
                         @Override
@@ -278,7 +280,7 @@ public class RioSourceHandler extends AbstractThingHandler<RioSourceProtocol> im
             updateStatus(ThingStatus.ONLINE);
             getProtocolHandler().postOnline();
         } catch (Exception e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.toString());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.toString());
         }
     }
 }

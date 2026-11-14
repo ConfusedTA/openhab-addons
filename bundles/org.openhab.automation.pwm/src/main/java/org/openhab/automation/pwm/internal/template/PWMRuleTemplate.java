@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,7 +12,6 @@
  */
 package org.openhab.automation.pwm.internal.template;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -43,17 +42,16 @@ public class PWMRuleTemplate extends RuleTemplate {
     public static PWMRuleTemplate initialize() {
         final String triggerId = UUID.randomUUID().toString();
 
-        final List<Trigger> triggers = Collections.singletonList(ModuleBuilder.createTrigger().withId(triggerId)
+        final List<Trigger> triggers = List.of(ModuleBuilder.createTrigger().withId(triggerId)
                 .withTypeUID(PWMTriggerType.UID).withLabel("PWM Trigger").build());
 
-        final Map<String, String> actionInputs = new HashMap<String, String>();
+        final Map<String, String> actionInputs = new HashMap<>();
         actionInputs.put(PWMConstants.INPUT, triggerId + "." + PWMConstants.OUTPUT);
 
-        Set<String> tags = new HashSet<String>();
+        Set<String> tags = new HashSet<>();
         tags.add("PWM");
 
-        return new PWMRuleTemplate(tags, triggers, Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList());
+        return new PWMRuleTemplate(tags, triggers, List.of(), List.of(), List.of());
     }
 
     public PWMRuleTemplate(Set<String> tags, List<Trigger> triggers, List<Condition> conditions, List<Action> actions,

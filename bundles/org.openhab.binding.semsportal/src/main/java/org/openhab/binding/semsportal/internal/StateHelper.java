@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -43,7 +43,13 @@ public class StateHelper {
     }
 
     public static State getLastUpdate(@Nullable StationStatus currentStatus) {
-        return currentStatus == null ? UnDefType.UNDEF : new DateTimeType(currentStatus.getLastUpdate());
+        if (currentStatus == null) {
+            return UnDefType.UNDEF;
+        }
+        if (currentStatus.getLastUpdate() == null) {
+            return UnDefType.NULL;
+        }
+        return new DateTimeType(currentStatus.getLastUpdate());
     }
 
     public static State getCurrentOutput(@Nullable StationStatus status) {

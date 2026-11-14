@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -20,7 +20,6 @@ import org.openhab.core.library.types.PercentType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
@@ -60,7 +59,7 @@ public class CBusDaliHandler extends CBusGroupHandler {
                 }
             } catch (CGateException e) {
                 logger.debug("Failed to getLevel for group {}", groupId, e);
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
             }
         } else {
             if (channelUID.getId().equals(CBusBindingConstants.CHANNEL_LEVEL)) {
@@ -72,9 +71,8 @@ public class CBusDaliHandler extends CBusGroupHandler {
                         } else if (command == OnOffType.OFF) {
                             group.off();
                         }
-                    } else if (command instanceof PercentType) {
-                        PercentType value = (PercentType) command;
-                        group.ramp((int) Math.round(value.doubleValue() / 100 * 255), 0);
+                    } else if (command instanceof PercentType percentCommand) {
+                        group.ramp((int) Math.round(percentCommand.doubleValue() / 100 * 255), 0);
                     } else if (command instanceof IncreaseDecreaseType) {
                         int level = group.getLevel();
                         if (command == IncreaseDecreaseType.DECREASE) {
@@ -87,12 +85,13 @@ public class CBusDaliHandler extends CBusGroupHandler {
                     }
                 } catch (CGateException e) {
                     logger.debug("Cannot send command {} to {}", command, group, e);
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Communication Error");
                 }
             }
         }
     }
 
+    @Override
     public void updateGroup(int updateApplicationId, int updateGroupId, String value) {
         if (updateGroupId == groupId && updateApplicationId == applicationId) {
             Thing thing = getThing();

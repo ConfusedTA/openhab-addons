@@ -3,12 +3,13 @@
 .idea
 .project
 .DS_Store
+.gradle
 *.iml
-npm-debug.log
-.build.log
+*.log
 
 .metadata/
 bin/
+generated/
 target/
 src-gen/
 xtend-gen/
@@ -25,3 +26,8 @@ features/**/src/main/feature
 .factorypath
 pom.xml.versionsBackup
 .openapi-generator
+
+.metals
+.vim
+shell.nix
+tags

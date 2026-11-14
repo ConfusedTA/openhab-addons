@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,6 +19,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.CharacterData;
@@ -34,17 +35,20 @@ import org.xml.sax.SAXException;
  * this:
  *
  * <pre>
+ * {@code
  * <xmp>
  *   <fsapiResponse> <status>FS_OK</status> <value><u8>1</u8></value> </fsapiResponse>
  * </xmp>
+ * }
  * </pre>
  *
  * This class parses this XML data and provides functions for reading and casting typical fields.
  *
- * @author Rainer Ostendorf
- * @author Patrick Koenemann
+ * @author Rainer Ostendorf - Initial contribution
+ * @author Patrick Koenemann - Improvements
  *
  */
+@NonNullByDefault
 public class FrontierSiliconRadioApiResult {
 
     /**
@@ -69,8 +73,8 @@ public class FrontierSiliconRadioApiResult {
             logger.trace("converting to XML failed: '{}' with {}: {}", requestResultString, e.getClass().getName(),
                     e.getMessage());
             logger.debug("converting to XML failed with {}: {}", e.getClass().getName(), e.getMessage());
-            if (e instanceof IOException) {
-                throw (IOException) e;
+            if (e instanceof IOException exception) {
+                throw exception;
             }
             throw new IOException(e);
         }
@@ -192,8 +196,7 @@ public class FrontierSiliconRadioApiResult {
      */
     public String getSessionId() {
         final NodeList sessionIdTagList = xmlDoc.getElementsByTagName("sessionId");
-        final String givenSessId = getCharacterDataFromElement((Element) sessionIdTagList.item(0));
-        return givenSessId;
+        return getCharacterDataFromElement((Element) sessionIdTagList.item(0));
     }
 
     /**
@@ -216,8 +219,7 @@ public class FrontierSiliconRadioApiResult {
         factory.setXIncludeAware(false);
         factory.setExpandEntityReferences(false);
         final DocumentBuilder builder = factory.newDocumentBuilder();
-        final Document xmlDocument = builder.parse(new InputSource(new StringReader(xmlString)));
-        return xmlDocument;
+        return builder.parse(new InputSource(new StringReader(xmlString)));
     }
 
     /**
@@ -229,8 +231,7 @@ public class FrontierSiliconRadioApiResult {
      */
     private static String getCharacterDataFromElement(Element e) {
         final Node child = e.getFirstChild();
-        if (child instanceof CharacterData) {
-            final CharacterData cd = (CharacterData) child;
+        if (child instanceof CharacterData cd) {
             return cd.getData();
         }
         return "";

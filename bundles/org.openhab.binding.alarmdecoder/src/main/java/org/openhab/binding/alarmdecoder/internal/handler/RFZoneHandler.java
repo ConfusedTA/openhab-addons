@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,7 +22,6 @@ import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.UnDefType;
@@ -51,7 +50,7 @@ public class RFZoneHandler extends ADThingHandler {
         config = getConfigAs(RFZoneConfig.class);
 
         if (config.serial < 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Invalid serial setting");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Invalid serial setting");
             return;
         }
         logger.debug("RF Zone handler initializing for serial {}", config.serial);
@@ -104,9 +103,8 @@ public class RFZoneHandler extends ADThingHandler {
             logger.trace("RF Zone handler for serial {} received update: {}", config.serial, rfxMsg.data);
             firstUpdateReceived.set(true);
 
-            updateState(CHANNEL_RF_LOWBAT, (rfxMsg.data & RFXMessage.BIT_LOWBAT) == 0 ? OnOffType.OFF : OnOffType.ON);
-            updateState(CHANNEL_RF_SUPERVISION,
-                    (rfxMsg.data & RFXMessage.BIT_SUPER) == 0 ? OnOffType.OFF : OnOffType.ON);
+            updateState(CHANNEL_RF_LOWBAT, OnOffType.from((rfxMsg.data & RFXMessage.BIT_LOWBAT) != 0));
+            updateState(CHANNEL_RF_SUPERVISION, OnOffType.from((rfxMsg.data & RFXMessage.BIT_SUPER) != 0));
 
             updateState(CHANNEL_RF_LOOP1,
                     (rfxMsg.data & RFXMessage.BIT_LOOP1) == 0 ? OpenClosedType.CLOSED : OpenClosedType.OPEN);

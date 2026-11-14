@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -10,10 +10,10 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-
 package org.openhab.binding.miio.internal.miot;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
@@ -21,7 +21,7 @@ import com.google.gson.annotations.SerializedName;
 /**
  * Model Urns DTO for miot spec file.
  *
- * To read http://miot-spec.org/miot-spec-v2/instances?status=released
+ * To read http://miot-spec.org/miot-spec-v2/instances?status=released or status=all
  *
  * @author Marcel Verpaalen - Initial contribution
  */
@@ -32,10 +32,13 @@ public class ModelUrnsDTO {
     private String model = "";
     @SerializedName("version")
     @Expose
-    private Integer version = 0;
+    private @Nullable Integer version;
     @SerializedName("type")
     @Expose
-    private String type = "";
+    private @Nullable String type;
+    @SerializedName("status")
+    @Expose
+    private @Nullable String status;
 
     public String getModel() {
         return model;
@@ -45,7 +48,7 @@ public class ModelUrnsDTO {
         this.model = model;
     }
 
-    public Integer getVersion() {
+    public @Nullable Integer getVersion() {
         return version;
     }
 
@@ -53,11 +56,18 @@ public class ModelUrnsDTO {
         this.version = version;
     }
 
-    public String getType() {
+    public @Nullable String getType() {
         return type;
     }
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    /**
+     * @return the status of the spec (released, preview or debug), null if the list does not contain the status
+     */
+    public @Nullable String getStatus() {
+        return status;
     }
 }

@@ -1,0 +1,2356 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.hue.internal.handler;
+
+import static org.openhab.binding.hue.internal.HueBindingConstants.*;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.hue.internal.action.DynamicsActions;
+import org.openhab.binding.hue.internal.api.dto.clip2.Alerts;
+import org.openhab.binding.hue.internal.api.dto.clip2.ColorTemperature;
+import org.openhab.binding.hue.internal.api.dto.clip2.ColorXy;
+import org.openhab.binding.hue.internal.api.dto.clip2.Dimming;
+import org.openhab.binding.hue.internal.api.dto.clip2.Effects;
+import org.openhab.binding.hue.internal.api.dto.clip2.Gamut2;
+import org.openhab.binding.hue.internal.api.dto.clip2.Gradient;
+import org.openhab.binding.hue.internal.api.dto.clip2.MetaData;
+import org.openhab.binding.hue.internal.api.dto.clip2.MirekSchema;
+import org.openhab.binding.hue.internal.api.dto.clip2.OnState;
+import org.openhab.binding.hue.internal.api.dto.clip2.PairXy;
+import org.openhab.binding.hue.internal.api.dto.clip2.ProductData;
+import org.openhab.binding.hue.internal.api.dto.clip2.Resource;
+import org.openhab.binding.hue.internal.api.dto.clip2.ResourceReference;
+import org.openhab.binding.hue.internal.api.dto.clip2.Resources;
+import org.openhab.binding.hue.internal.api.dto.clip2.Sound;
+import org.openhab.binding.hue.internal.api.dto.clip2.TimedEffects;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.ActionType;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.Archetype;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.ChimeType;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.ContentType;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.EffectType;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.ErrorType;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.MuteType;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.ResourceType;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.SceneRecallAction;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.SmartSceneRecallAction;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.SoundValue;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.UpdateStatusV2;
+import org.openhab.binding.hue.internal.api.dto.clip2.enums.ZigbeeStatus;
+import org.openhab.binding.hue.internal.api.dto.clip2.helper.LegacyLightState;
+import org.openhab.binding.hue.internal.api.dto.clip2.helper.Setters;
+import org.openhab.binding.hue.internal.config.Clip2ThingConfig;
+import org.openhab.binding.hue.internal.exceptions.ApiException;
+import org.openhab.binding.hue.internal.exceptions.AssetNotLoadedException;
+import org.openhab.binding.hue.internal.exceptions.CriticalFieldMissingException;
+import org.openhab.core.items.Item;
+import org.openhab.core.library.types.DateTimeType;
+import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.library.types.HSBType;
+import org.openhab.core.library.types.IncreaseDecreaseType;
+import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.PercentType;
+import org.openhab.core.library.types.QuantityType;
+import org.openhab.core.library.types.StringType;
+import org.openhab.core.library.unit.MetricPrefix;
+import org.openhab.core.library.unit.Units;
+import org.openhab.core.semantics.SemanticTag;
+import org.openhab.core.semantics.model.DefaultSemanticTags.Equipment;
+import org.openhab.core.thing.Bridge;
+import org.openhab.core.thing.Channel;
+import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingRegistry;
+import org.openhab.core.thing.ThingStatus;
+import org.openhab.core.thing.ThingStatusDetail;
+import org.openhab.core.thing.ThingStatusInfo;
+import org.openhab.core.thing.ThingTypeUID;
+import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.binding.BaseThingHandler;
+import org.openhab.core.thing.binding.BridgeHandler;
+import org.openhab.core.thing.binding.ThingHandlerService;
+import org.openhab.core.thing.binding.builder.ChannelBuilder;
+import org.openhab.core.thing.binding.builder.ThingBuilder;
+import org.openhab.core.thing.link.ItemChannelLink;
+import org.openhab.core.thing.link.ItemChannelLinkRegistry;
+import org.openhab.core.thing.type.ChannelTypeUID;
+import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
+import org.openhab.core.types.State;
+import org.openhab.core.types.StateOption;
+import org.openhab.core.types.UnDefType;
+import org.openhab.core.util.ColorUtil;
+import org.openhab.core.util.ColorUtil.Gamut;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Handler for things based on CLIP 2 'device', 'room', or 'zone resources.
+ *
+ * @author Andrew Fiddian-Green - Initial contribution.
+ */
+@NonNullByDefault
+public class Clip2ThingHandler extends BaseThingHandler {
+
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_DEVICE, THING_TYPE_ROOM,
+            THING_TYPE_ZONE, THING_TYPE_AREA, THING_TYPE_SERVICE_GROUP);
+
+    private static final Set<ResourceType> SUPPORTED_SCENE_TYPES = Set.of(ResourceType.SCENE, ResourceType.SMART_SCENE);
+
+    private static final Set<Archetype> STRIPLIGHT_ARCHETYPES = Set.of(Archetype.HUE_LIGHTSTRIP,
+            Archetype.HUE_LIGHTSTRIP_TV, Archetype.HUE_TUBE, Archetype.STRING_LIGHT, Archetype.CHRISTMAS_TREE);
+
+    private static final Duration DYNAMICS_ACTIVE_WINDOW = Duration.ofSeconds(10);
+
+    /*
+     * Pre-compiled pattern matcher based on the following set of Model Id regular expressions for devices having
+     * the issue where they do not correctly handle a PUT command for the 'off' state.
+     */
+    private static final Set<String> OFF_TRANSITION_WORK_AROUND_MODELS = Set.of( //
+            "LK Dimmer", // LK Wiser Dimmer -- see https://techblog.vindvejr.dk/?p=455
+            "^TRADFRI.*1055l$" // IKEA Tradfri 1055l bulb
+    );
+    static final Pattern OFF_TRANSITION_WORK_AROUND_PATTERN = Pattern.compile(
+            OFF_TRANSITION_WORK_AROUND_MODELS.stream().collect(Collectors.joining("|")), Pattern.CASE_INSENSITIVE);
+
+    /*
+     * Pre-compiled pattern matcher based on the following set of Model Id regular expressions for devices having
+     * the (legacy) issue where the light operates bi-stable in either 'FULL_COLOR' or 'COLOR_TEMP' mode.
+     */
+    private static final Set<String> OPERATING_MODE_WORK_AROUND_MODELS = Set.of( //
+            "RGB-CCT", // Müller Licht extended color light
+            "TS0505B" // No Brand extended color light
+    );
+    private static final Pattern OPERATING_MODE_WORK_AROUND_PATTERN = Pattern.compile(
+            OPERATING_MODE_WORK_AROUND_MODELS.stream().collect(Collectors.joining("|")), Pattern.CASE_INSENSITIVE);
+
+    private final Logger logger = LoggerFactory.getLogger(Clip2ThingHandler.class);
+
+    // flag values for logging resource consumption
+    private static final int FLAG_PROPERTIES_UPDATE = 1;
+    private static final int FLAG_DEPENDENCIES_UPDATE = 2;
+    private static final int FLAG_CACHE_UPDATE = 4;
+    private static final int FLAG_CHANNELS_UPDATE = 8;
+    private static final int FLAG_SCENE_ADD = 16;
+    private static final int FLAG_SCENE_DELETE = 32;
+
+    // smart chime devices use write-only volume and duration channels, so these are their default values
+    private static final PercentType DEFAULT_SOUND_VOLUME = new PercentType(50);
+    private static final QuantityType<?> DEFAULT_ALARM_DURATION = QuantityType.valueOf(3, Units.SECOND);
+
+    private static final int INCREASE_DECREASE_PERCENT = 10;
+    private static final int MIN_MIREK_DELTA = 10;
+
+    /**
+     * A map of service Resources whose state contributes to the overall state of this thing. It is a map between the
+     * resource ID (string) and a Resource object containing the last known state. e.g. a DEVICE thing may support a
+     * LIGHT service whose Resource contributes to its overall state, or a ROOM or ZONE thing may support a
+     * GROUPED_LIGHT service whose Resource contributes to its overall state.
+     */
+    private final Map<String, Resource> serviceContributorsCache = new ConcurrentHashMap<>();
+
+    /**
+     * A map of Resource IDs which are targets for commands to be sent. It is a map between the type of command
+     * (ResourcesType) and the resource ID to which the command shall be sent. e.g. a LIGHT 'on' command shall be sent
+     * to the respective LIGHT resource ID.
+     */
+    private final Map<ResourceType, String> commandResourceIds = new ConcurrentHashMap<>();
+
+    /**
+     * In the Hue API some resource types extend other base types (e.g. ResourceType.CAMERA_MOTION extends the
+     * ResourceType.MOTION base type). An extended resource type contains the same basic JSON fields as the base
+     * type plus a few extra application specific fields. So when reading data from an incoming extension resource
+     * we can safely "down map" its information to respective OH channels as if the data came from the base type.
+     * So e.g. the data from a ResourceType.CAMERA_MOTION resource can update the CHANNEL_2_MOTION channel state.
+     * By contrast when sending OH Channel commands we must "up map" the base information to the full extended
+     * resource type. This is a map between such base resource types and respective extended resource types.
+     */
+    private final Map<ResourceType, ResourceType> extendedResourceTypes = new ConcurrentHashMap<>();
+
+    /**
+     * Button devices contain one or more physical buttons, each of which is represented by a BUTTON Resource with its
+     * own unique resource ID, and a respective controlId that indicates which button it is in the device. e.g. a dimmer
+     * pad has four buttons (controlId's 1..4) each represented by a BUTTON Resource with a unique resource ID. This is
+     * a map between the resource ID and its respective controlId.
+     */
+    private final Map<String, Integer> controlIds = new ConcurrentHashMap<>();
+
+    /**
+     * The set of channel UIDs that are supported by this thing. e.g. an on/off light may support 'switch' and
+     * 'zigbeeStatus' channels, whereas a complex light may support 'switch', 'brightness', 'color', 'color temperature'
+     * and 'zigbeeStatus' channels.
+     */
+    private final Set<ChannelUID> supportedChannelUIDs = ConcurrentHashMap.newKeySet();
+
+    /**
+     * A map of scene IDs versus scene Resources for the scenes that contribute to and command this thing. It is a map
+     * between the resource ID (string) and a Resource object containing the scene's last known state.
+     */
+    private final Map<String, Resource> sceneContributorsCache = new ConcurrentHashMap<>();
+
+    /**
+     * A map of scene names versus scene Resources for the scenes that contribute to and command this thing. e.g. a
+     * command for a scene named 'Energize' shall be sent to the respective SCENE resource ID.
+     */
+    private final Map<String, Resource> sceneResourceEntries = new ConcurrentHashMap<>();
+
+    /**
+     * A list of API v1 thing channel UIDs that are linked to items. It is used in the process of replicating the
+     * Item/Channel links from a legacy v1 thing to this API v2 thing.
+     */
+    private final List<ChannelUID> legacyLinkedChannelUIDs = new CopyOnWriteArrayList<>();
+
+    // groupId -> light resource ID, for every light except the primary (front) light
+    private final Map<String, String> auxiliaryLightGroups = new ConcurrentHashMap<>();
+
+    private final ThingRegistry thingRegistry;
+    private final ItemChannelLinkRegistry itemChannelLinkRegistry;
+    private final Clip2StateDescriptionProvider stateDescriptionProvider;
+
+    private String resourceId = "?";
+    private Resource thisResource;
+
+    private final Map<ChannelUID, Duration> dynamicsDurations = new ConcurrentHashMap<>();
+    private final Map<ChannelUID, Instant> dynamicsExpireTimes = new ConcurrentHashMap<>();
+    private Instant buttonGroupLastUpdated = Instant.MIN;
+
+    private boolean disposing;
+    private boolean hasConnectivityIssue;
+    private boolean updateSceneContributorsDone;
+    private boolean updateLightPropertiesDone;
+    private boolean updateLightCacheRequiredFieldsDone;
+    private boolean updatePropertiesDone;
+    private boolean updateDependenciesDone;
+
+    private @Nullable LegacyLightState legacyLightState;
+
+    private final Map<ChannelUID, Future<?>> alertResetTasks = new ConcurrentHashMap<>();
+    private final Map<ChannelUID, Future<?>> dynamicsResetTasks = new ConcurrentHashMap<>();
+    private @Nullable Future<?> updateDependenciesTask;
+    private @Nullable Future<?> updateServiceContributorsTask;
+
+    public Clip2ThingHandler(Thing thing, Clip2StateDescriptionProvider stateDescriptionProvider,
+            ThingRegistry thingRegistry, ItemChannelLinkRegistry itemChannelLinkRegistry) {
+        super(thing);
+
+        ThingTypeUID thingTypeUID = thing.getThingTypeUID();
+        if (THING_TYPE_DEVICE.equals(thingTypeUID)) {
+            thisResource = new Resource(ResourceType.DEVICE);
+        } else if (THING_TYPE_ROOM.equals(thingTypeUID)) {
+            thisResource = new Resource(ResourceType.ROOM);
+        } else if (THING_TYPE_ZONE.equals(thingTypeUID)) {
+            thisResource = new Resource(ResourceType.ZONE);
+        } else if (THING_TYPE_SERVICE_GROUP.equals(thingTypeUID)) {
+            thisResource = new Resource(ResourceType.SERVICE_GROUP);
+        } else if (THING_TYPE_AREA.equals(thingTypeUID)) {
+            thisResource = new Resource(ResourceType.MOTION_AREA_CONFIGURATION);
+        } else {
+            throw new IllegalArgumentException("Wrong thing type " + thingTypeUID.getAsString());
+        }
+
+        this.thingRegistry = thingRegistry;
+        this.itemChannelLinkRegistry = itemChannelLinkRegistry;
+        this.stateDescriptionProvider = stateDescriptionProvider;
+    }
+
+    /**
+     * Add a channel UID to the {@link #supportedChannelUIDs} set. If the channel supports dynamics (timed transitions)
+     * then add the respective channel as well.
+     *
+     * @param channelUID the channel UID to add.
+     */
+    private void addSupportedChannel(ChannelUID channelUID) {
+        if (!disposing && !updateDependenciesDone) {
+            if (supportedChannelUIDs.add(channelUID)) {
+                logger.debug("{} -> addSupportedChannel() '{}' added to supported channel set", resourceId, channelUID);
+                switch (channelUID.getIdWithoutGroup()) { // set speaker write only channel default values
+                    case CHANNEL_2_VOLUME:
+                        updateState(channelUID, DEFAULT_SOUND_VOLUME);
+                        break;
+                    case CHANNEL_2_DURATION:
+                        updateState(channelUID, DEFAULT_ALARM_DURATION);
+                        break;
+                    default:
+                }
+            }
+            if (DYNAMIC_CHANNELS.contains(channelUID.getIdWithoutGroup())) {
+                // dynamics channel is in the same group (or ungrouped) as the channel being added
+                clearDynamicsChannel(uid(channelUID.getGroupId(), CHANNEL_2_DYNAMICS));
+            }
+        }
+    }
+
+    private void addSupportedChannel(String channelID) {
+        addSupportedChannel(uid(null, channelID));
+    }
+
+    /**
+     * Cancel the given task.
+     *
+     * @param cancelTask the task to be cancelled (may be null)
+     * @param mayInterrupt allows cancel() to interrupt the thread.
+     */
+    private void cancelTask(@Nullable Future<?> cancelTask, boolean mayInterrupt) {
+        if (Objects.nonNull(cancelTask)) {
+            cancelTask.cancel(mayInterrupt);
+        }
+    }
+
+    /**
+     * Clear the dynamics channel parameters.
+     *
+     * @param channelUID the channel UID to clear
+     */
+    private void clearDynamicsChannel(ChannelUID channelUID) {
+        dynamicsExpireTimes.put(channelUID, Instant.MIN);
+        dynamicsDurations.put(channelUID, Duration.ZERO);
+        updateState(channelUID, new QuantityType<>(0, MetricPrefix.MILLI(Units.SECOND)), true);
+    }
+
+    @Override
+    public void dispose() {
+        logger.debug("{} -> dispose()", resourceId);
+        disposing = true;
+        alertResetTasks.values().forEach(task -> cancelTask(task, true));
+        dynamicsResetTasks.values().forEach(task -> cancelTask(task, true));
+        cancelTask(updateDependenciesTask, true);
+        cancelTask(updateServiceContributorsTask, true);
+        alertResetTasks.clear();
+        dynamicsResetTasks.clear();
+        updateDependenciesTask = null;
+        updateServiceContributorsTask = null;
+        auxiliaryLightGroups.clear();
+        legacyLinkedChannelUIDs.clear();
+        sceneContributorsCache.clear();
+        sceneResourceEntries.clear();
+        supportedChannelUIDs.clear();
+        commandResourceIds.clear();
+        serviceContributorsCache.clear();
+        controlIds.clear();
+        extendedResourceTypes.clear();
+        dynamicsDurations.clear();
+        dynamicsExpireTimes.clear();
+    }
+
+    /**
+     * Get the bridge handler.
+     *
+     * @throws AssetNotLoadedException if the handler does not exist.
+     */
+    private Clip2BridgeHandler getBridgeHandler() throws AssetNotLoadedException {
+        Bridge bridge = getBridge();
+        if (Objects.nonNull(bridge)) {
+            BridgeHandler bridgeHandler = bridge.getHandler();
+            if (bridgeHandler instanceof Clip2BridgeHandler clip2BridgeHandler) {
+                return clip2BridgeHandler;
+            }
+        }
+        throw new AssetNotLoadedException("Bridge handler missing");
+    }
+
+    /**
+     * Do a double lookup to get the cached resource that matches the given ResourceType.
+     *
+     * @param resourceType the type to search for.
+     * @return the Resource, or null if not found.
+     */
+    private @Nullable Resource getCachedResource(ResourceType resourceType) {
+        String commandResourceId = commandResourceIds.get(resourceType);
+        return Objects.nonNull(commandResourceId) ? serviceContributorsCache.get(commandResourceId) : null;
+    }
+
+    /**
+     * Return a ResourceReference to this handler's resource.
+     *
+     * @return a ResourceReference instance.
+     */
+    public ResourceReference getResourceReference() {
+        return new ResourceReference().setId(resourceId).setType(thisResource.getType());
+    }
+
+    /**
+     * Register the 'DynamicsAction' service.
+     */
+    @Override
+    public Collection<Class<? extends ThingHandlerService>> getServices() {
+        return Set.of(DynamicsActions.class);
+    }
+
+    @Override
+    public void handleCommand(ChannelUID channelUID, Command commandParam) {
+        if (RefreshType.REFRESH.equals(commandParam)) {
+            if (thing.getStatus() == ThingStatus.ONLINE) {
+                refreshAllChannels();
+            }
+            return;
+        }
+
+        Channel channel = thing.getChannel(channelUID);
+        if (channel == null) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("{} -> handleCommand() channelUID:{} does not exist", resourceId, channelUID);
+
+            } else {
+                logger.warn("Command received for channel '{}' which is not in thing '{}'.", channelUID,
+                        thing.getUID());
+            }
+            return;
+        }
+
+        try {
+            handleCommandInner(channelUID, commandParam);
+        } catch (CriticalFieldMissingException e) {
+            logger.warn("{} -> handleCommand() channelUID:{} command:{} error: {}", resourceId, channelUID,
+                    commandParam, e.getMessage(), e);
+        }
+    }
+
+    public void handleCommandInner(ChannelUID channelUID, Command commandParam) throws CriticalFieldMissingException {
+        ResourceType lightResourceType = thisResource.getType() == ResourceType.DEVICE ? ResourceType.LIGHT
+                : ResourceType.GROUPED_LIGHT;
+
+        Resource putResource = null;
+        Resource putGradientResource = null;
+        String putResourceId = null;
+
+        Command command = commandParam;
+        String channelId = channelUID.getIdWithoutGroup();
+        String channelGroupId = channelUID.getGroupId();
+        String auxLightId = channelGroupId == null ? null : auxiliaryLightGroups.get(channelGroupId);
+        if (auxLightId == null && channelGroupId != null && LIGHT_GROUP_PATTERN.matcher(channelGroupId).matches()) {
+            logger.warn("Command received for unknown light channel group '{}'.", channelUID);
+            return;
+        }
+        boolean isAuxLight = auxLightId != null;
+        Resource cache = isAuxLight ? serviceContributorsCache.get(auxLightId) : getCachedResource(lightResourceType);
+
+        ChimeType chimeType = null;
+        QuantityType<?> alarmDuration = null;
+
+        switch (channelId) {
+            case CHANNEL_2_ALERT:
+                putResource = Setters.setAlert(new Resource(lightResourceType), command, cache);
+                Optional.ofNullable(alertResetTasks.get(channelUID)).ifPresent(t -> cancelTask(t, false));
+                alertResetTasks.put(channelUID,
+                        scheduler.schedule(() -> updateState(channelUID, new StringType(ActionType.NO_ACTION.name())),
+                                10, TimeUnit.SECONDS));
+                break;
+
+            case CHANNEL_2_EFFECT:
+                putResource = Setters.setEffect(new Resource(lightResourceType), command, cache).setOnOff(OnOffType.ON);
+                break;
+
+            case CHANNEL_2_COLOR_TEMP_PERCENT:
+                if (command instanceof IncreaseDecreaseType incDecCommand) {
+                    MirekSchema schema = cache != null ? cache.getMirekSchema() : null;
+                    schema = schema != null ? schema : MirekSchema.DEFAULT_SCHEMA;
+                    double mirekRange = schema.getMirekMaximum() - schema.getMirekMinimum();
+                    int mirekDelta = (int) Math.max(mirekRange * INCREASE_DECREASE_PERCENT / 100.0, MIN_MIREK_DELTA);
+                    putResource = new Resource(lightResourceType).setMirekDelta(incDecCommand, mirekDelta);
+                    break;
+                }
+                if (command instanceof OnOffType) {
+                    command = OnOffType.OFF == command ? PercentType.ZERO : PercentType.HUNDRED;
+                }
+                putResource = Setters.setColorTemperaturePercent(new Resource(lightResourceType), command, cache);
+                break;
+
+            case CHANNEL_2_COLOR_TEMP_ABSOLUTE:
+                putResource = Setters.setColorTemperatureAbsolute(new Resource(lightResourceType), command, cache);
+                break;
+
+            case CHANNEL_2_COLOR:
+                putResource = new Resource(lightResourceType);
+                if (command instanceof HSBType colorCommand) {
+                    putResource = Setters.setColorXy(putResource, colorCommand, cache);
+                    command = colorCommand.getBrightness();
+                }
+                // NB fall through for handling of brightness and switch related commands !!
+
+            case CHANNEL_2_BRIGHTNESS:
+                putResource = Objects.nonNull(putResource) ? putResource : new Resource(lightResourceType);
+                if (command instanceof IncreaseDecreaseType incDecCommand) {
+                    command = handleIncreaseDecreaseBrightnessCommand(incDecCommand, putResource, cache);
+                    if (command == null) {
+                        return; // error; do not send command
+                    }
+                    // fall through
+                } else if (command instanceof PercentType brightnessCommand) {
+                    putResource = putResource.setBrightness(brightnessCommand);
+                    double brightness = Math.max(0.0, Math.min(100.0, brightnessCommand.doubleValue()));
+                    command = OnOffType.from(brightness > 0.0); // avoid "soft off"
+                }
+                // NB fall through for handling of switch related commands !!
+
+            case CHANNEL_2_SWITCH:
+                putResource = Objects.nonNull(putResource) ? putResource : new Resource(lightResourceType);
+                putResource.setOnOff(command);
+                applyOffTransitionWorkAround(isAuxLight, command, putResource);
+                applyColorTemperatureWorkAround(isAuxLight, command, putResource);
+                break;
+
+            case CHANNEL_2_COLOR_XY_ONLY:
+                putResource = Setters.setColorXy(new Resource(lightResourceType), command, cache);
+                break;
+
+            case CHANNEL_2_DIMMING_ONLY:
+                putResource = new Resource(lightResourceType).setBrightness(command);
+                break;
+
+            case CHANNEL_2_ON_OFF_ONLY:
+                putResource = new Resource(lightResourceType).setOnOff(command);
+                applyOffTransitionWorkAround(isAuxLight, command, putResource);
+                break;
+
+            case CHANNEL_2_TEMPERATURE_ENABLED:
+                putResource = new Resource(ResourceType.TEMPERATURE).setEnabled(command);
+                break;
+
+            case CHANNEL_2_MOTION_ENABLED:
+                ResourceType motionType = thisResource.getType() == ResourceType.DEVICE //
+                        ? getExtendedResourceType(ResourceType.MOTION)
+                        : ResourceType.GROUPED_MOTION;
+                putResource = new Resource(motionType).setEnabled(command);
+                break;
+
+            case CHANNEL_2_LIGHT_LEVEL_ENABLED:
+                ResourceType lightLevelType = thisResource.getType() == ResourceType.DEVICE //
+                        ? ResourceType.LIGHT_LEVEL
+                        : ResourceType.GROUPED_LIGHT_LEVEL;
+                putResource = new Resource(lightLevelType).setEnabled(command);
+                break;
+
+            case CHANNEL_2_SECURITY_CONTACT_ENABLED:
+                putResource = new Resource(ResourceType.CONTACT).setEnabled(command);
+                break;
+
+            case CHANNEL_2_SCENE:
+                if (command instanceof StringType stringCommand) {
+                    Resource scene = sceneResourceEntries.get(stringCommand.toString());
+                    if (Objects.nonNull(scene)) {
+                        ResourceType putResourceType = scene.getType();
+                        putResource = new Resource(putResourceType);
+                        switch (putResourceType) {
+                            case SCENE:
+                                putResource.setRecallAction(SceneRecallAction.ACTIVE);
+                                break;
+                            case SMART_SCENE:
+                                putResource.setRecallAction(SmartSceneRecallAction.ACTIVATE);
+                                break;
+                            default:
+                                logger.debug("{} -> handleCommand() type '{}' is not a supported scene type",
+                                        resourceId, putResourceType);
+                                return;
+                        }
+                        putResourceId = scene.getId();
+                    }
+                }
+                break;
+
+            case CHANNEL_2_ALARM_SOUND:
+                chimeType = ChimeType.ALARM;
+                alarmDuration = thing.getChannel(CHANNEL_2_DURATION) instanceof Channel channel2
+                        && getItemState(channel2.getUID(), QuantityType.class) instanceof QuantityType<?> quantity
+                                ? quantity
+                                : DEFAULT_ALARM_DURATION;
+                // fall through
+
+            case CHANNEL_2_ALERT_SOUND:
+                chimeType = chimeType != null ? chimeType : ChimeType.ALERT;
+                // fall through
+
+            case CHANNEL_2_CHIME_SOUND:
+                if (command instanceof StringType stringCommand) {
+                    chimeType = chimeType != null ? chimeType : ChimeType.CHIME;
+                    SoundValue soundValue = SoundValue.of(stringCommand.toString());
+                    PercentType soundVolume = thing.getChannel(CHANNEL_2_VOLUME) instanceof Channel chan
+                            && getItemState(chan.getUID(), PercentType.class) instanceof PercentType level ? level
+                                    : DEFAULT_SOUND_VOLUME;
+                    putResource = new Resource(ResourceType.SPEAKER).setSound(chimeType, soundValue, soundVolume,
+                            alarmDuration);
+                }
+                break;
+
+            case CHANNEL_2_MUTE:
+                if (command instanceof OnOffType onOff) {
+                    putResource = new Resource(ResourceType.SPEAKER)
+                            .setMuteType(MuteType.of(OnOffType.ON.equals(onOff)));
+                }
+                break;
+
+            case CHANNEL_2_MOTION_AREA_ENABLED:
+                putResource = new Resource(ResourceType.MOTION_AREA_CONFIGURATION).setEnabled(command);
+                putResourceId = thisResource.getId();
+                break;
+
+            case CHANNEL_2_DYNAMICS:
+                Duration clearAfter = Duration.ZERO;
+                if (command instanceof QuantityType<?> quantityCommand) {
+                    QuantityType<?> durationMs = quantityCommand.toUnit(MetricPrefix.MILLI(Units.SECOND));
+                    if (Objects.nonNull(durationMs) && durationMs.longValue() > 0) {
+                        Duration duration = Duration.ofMillis(durationMs.longValue());
+                        dynamicsDurations.put(channelUID, duration);
+                        dynamicsExpireTimes.put(channelUID, Instant.now().plus(DYNAMICS_ACTIVE_WINDOW));
+                        clearAfter = DYNAMICS_ACTIVE_WINDOW;
+                        logger.debug("{} -> handleCommand() dynamics setting {} valid for {}", resourceId, duration,
+                                clearAfter);
+                    }
+                }
+                Optional.ofNullable(dynamicsResetTasks.get(channelUID)).ifPresent(t -> cancelTask(t, false));
+                dynamicsResetTasks.put(channelUID, scheduler.schedule(() -> clearDynamicsChannel(channelUID),
+                        clearAfter.toMillis(), TimeUnit.MILLISECONDS));
+                return;
+
+            default:
+                Matcher gradientChannelMatcher = CHANNEL_2_GRADIENT_PATTERN.matcher(channelId);
+                if (gradientChannelMatcher.matches()) {
+                    int index = Integer.parseInt(gradientChannelMatcher.group(1)) - 1;
+                    putResource = new Resource(ResourceType.LIGHT);
+                    putResource = Setters.setGradientPointColorXy(putResource, command, index, cache);
+                    putGradientResource = putResource;
+                    break;
+                }
+
+                // if we reach here then the channel is not supported for this command
+                if (logger.isDebugEnabled()) {
+                    logger.debug("{} -> handleCommand() for unknown channelUID:{}", resourceId, channelUID);
+                } else {
+                    logger.warn("Command received for unknown channel '{}'.", channelUID);
+                }
+                return;
+        }
+
+        if (putResource == null) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("{} -> handleCommand({}) not supported on channelUID:{}", resourceId, command, channelUID);
+            } else {
+                logger.warn("Command '{}' is not supported on channel '{}'.", command, channelUID);
+            }
+            return;
+        }
+
+        if (putResourceId == null) {
+            putResourceId = isAuxLight ? auxLightId : commandResourceIds.get(putResource.getType());
+        }
+
+        if (putResourceId == null) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                        "{} -> handleCommand() channelUID:{}, command:{}, putResourceType:{} => missing resource ID",
+                        resourceId, channelUID, command, putResource.getType());
+            } else {
+                logger.warn("Command '{}' for channel '{}' cannot be processed by thing '{}'.", command, channelUID,
+                        thing.getUID());
+            }
+            return;
+        }
+
+        if (DYNAMIC_CHANNELS.contains(channelId)) {
+            ChannelUID dynamicsUID = uid(channelGroupId, CHANNEL_2_DYNAMICS);
+            Duration dynamicsDuration = dynamicsDurations.getOrDefault(dynamicsUID, Duration.ZERO);
+            Instant dynamicsExpireTime = dynamicsExpireTimes.getOrDefault(dynamicsUID, Instant.MIN);
+            if (Instant.now().isBefore(dynamicsExpireTime) && !dynamicsDuration.isZero()
+                    && !dynamicsDuration.isNegative()) {
+                if (ResourceType.SCENE == putResource.getType()) {
+                    putResource.setRecallDuration(dynamicsDuration);
+                } else if (CHANNEL_2_EFFECT.equals(channelId)) {
+                    putResource.setTimedEffectsDuration(dynamicsDuration);
+                } else {
+                    putResource.setDynamicsDuration(dynamicsDuration);
+                }
+            }
+        }
+
+        putResource.setId(putResourceId);
+        logger.debug("{} -> handleCommand() put resource {}", resourceId, putResource);
+
+        try {
+            Resources resources = getBridgeHandler().putResource(putResource);
+
+            if (resources.hasErrors()) {
+                logger.debug("{} command '{}' for channel '{}' succeeded with error(s): {}", resourceId, command,
+                        channelUID,
+                        resources.getErrors().stream().map(e -> e.getDescription()).collect(Collectors.joining("; ")));
+                if (resources.getErrors().stream()
+                        .allMatch(e -> ErrorType.ATTRIBUTE_MAY_HAVE_NO_EFFECT == e.getErrorType())) {
+                    loopBackNotify(putResource);
+                }
+            } else if (putGradientResource != null && cache != null) {
+                // update gradient points cache entry to be ready immediately for a next point command
+                Setters.setResource(putGradientResource, cache);
+                serviceContributorsCache.put(putGradientResource.getId(), putGradientResource);
+            }
+        } catch (ApiException | AssetNotLoadedException e) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("{} -> handleCommand() error {}", resourceId, e.getMessage(), e);
+            } else {
+                logger.warn("Command '{}' for thing '{}', channel '{}' failed with error '{}'.", command,
+                        thing.getUID(), channelUID, e.getMessage());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /*
+     * Many channels have 'autoUpdatePolicy == veto' since we normally expect the bridge to immediately send a
+     * state update event after a PUT command. However if the bridge returned a "succeeded with error" message
+     * (HTTP status code 207) then, depending on the manufacturer, it may not send a state update, so we send
+     * ourself a mock event via loop-back in order to update the channel faster. We also add ColorTemperature
+     * or ColorXy DTO fields for commands to the counterpart channel in order to synch both channel sets.
+     */
+    private void loopBackNotify(Resource resource) {
+        scheduler.submit(() -> {
+            logger.debug("{} -> loopBackNotify() with resource {}", resourceId, resource);
+
+            // add DTO fields to synch ColorXy and ColorTemperature for commands to the counterpart channel
+            if (ResourceType.LIGHT == resource.getType()) {
+                ColorXy colorXy = resource.getColorXy();
+                ColorTemperature colorTemp = resource.getColorTemperature();
+
+                // ColorXy: add a ColorTemperature field with null (i.e. unknown) mirek value
+                if (colorXy != null && colorTemp == null && thing.getChannel(CHANNEL_2_COLOR_TEMP_PERCENT) != null) {
+                    resource.setColorTemperature(new ColorTemperature().setMirek(null));
+                }
+
+                // ColorTemperature: add a ColorXy field with the XY of the ColorTemperature on the Planckian locus
+                if (colorTemp != null && colorXy == null && thing.getChannel(CHANNEL_2_COLOR) != null
+                        && colorTemp.getMirek() instanceof Long mirek) {
+                    resource.setColorXy(new ColorXy().setXY(ColorUtil.kelvinToXY(1000000.0 / mirek)));
+                }
+            }
+
+            onResource(resource.setContentType(ContentType.UPDATE));
+        });
+    }
+
+    /**
+     * Get the state of the first linked item of the given type for the given channel UID.
+     *
+     * @param channelUID the channel UID.
+     * @param type the expected state type.
+     * @return the state, or null if not found.
+     */
+    private <T extends State> @Nullable T getItemState(ChannelUID channelUID, Class<T> type) {
+        return itemChannelLinkRegistry.getLinkedItems(channelUID).stream().map(Item::getState).filter(type::isInstance)
+                .map(type::cast).findFirst().orElse(null);
+    }
+
+    /**
+     * Returns the extended resource type, or base type if none available.
+     */
+    private ResourceType getExtendedResourceType(ResourceType baseType) {
+        return extendedResourceTypes.get(baseType) instanceof ResourceType extendedType ? extendedType : baseType;
+    }
+
+    private void refreshAllChannels() {
+        if (!updateDependenciesDone) {
+            return;
+        }
+        cancelTask(updateServiceContributorsTask, false);
+        updateServiceContributorsTask = scheduler.schedule(() -> {
+            try {
+                updateServiceContributors();
+            } catch (ApiException | AssetNotLoadedException e) {
+                logger.debug("{} -> handleCommand() error {}", resourceId, e.getMessage(), e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, 3, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Apply the off transition work-around for the given command to the given resource.
+     *
+     * @param isAuxiliaryLight the command is for an auxiliary light channel so no workaround is applied.
+     * @param command the handled command.
+     * @param putResource the resource that will be adjusted if needed.
+     */
+    private void applyOffTransitionWorkAround(boolean isAuxiliaryLight, Command command, Resource putResource) {
+        if (isAuxiliaryLight) {
+            return;
+        }
+        try {
+            if (command == OnOffType.OFF && getBridgeHandler().requiresOffTransitionWorkAround(resourceId)) {
+                Duration dynamicsDuration = dynamicsDurations.getOrDefault(uid(null, CHANNEL_2_DYNAMICS),
+                        Duration.ZERO);
+                putResource.setDynamicsDuration(dynamicsDuration);
+                logger.debug("{} -> applyOffTransitionWorkAround() command={} dynamics.duration={}", resourceId,
+                        command, dynamicsDuration);
+            }
+        } catch (AssetNotLoadedException e) {
+            logger.debug("{} -> applyOffTransitionWorkAround() error {}", resourceId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Some legacy lights have a bi-stable operating mode which makes them forget color temperature
+     * commands when they are in soft-off state. This method re-applies the lost color temperature.
+     *
+     * @param isAuxiliaryLight the command is for an auxiliary light channel so no workaround is applied.
+     * @param command the handled command.
+     * @param putResource the resource that will be adjusted if needed.
+     */
+    private void applyColorTemperatureWorkAround(boolean isAuxiliaryLight, Command command, Resource putResource) {
+        if (isAuxiliaryLight) {
+            return;
+        }
+        LegacyLightState legacyState = legacyLightState;
+        if (legacyState == null || legacyState.getMode() != LegacyLightState.Mode.COLOR_TEMP) {
+            return;
+        }
+        if (command != OnOffType.ON || putResource.getColorXy() != null || putResource.getColorTemperature() != null) {
+            return;
+        }
+        Long mirek = legacyState.getMirek();
+        if (mirek != null) {
+            putResource.setColorTemperature(new ColorTemperature().setMirek(mirek));
+            logger.debug("{} -> applyColorTemperatureWorkAround() mirek={}", resourceId, mirek);
+        }
+    }
+
+    /**
+     * Handle a 'dynamics' command for the given channel ID for the given dynamics duration.
+     *
+     * @param channelId the ID of the target channel; either 'some-channel' or 'lightN#some-channel'.
+     * @param command the new target state.
+     * @param duration the transition duration.
+     */
+    public synchronized void handleDynamicsCommand(String channelId, Command command, QuantityType<?> duration) {
+        String[] parts = channelId.split(ChannelUID.CHANNEL_GROUP_SEPARATOR);
+        String groupId = parts.length == 2 ? parts[0] : null;
+        String normalizedChannelId = parts.length == 2 ? parts[1] : parts[0];
+        if (DYNAMIC_CHANNELS.contains(normalizedChannelId)) {
+            ChannelUID dynamicsUID = uid(groupId, CHANNEL_2_DYNAMICS);
+            ChannelUID targetUID = uid(groupId, normalizedChannelId);
+            Channel dynamicsChannel = thing.getChannel(dynamicsUID);
+            Channel targetChannel = thing.getChannel(targetUID);
+            if (Objects.nonNull(dynamicsChannel) && Objects.nonNull(targetChannel)) {
+                logger.debug("{} - handleDynamicsCommand() channelId:{}, command:{}, duration:{}", resourceId,
+                        channelId, command, duration);
+                handleCommand(dynamicsUID, duration);
+                handleCommand(targetUID, command);
+                return;
+            }
+        }
+        logger.warn("Dynamics command '{}' for thing '{}', channel '{}' and duration'{}' failed.", command,
+                thing.getUID(), channelId, duration);
+    }
+
+    @Override
+    public void initialize() {
+        Clip2ThingConfig config = getConfigAs(Clip2ThingConfig.class);
+
+        String resourceId = config.resourceId;
+        if (resourceId.isBlank()) {
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.api2.conf-error.resource-id-missing");
+            return;
+        }
+        thisResource.setId(resourceId);
+        this.resourceId = resourceId;
+        logger.debug("{} -> initialize()", resourceId);
+
+        updateThingFromLegacy();
+        updateStatus(ThingStatus.UNKNOWN);
+
+        dynamicsDurations.put(uid(null, CHANNEL_2_DYNAMICS), Duration.ZERO);
+        dynamicsExpireTimes.put(uid(null, CHANNEL_2_DYNAMICS), Instant.MIN);
+
+        disposing = false;
+        hasConnectivityIssue = false;
+        updatePropertiesDone = false;
+        updateDependenciesDone = false;
+        updateLightPropertiesDone = false;
+        updateLightCacheRequiredFieldsDone = false;
+        updateSceneContributorsDone = false;
+        legacyLightState = null;
+
+        Bridge bridge = getBridge();
+        if (Objects.nonNull(bridge)) {
+            BridgeHandler bridgeHandler = bridge.getHandler();
+            if (bridgeHandler instanceof Clip2BridgeHandler clip2BridgeHandler) {
+                clip2BridgeHandler.childInitialized();
+            }
+        }
+    }
+
+    /**
+     * Update the channel state depending on new resources sent from the bridge.
+     *
+     * @param resources a collection of Resource objects containing the new state.
+     */
+    public void onResources(Collection<Resource> resources) {
+        boolean sceneActivated = resources.stream()
+                .anyMatch(r -> sceneContributorsCache.containsKey(r.getId())
+                        && (Objects.requireNonNullElse(r.getSceneActive(), false)
+                                || Objects.requireNonNullElse(r.getSmartSceneActive(), false)));
+        for (Resource resource : resources) {
+            // Skip scene deactivation when we have also received a scene activation.
+            boolean updateChannels = !sceneActivated || !sceneContributorsCache.containsKey(resource.getId())
+                    || Objects.requireNonNullElse(resource.getSceneActive(), false)
+                    || Objects.requireNonNullElse(resource.getSmartSceneActive(), false);
+            onResource(resource, updateChannels);
+        }
+    }
+
+    /**
+     * Update the channel state depending on a new resource sent from the bridge.
+     *
+     * @param resource a Resource object containing the new state.
+     */
+    private void onResource(Resource resource) {
+        onResource(resource, true);
+    }
+
+    /**
+     * Update the channel state depending on a new resource sent from the bridge.
+     *
+     * @param resource a Resource object containing the new state.
+     * @param updateChannels update channels (otherwise only update cache/properties).
+     */
+    private void onResource(Resource resource, boolean updateChannels) {
+        if (disposing) {
+            return;
+        }
+        int resourceConsumedFlags = 0;
+        if (resourceId.equals(resource.getId())) {
+            if (resource.hasFullState()) {
+                thisResource = resource;
+                if (!updatePropertiesDone) {
+                    updateProperties(resource);
+                    resourceConsumedFlags = updatePropertiesDone ? FLAG_PROPERTIES_UPDATE : 0;
+                }
+            }
+            if (resource.getType() == ResourceType.MOTION_AREA_CONFIGURATION) {
+                resourceConsumedFlags |= updateChannels && updateChannels(resource) ? FLAG_CHANNELS_UPDATE : 0;
+            }
+            if (!updateDependenciesDone) {
+                resourceConsumedFlags |= FLAG_DEPENDENCIES_UPDATE;
+                cancelTask(updateDependenciesTask, false);
+                updateDependenciesTask = scheduler.submit(() -> updateDependencies());
+            }
+        } else {
+            if (SUPPORTED_SCENE_TYPES.contains(resource.getType())) {
+                resourceConsumedFlags = checkSceneResourceAddDelete(resource);
+            }
+            Resource cachedResource = getResourceFromCache(resource);
+            if (cachedResource != null) {
+                Setters.setResource(resource, cachedResource);
+                resourceConsumedFlags |= FLAG_CACHE_UPDATE;
+                resourceConsumedFlags |= updateChannels && updateChannels(resource) ? FLAG_CHANNELS_UPDATE : 0;
+                putResourceToCache(resource);
+                switch (resource.getType()) {
+                    case DEVICE_SOFTWARE_UPDATE:
+                        refreshSoftwareStatusUI(resource);
+                        break;
+                    default:
+                }
+            }
+        }
+        if (resourceConsumedFlags != 0) {
+            logger.debug("{} -> onResource() consumed resource {}, flags:{}", resourceId, resource,
+                    resourceConsumedFlags);
+        }
+    }
+
+    /**
+     * Check if a scene resource is of type 'ADD or 'DELETE' and either add it to, or delete it from, the two scene
+     * resource caches; and refresh the scene channel state description selection options.
+     *
+     * @param sceneResource the respective scene resource
+     * @return a flag value indicating if the scene was added or deleted
+     */
+    private int checkSceneResourceAddDelete(Resource sceneResource) {
+        switch (sceneResource.getContentType()) {
+            case ADD:
+                if (getResourceReference().equals(sceneResource.getGroup())) {
+                    sceneResource.setContentType(ContentType.FULL_STATE);
+                    sceneContributorsCache.put(sceneResource.getId(), sceneResource);
+                    sceneResourceEntries.put(sceneResource.getName(), sceneResource);
+                    updateSceneChannelStateDescription();
+                    return FLAG_SCENE_ADD;
+                }
+                break;
+            case DELETE:
+                Resource deletedScene = sceneContributorsCache.remove(sceneResource.getId());
+                if (Objects.nonNull(deletedScene)) {
+                    sceneResourceEntries.remove(deletedScene.getName());
+                    updateSceneChannelStateDescription();
+                    return FLAG_SCENE_DELETE;
+                }
+            default:
+        }
+        return 0;
+    }
+
+    private void putResourceToCache(Resource resource) {
+        if (SUPPORTED_SCENE_TYPES.contains(resource.getType())) {
+            sceneContributorsCache.put(resource.getId(), resource);
+        } else {
+            serviceContributorsCache.put(resource.getId(), resource);
+        }
+    }
+
+    private @Nullable Resource getResourceFromCache(Resource resource) {
+        return SUPPORTED_SCENE_TYPES.contains(resource.getType()) //
+                ? sceneContributorsCache.get(resource.getId())
+                : serviceContributorsCache.get(resource.getId());
+    }
+
+    /**
+     * Update the thing internal state depending on a full list of resources sent from the bridge. If the resourceType
+     * is SCENE then call updateScenes(), otherwise if the resource refers to this thing, consume it via onResource() as
+     * any other resource, or else if the resourceType nevertheless matches the thing type, set the thing state offline.
+     *
+     * @param resourceType the type of the resources in the list.
+     * @param fullResources the full list of resources of the given type.
+     */
+    public void onResourcesList(ResourceType resourceType, List<Resource> fullResources) {
+        if (SUPPORTED_SCENE_TYPES.contains(resourceType)) {
+            updateSceneContributors(fullResources);
+        } else {
+            fullResources.stream().filter(r -> resourceId.equals(r.getId())).findAny()
+                    .ifPresentOrElse(r -> onResource(r), () -> {
+                        if (resourceType == thisResource.getType()) {
+                            logger.debug("{} -> onResourcesList() configuration error: unknown resourceId", resourceId);
+                            updateStatus(ThingStatusDetail.GONE, "@text/offline.api2.gone.resource-id-unknown");
+                        }
+                    });
+        }
+    }
+
+    /**
+     * Process the incoming Resource to initialize the alert channel.
+     *
+     * @param channelUID the channel UID of the alert channel.
+     * @param resource a Resource possibly with an Alerts element.
+     */
+    private void updateAlertChannel(ChannelUID channelUID, Resource resource) {
+        Alerts alerts = resource.getAlerts();
+        if (Objects.nonNull(alerts)) {
+            List<StateOption> stateOptions = alerts.getActionValues().stream().map(action -> action.name())
+                    .map(actionId -> new StateOption(actionId, actionId)).toList();
+            if (!stateOptions.isEmpty()) {
+                stateDescriptionProvider.setStateOptions(channelUID, stateOptions);
+                logger.debug("{} -> updateAlerts() found {} associated alerts", resourceId, stateOptions.size());
+            }
+        }
+    }
+
+    private void updateAlertChannel(String channelID, Resource resource) {
+        updateAlertChannel(uid(null, channelID), resource);
+    }
+
+    /**
+     * If this v2 thing has a matching v1 legacy thing in the system, then for each channel in the v1 thing that
+     * corresponds to an equivalent channel in this v2 thing, and for all items that are linked to the v1 channel,
+     * create a new channel/item link between that item and the respective v2 channel in this thing.
+     */
+    private void updateChannelItemLinksFromLegacy() {
+        if (!disposing) {
+            legacyLinkedChannelUIDs.forEach(legacyLinkedChannelUID -> {
+                String targetChannelId = REPLICATE_CHANNEL_ID_MAP.get(legacyLinkedChannelUID.getId());
+                if (Objects.nonNull(targetChannelId)) {
+                    Channel targetChannel = thing.getChannel(targetChannelId);
+                    if (Objects.nonNull(targetChannel)) {
+                        ChannelUID uid = targetChannel.getUID();
+                        itemChannelLinkRegistry.getLinkedItems(legacyLinkedChannelUID).forEach(linkedItem -> {
+                            String item = linkedItem.getName();
+                            if (!itemChannelLinkRegistry.isLinked(item, uid)) {
+                                if (logger.isDebugEnabled()) {
+                                    logger.debug(
+                                            "{} -> updateChannelItemLinksFromLegacy() item:{} linked to channel:{}",
+                                            resourceId, item, uid);
+                                } else {
+                                    logger.info("Item '{}' linked to thing '{}' channel '{}'", item, thing.getUID(),
+                                            targetChannelId);
+                                }
+                                itemChannelLinkRegistry.add(new ItemChannelLink(item, uid));
+                            }
+                        });
+                    }
+                }
+            });
+            legacyLinkedChannelUIDs.clear();
+        }
+    }
+
+    /**
+     * The full initial list of main channels is initially created from the thing XML declaration. And if
+     * there is an auxiliary light then additional channels are added to the list dynamically by cloning the main
+     * channels and applying a 'lightN' prefix.
+     *
+     * By this time the {@link #supportedChannelUIDs} set has been populated from the initial poll based on
+     * the actual capabilities of the light; specifically the set contains only those channels which returned
+     * a {@link State} that is NOT {@link UndefType.NULL}.
+     *
+     * The final list of channels is created by a 'subtractive' method i.e. the initial full set of channels
+     * is pruned by removing any channels that are not in {@link #supportedChannelUIDs}.
+     *
+     * Finally, warns if there are channels in {@link #supportedChannelUIDs} which are not in the thing.
+     *
+     * @throws AssetNotLoadedException if the bridge handler is not yet loaded
+     */
+    private void updateChannelList() throws AssetNotLoadedException {
+        if (!disposing) {
+            logger.debug("{} -> updateChannelList()", resourceId);
+
+            addRemoveCorrelatedChannelUIDs();
+
+            List<Channel> auxChannels = buildAuxiliaryLightChannels();
+            List<Channel> fullChannels = new ArrayList<>(thing.getChannels());
+            fullChannels.addAll(auxChannels);
+
+            List<Channel> keepChannels = fullChannels.stream().filter(c -> supportedChannelUIDs.contains(c.getUID()))
+                    .toList();
+
+            if (!auxChannels.isEmpty() || keepChannels.size() != thing.getChannels().size()) {
+                if (logger.isDebugEnabled()) {
+                    Set<ChannelUID> keepUIDs = keepChannels.stream().map(c -> c.getUID()).collect(Collectors.toSet());
+                    thing.getChannels().stream().map(c -> c.getUID()).filter(uid -> !keepUIDs.contains(uid))
+                            .forEach(uid -> logger.debug("{} -> updateChannelList() removing unused channel '{}'",
+                                    resourceId, uid.getId()));
+                }
+                updateThing(editThing().withChannels(keepChannels).build());
+
+                // auxiliary light channels did not exist when the state arrived, so push cached state now
+                if (!auxChannels.isEmpty()) {
+                    auxiliaryLightGroups.values().stream().map(serviceContributorsCache::get).filter(Objects::nonNull)
+                            .forEach(this::updateChannels);
+                }
+            }
+
+            if (logger.isDebugEnabled()) {
+                supportedChannelUIDs.stream().filter(uid -> Objects.isNull(thing.getChannel(uid))) //
+                        .forEach(uid -> logger.debug("{} -> updateChannelList() required channel '{}' missing",
+                                resourceId, uid));
+            } else {
+                supportedChannelUIDs.stream().filter(uid -> Objects.isNull(thing.getChannel(uid)))
+                        .forEach(uid -> logger.warn(
+                                "Thing '{}' is missing required channel '{}'. Please recreate the thing!",
+                                thing.getUID(), uid));
+            }
+        }
+    }
+
+    /**
+     * Add correlated channel ID's, and remove forbidden channel ID's.
+     *
+     * Adjusts the channel list so that only the highest level channel is available in the normal channel list. If a
+     * light supports the color channel, then it's brightness and switch can be commanded via the 'B' part of the HSB
+     * channel value. And if it supports the brightness channel the switch can be controlled via the brightness. So we
+     * can remove these lower level channels from the normal channel list.
+     *
+     * For more advanced applications, it is necessary to orthogonally command the color xy parameter, dimming
+     * parameter, and/or on/off parameter independently. So we add corresponding advanced level 'CHANNEL_2_BLAH_ONLY'
+     * channels for that purpose. Since they are advanced level, normal users should normally not be confused by them,
+     * yet advanced users can use them nevertheless.
+     */
+    private void addRemoveCorrelatedChannelUIDs() {
+        List<@Nullable String> groupIds = new ArrayList<>();
+        groupIds.add(null); // main channels
+        groupIds.addAll(auxiliaryLightGroups.keySet());
+
+        groupIds.stream().forEach(groupId -> {
+            if (supportedChannelUIDs.contains(uid(groupId, CHANNEL_2_COLOR))) {
+                supportedChannelUIDs.add(uid(groupId, CHANNEL_2_COLOR_XY_ONLY));
+                supportedChannelUIDs.remove(uid(groupId, CHANNEL_2_BRIGHTNESS));
+                supportedChannelUIDs.add(uid(groupId, CHANNEL_2_DIMMING_ONLY));
+                supportedChannelUIDs.remove(uid(groupId, CHANNEL_2_SWITCH));
+                supportedChannelUIDs.add(uid(groupId, CHANNEL_2_ON_OFF_ONLY));
+            }
+            if (supportedChannelUIDs.contains(uid(groupId, CHANNEL_2_BRIGHTNESS))) {
+                supportedChannelUIDs.add(uid(groupId, CHANNEL_2_DIMMING_ONLY));
+                supportedChannelUIDs.remove(uid(groupId, CHANNEL_2_SWITCH));
+                supportedChannelUIDs.add(uid(groupId, CHANNEL_2_ON_OFF_ONLY));
+            }
+            if (supportedChannelUIDs.contains(uid(groupId, CHANNEL_2_SWITCH))) {
+                supportedChannelUIDs.add(uid(groupId, CHANNEL_2_ON_OFF_ONLY));
+            }
+        });
+    }
+
+    /**
+     * Build a list of the auxiliary light channels. These are created based on the main
+     * (front) channels but with their channel UID containing a group ID.
+     *
+     * @throws AssetNotLoadedException if the bridge handler is not yet loaded
+     */
+    private List<Channel> buildAuxiliaryLightChannels() throws AssetNotLoadedException {
+        if (disposing || auxiliaryLightGroups.isEmpty()) {
+            return List.of();
+        }
+        String labelPrefix = getBridgeHandler().getLocalizedText(AUX_CHANNEL_PREFIX_KEY);
+        List<Channel> result = new ArrayList<>();
+        for (String groupId : auxiliaryLightGroups.keySet()) {
+            Matcher matcher = LIGHT_GROUP_PATTERN.matcher(groupId);
+            if (!matcher.matches()) {
+                logger.warn("{} -> buildAuxiliaryLightChannels() invalid groupId '{}'", resourceId, groupId);
+                continue;
+            }
+            String labelPrefix2 = labelPrefix + " " + matcher.group(1) + " ";
+            for (Channel mainChannel : thing.getChannels()) {
+                if (mainChannel.getUID().getGroupId() != null) {
+                    continue; // skip non main channels
+                }
+                ChannelTypeUID typeUID = mainChannel.getChannelTypeUID();
+                if (typeUID == null) {
+                    continue;
+                }
+                ChannelUID groupUID = uid(groupId, mainChannel.getUID().getIdWithoutGroup());
+                if (thing.getChannel(groupUID) != null || !supportedChannelUIDs.contains(groupUID)) {
+                    continue; // already exists, or not supported
+                }
+                ChannelBuilder builder = ChannelBuilder.create(groupUID, mainChannel.getAcceptedItemType())
+                        .withType(typeUID).withKind(mainChannel.getKind()).withDefaultTags(mainChannel.getDefaultTags())
+                        .withProperties(mainChannel.getProperties())
+                        .withAutoUpdatePolicy(mainChannel.getAutoUpdatePolicy())
+                        .withConfiguration(mainChannel.getConfiguration());
+                String label = mainChannel.getLabel();
+                if (label != null) {
+                    builder.withLabel(labelPrefix2 + label);
+                }
+                String description = mainChannel.getDescription();
+                if (description != null) {
+                    builder.withDescription(description);
+                }
+                result.add(builder.build());
+                logger.debug("{} -> buildAuxiliaryLightChannels() adding channel '{}'", resourceId, groupUID);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Update the state of the existing channels.
+     *
+     * @param resource the Resource containing the new channel state.
+     * @return true if the channel was found and updated.
+     */
+    boolean updateChannels(Resource resource) {
+        try {
+            String groupId = ResourceType.LIGHT == resource.getType() ? groupIdOf(resource.getId()) : null;
+            if (groupId != null) {
+                return updateAuxiliaryLightChannels(groupId, resource);
+            }
+            if (isUnresolvedLightResource(resource)) {
+                logger.debug("{} -> updateChannels() ignored not yet resolved light resource {}", resourceId, resource);
+                return false;
+            }
+            return updateMainChannels(resource);
+        } catch (CriticalFieldMissingException e) {
+            // this should never happen but log it just in case
+            logger.warn("{} -> updateChannels() error {}", resourceId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Returns true if the resource is a LIGHT that cannot yet be attributed to this thing's lights, i.e. it is
+     * neither an auxiliary light nor the main light. This includes the period before updateLookups() has succeeded,
+     * when neither the main light ID nor the auxiliary light ID is known.
+     */
+    private boolean isUnresolvedLightResource(Resource resource) {
+        if (ResourceType.LIGHT != resource.getType() || !auxiliaryLightGroups.isEmpty()) {
+            return false;
+        }
+        String mainLightId = commandResourceIds.get(ResourceType.LIGHT);
+        return mainLightId == null || !mainLightId.equals(resource.getId());
+    }
+
+    /**
+     * Update the state of the auxiliary light channels if existing.
+     *
+     * @param resource the Resource containing the new channel state.
+     * @return true if the channel was found and updated.
+     */
+    private boolean updateAuxiliaryLightChannels(String groupId, Resource resource)
+            throws CriticalFieldMissingException {
+        logger.debug("{} -> updateAuxiliaryLightChannels() group {} from resource {}", resourceId, groupId, resource);
+        boolean fullUpdate = resource.hasFullState();
+        if (fullUpdate) {
+            updateAuxiliaryLightCacheRequiredFields(resource);
+            updateEffectChannel(uid(groupId, CHANNEL_2_EFFECT), resource);
+            updateColorTemperatureAbsoluteChannel(uid(groupId, CHANNEL_2_COLOR_TEMP_ABSOLUTE), resource);
+            updateAlertChannel(uid(groupId, CHANNEL_2_ALERT), resource);
+        }
+        updateState(uid(groupId, CHANNEL_2_COLOR), resource.getColorState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_COLOR_XY_ONLY), resource.getColorXyState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_COLOR_TEMP_PERCENT), resource.getColorTemperaturePercentState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_COLOR_TEMP_ABSOLUTE), resource.getColorTemperatureAbsoluteState(),
+                fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_BRIGHTNESS), resource.getBrightnessState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_DIMMING_ONLY), resource.getDimmingState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_SWITCH), resource.getSwitchState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_ON_OFF_ONLY), resource.getOnOffState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_EFFECT), resource.getEffectState(), fullUpdate);
+        updateState(uid(groupId, CHANNEL_2_ALERT), resource.getAlertState(), fullUpdate);
+        if (thisResource.getType() == ResourceType.DEVICE) {
+            updateState(CHANNEL_2_LAST_UPDATED, new DateTimeType(), fullUpdate);
+        }
+        updateGradientStates(groupId, resource, fullUpdate);
+        return true;
+    }
+
+    /**
+     * Returns the group ID of the given light resource ID, or null if not found.
+     */
+    private @Nullable String groupIdOf(String lightResourceId) {
+        return auxiliaryLightGroups.entrySet().stream().filter(e -> e.getValue().equals(lightResourceId))
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+    }
+
+    /**
+     * Create the channel UID for the given channel channel and ID.
+     *
+     * @param channelId the channel ID.
+     * @return the main channel UID.
+     */
+    private ChannelUID uid(@Nullable String groupId, String channelId) {
+        return groupId == null ? new ChannelUID(thing.getUID(), channelId)
+                : new ChannelUID(thing.getUID(), groupId, channelId);
+    }
+
+    /**
+     * Create the gradient channel UID for the given index.
+     *
+     * @param groupId the group ID of the auxiliary light, or null for the main light.
+     * @param index the gradient index (0-based).
+     * @return the gradient channel UID.
+     */
+    private ChannelUID gradientUID(@Nullable String groupId, int index) {
+        return uid(groupId, CHANNEL_2_GRADIENT_FORMAT.formatted(index + 1));
+    }
+
+    /**
+     * Update the state of the existing main channels.
+     *
+     * @param resource the Resource containing the new channel state.
+     * @return true if the channel was found and updated.
+     */
+    private boolean updateMainChannels(Resource resource) throws CriticalFieldMissingException {
+        logger.debug("{} -> updateChannels() from resource {}", resourceId, resource);
+        boolean fullUpdate = resource.hasFullState();
+        switch (resource.getType()) {
+            case BELL_BUTTON:
+                if (fullUpdate) {
+                    extendedResourceTypes.put(ResourceType.BUTTON, resource.getType());
+                }
+                // fall through for button related channels
+
+            case BUTTON:
+                if (fullUpdate) {
+                    addSupportedChannel(CHANNEL_2_BUTTON_LAST_EVENT);
+                    addSupportedChannel(CHANNEL_2_BUTTON_LAST_UPDATED);
+                    controlIds.put(resource.getId(), resource.getControlId());
+                } else {
+                    State buttonState = resource.getButtonEventState(controlIds);
+                    updateState(CHANNEL_2_BUTTON_LAST_EVENT, buttonState, fullUpdate);
+                }
+                // Update channel from timestamp if last button pressed.
+                State buttonLastUpdatedState = resource.getButtonLastUpdatedState();
+                if (buttonLastUpdatedState instanceof DateTimeType dateTimeState) {
+                    Instant buttonLastUpdatedInstant = dateTimeState.getInstant();
+                    if (buttonLastUpdatedInstant.isAfter(buttonGroupLastUpdated)) {
+                        updateState(CHANNEL_2_BUTTON_LAST_UPDATED, buttonLastUpdatedState, fullUpdate);
+                        buttonGroupLastUpdated = buttonLastUpdatedInstant;
+                    }
+                } else if (Instant.MIN.equals(buttonGroupLastUpdated)) {
+                    updateState(CHANNEL_2_BUTTON_LAST_UPDATED, buttonLastUpdatedState, fullUpdate);
+                }
+                break;
+
+            case DEVICE_POWER:
+                updateState(CHANNEL_2_BATTERY_LEVEL, resource.getBatteryLevelState(), fullUpdate);
+                updateState(CHANNEL_2_BATTERY_LOW, resource.getBatteryLowState(), fullUpdate);
+                break;
+
+            case LIGHT:
+                ColorXy color = resource.getColorXy();
+                ColorTemperature colorTemp = resource.getColorTemperature();
+                LegacyLightState legacyState = legacyLightState;
+                PairXy legacyColor = (legacyState != null && colorTemp != null && color != null) ? color.getXY() : null;
+
+                if (fullUpdate) {
+                    updateLightProperties(resource);
+                    updateLightCacheRequiredFields(resource);
+                    updateEffectChannel(CHANNEL_2_EFFECT, resource);
+                    updateColorTemperatureAbsoluteChannel(CHANNEL_2_COLOR_TEMP_ABSOLUTE, resource);
+                    if (legacyState != null && legacyColor != null && colorTemp != null) {
+                        legacyState.setParameters(legacyColor, colorTemp.getMirek());
+                        logger.debug("{} -> updateChannels() initialised operating mode work-around legacy state {}",
+                                resourceId, legacyState);
+                    }
+                }
+
+                State colorState = resource.getColorState();
+                State colorXyState = resource.getColorXyState();
+                State colorTempState = resource.getColorTemperaturePercentState();
+                State colorTempAbsState = resource.getColorTemperatureAbsoluteState();
+
+                if (legacyState != null && legacyColor != null && colorTemp != null && color != null) {
+                    State colorPrior = colorState;
+                    State colorTempPrior = colorTempState;
+                    legacyState.setParameters(legacyColor, colorTemp.getMirek());
+                    color.setXY(legacyState.getXY());
+                    colorTemp.setMirek(legacyState.getMirek());
+                    colorState = resource.getColorState();
+                    colorXyState = resource.getColorXyState();
+                    colorTempState = resource.getColorTemperaturePercentState();
+                    colorTempAbsState = resource.getColorTemperatureAbsoluteState();
+                    logger.debug(
+                            "{} -> updateChannels() operating mode work-around legacy state '{}' transformed [{}]->[{}] and {}->{}",
+                            resourceId, legacyState, colorPrior, colorState, colorTempPrior, colorTempState);
+                }
+
+                updateState(CHANNEL_2_COLOR, colorState, fullUpdate);
+                updateState(CHANNEL_2_COLOR_XY_ONLY, colorXyState, fullUpdate);
+                updateState(CHANNEL_2_COLOR_TEMP_PERCENT, colorTempState, fullUpdate);
+                updateState(CHANNEL_2_COLOR_TEMP_ABSOLUTE, colorTempAbsState, fullUpdate);
+                updateState(CHANNEL_2_EFFECT, resource.getEffectState(), fullUpdate);
+                updateGradientStates(null, resource, fullUpdate); // update main light gradient states
+                // fall through for dimming and on/off related channels
+
+            case GROUPED_LIGHT:
+                if (fullUpdate) {
+                    updateAlertChannel(CHANNEL_2_ALERT, resource);
+                    updateLightCacheRequiredFields(resource);
+                }
+                updateState(CHANNEL_2_BRIGHTNESS, resource.getBrightnessState(), fullUpdate);
+                updateState(CHANNEL_2_DIMMING_ONLY, resource.getDimmingState(), fullUpdate);
+                updateState(CHANNEL_2_SWITCH, resource.getSwitchState(), fullUpdate);
+                updateState(CHANNEL_2_ON_OFF_ONLY, resource.getOnOffState(), fullUpdate);
+                updateState(CHANNEL_2_ALERT, resource.getAlertState(), fullUpdate);
+                break;
+
+            case GROUPED_LIGHT_LEVEL:
+            case LIGHT_LEVEL:
+                updateState(CHANNEL_2_LIGHT_LEVEL, resource.getLightLevelState(), fullUpdate);
+                updateState(CHANNEL_2_LIGHT_LEVEL_LAST_UPDATED, resource.getLightLevelLastUpdatedState(), fullUpdate);
+                updateState(CHANNEL_2_LIGHT_LEVEL_ENABLED, resource.getEnabledState(), fullUpdate);
+                break;
+
+            case CAMERA_MOTION:
+                if (fullUpdate) {
+                    extendedResourceTypes.put(ResourceType.MOTION, resource.getType());
+                }
+                updateState(CHANNEL_2_MOTION, resource.getMotionState(), fullUpdate);
+                updateState(CHANNEL_2_MOTION_LAST_UPDATED, resource.getMotionLastUpdatedState(), fullUpdate);
+                updateState(CHANNEL_2_MOTION_ENABLED, resource.getEnabledState(), fullUpdate);
+                break;
+
+            case CONVENIENCE_AREA_MOTION:
+                if (fullUpdate) {
+                    extendedResourceTypes.put(ResourceType.MOTION, resource.getType());
+                }
+                updateState(CHANNEL_2_MOTION, resource.getMotionState(), fullUpdate);
+                updateState(CHANNEL_2_MOTION_LAST_UPDATED, resource.getMotionLastUpdatedState(), fullUpdate);
+                break;
+
+            case MOTION_AREA_CONFIGURATION:
+                updateState(CHANNEL_2_MOTION_AREA_ENABLED, resource.getEnabledState(), fullUpdate);
+                break;
+
+            case GROUPED_MOTION:
+            case MOTION:
+                updateState(CHANNEL_2_MOTION, resource.getMotionState(), fullUpdate);
+                updateState(CHANNEL_2_MOTION_LAST_UPDATED, resource.getMotionLastUpdatedState(), fullUpdate);
+                updateState(CHANNEL_2_MOTION_ENABLED, resource.getEnabledState(), fullUpdate);
+                break;
+
+            case RELATIVE_ROTARY:
+                if (fullUpdate) {
+                    addSupportedChannel(CHANNEL_2_ROTARY_STEPS);
+                    addSupportedChannel(CHANNEL_2_ROTARY_STEPS_LAST_UPDATED);
+                } else {
+                    updateState(CHANNEL_2_ROTARY_STEPS, resource.getRotaryStepsState(), fullUpdate);
+                }
+                updateState(CHANNEL_2_ROTARY_STEPS_LAST_UPDATED, resource.getRotaryStepsLastUpdatedState(), fullUpdate);
+                break;
+
+            case SECURITY_AREA_MOTION:
+                updateState(CHANNEL_2_SECURITY_MOTION, resource.getMotionState(), fullUpdate);
+                updateState(CHANNEL_2_SECURITY_MOTION_LAST_UPDATED, resource.getMotionLastUpdatedState(), fullUpdate);
+                break;
+
+            case TEMPERATURE:
+                updateState(CHANNEL_2_TEMPERATURE, resource.getTemperatureState(), fullUpdate);
+                updateState(CHANNEL_2_TEMPERATURE_LAST_UPDATED, resource.getTemperatureLastUpdatedState(), fullUpdate);
+                updateState(CHANNEL_2_TEMPERATURE_ENABLED, resource.getEnabledState(), fullUpdate);
+                break;
+
+            case ZGP_CONNECTIVITY:
+            case ZIGBEE_CONNECTIVITY:
+                updateConnectivityState(resource);
+                break;
+
+            case SCENE:
+                updateState(CHANNEL_2_SCENE, resource.getSceneState(), fullUpdate);
+                break;
+
+            case CONTACT:
+                updateState(CHANNEL_2_SECURITY_CONTACT, resource.getContactState(), fullUpdate);
+                updateState(CHANNEL_2_SECURITY_CONTACT_LAST_UPDATED, resource.getContactLastUpdatedState(), fullUpdate);
+                updateState(CHANNEL_2_SECURITY_CONTACT_ENABLED, resource.getEnabledState(), fullUpdate);
+                break;
+
+            case TAMPER:
+                updateState(CHANNEL_2_SECURITY_TAMPER, resource.getTamperState(), fullUpdate);
+                updateState(CHANNEL_2_SECURITY_TAMPER_LAST_UPDATED, resource.getTamperLastUpdatedState(), fullUpdate);
+                break;
+
+            case SMART_SCENE:
+                updateState(CHANNEL_2_SCENE, resource.getSmartSceneState(), fullUpdate);
+                break;
+
+            case SPEAKER:
+                if (fullUpdate) {
+                    addSupportedChannel(CHANNEL_2_VOLUME);
+                    addSupportedChannel(CHANNEL_2_DURATION);
+                    updateSoundChannelOptions(resource);
+                }
+                updateState(CHANNEL_2_ALARM_SOUND, resource.getSoundState(ChimeType.ALARM), fullUpdate);
+                updateState(CHANNEL_2_ALERT_SOUND, resource.getSoundState(ChimeType.ALERT), fullUpdate);
+                updateState(CHANNEL_2_CHIME_SOUND, resource.getSoundState(ChimeType.CHIME), fullUpdate);
+                updateState(CHANNEL_2_MUTE, resource.getSoundMuteState(), fullUpdate);
+                break;
+
+            default:
+                return false;
+        }
+
+        if (thisResource.getType() == ResourceType.DEVICE) {
+            updateState(CHANNEL_2_LAST_UPDATED, new DateTimeType(), fullUpdate);
+        }
+        return true;
+    }
+
+    /**
+     * Check the Zigbee connectivity and set the thing online status accordingly. If the thing is offline then set all
+     * its channel states to undefined, otherwise execute a refresh command to update channels to the latest current
+     * state.
+     *
+     * @param resource a Resource that potentially contains the Zigbee connectivity state.
+     */
+    private void updateConnectivityState(Resource resource) {
+        ZigbeeStatus zigbeeStatus = resource.getZigbeeStatus();
+        if (Objects.nonNull(zigbeeStatus)) {
+            logger.debug("{} -> updateConnectivityState() thingStatus:{}, zigbeeStatus:{}", resourceId,
+                    thing.getStatus(), zigbeeStatus);
+            hasConnectivityIssue = zigbeeStatus.isConnectivityIssue();
+            if (hasConnectivityIssue) {
+                // unknown values also parse to DISCONNECTED, so only a literal 'disconnected' gets its own text
+                String description = ZigbeeStatus.DISCONNECTED.name().equalsIgnoreCase(resource.getZigbeeStatusValue())
+                        ? TEXT_OFFLINE_ZIGBEE_DISCONNECTED
+                        : TEXT_OFFLINE_ZIGBEE_CONNECTIVITY_ISSUE;
+                // publish unless the thing already shows exactly this, so that a status set by anybody else heals
+                ThingStatusInfo statusInfo = thing.getStatusInfo();
+                if (statusInfo.getStatus() != ThingStatus.OFFLINE
+                        || statusInfo.getStatusDetail() != ThingStatusDetail.COMMUNICATION_ERROR
+                        || !description.equals(statusInfo.getDescription())) {
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, description);
+                    supportedChannelUIDs.forEach(channelUID -> updateState(channelUID, UnDefType.UNDEF));
+                }
+                return;
+            }
+            String fwState = thing.getProperties().get(PROPERTY_FIRMWARE_UPDATE_STATE);
+            if (UpdateStatusV2.INSTALLING.toString().equals(fwState)) {
+                // firmware update still in progress; remain OFFLINE(FIRMWARE_UPDATING)
+                updateStatus(ThingStatusDetail.FIRMWARE_UPDATING);
+                return;
+            }
+            if (thing.getStatus() != ThingStatus.ONLINE) {
+                // the updateStatus() override below takes care of setting the status detail and description
+                updateStatus(ThingStatus.ONLINE);
+                refreshAllChannels();
+            }
+        }
+    }
+
+    /**
+     * Get all resources needed for building the thing state. Build the forward / reverse contributor lookup maps. Set
+     * up the final list of channels in the thing.
+     */
+    private synchronized void updateDependencies() {
+        if (!disposing && !updateDependenciesDone) {
+            logger.debug("{} -> updateDependencies()", resourceId);
+            try {
+                if (!updatePropertiesDone) {
+                    logger.debug("{} -> updateDependencies() properties not initialized", resourceId);
+                    return;
+                }
+                if (!updateSceneContributorsDone && !updateSceneContributors()) {
+                    logger.debug("{} -> updateDependencies() scenes not initialized", resourceId);
+                    return;
+                }
+                updateLookups();
+                updateServiceContributors();
+                updateChannelList();
+                updateChannelItemLinksFromLegacy();
+                updateEquipmentTag();
+                if (!hasConnectivityIssue) {
+                    updateStatus(ThingStatus.ONLINE);
+                }
+                updateDependenciesDone = true;
+            } catch (ApiException e) {
+                logger.debug("{} -> updateDependencies() {}", resourceId, e.getMessage(), e);
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            } catch (AssetNotLoadedException e) {
+                logger.debug("{} -> updateDependencies() {}", resourceId, e.getMessage(), e);
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.api2.conf-error.assets-not-loaded");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
+     * Process the incoming Resource to initialize the fixed resp. timed effects channel.
+     *
+     * @param channelUID the channel UID of the effects channel.
+     * @param resource a Resource possibly containing a fixed and/or timed effects element.
+     */
+    public void updateEffectChannel(ChannelUID channelUID, Resource resource) {
+        Effects fixedEffects = resource.getFixedEffects();
+        TimedEffects timedEffects = resource.getTimedEffects();
+        List<StateOption> stateOptions = Stream
+                .concat(Objects.nonNull(fixedEffects) ? fixedEffects.getStatusValues().stream() : Stream.empty(),
+                        Objects.nonNull(timedEffects) ? timedEffects.getStatusValues().stream() : Stream.empty())
+                .map(effect -> {
+                    String effectName = EffectType.of(effect).name();
+                    return new StateOption(effectName, effectName);
+                }).distinct().toList();
+        if (!stateOptions.isEmpty()) {
+            stateDescriptionProvider.setStateOptions(channelUID, stateOptions);
+            logger.debug("{} -> updateEffects() found {} effects", resourceId, stateOptions.size());
+        }
+    }
+
+    public void updateEffectChannel(String channelID, Resource resource) {
+        updateEffectChannel(uid(null, channelID), resource);
+    }
+
+    /**
+     * Process the incoming Resource to initialize the colour temperature absolute channel's state description based on
+     * the minimum and maximum values supported by the lamp's Mirek schema.
+     *
+     * @param channelUID the channel UID of the color temperature absolute channel.
+     * @param resource a Resource possibly containing a color temperature element and respective Mirek schema element.
+     */
+    private void updateColorTemperatureAbsoluteChannel(ChannelUID channelUID, Resource resource) {
+        ColorTemperature colorTemperature = resource.getColorTemperature();
+        if (colorTemperature != null) {
+            MirekSchema mirekSchema = colorTemperature.getMirekSchema();
+            if (mirekSchema != null) {
+                stateDescriptionProvider.setMinMaxKelvin(channelUID, 1000000 / mirekSchema.getMirekMaximum(),
+                        1000000 / mirekSchema.getMirekMinimum());
+            }
+        }
+    }
+
+    private void updateColorTemperatureAbsoluteChannel(String channelID, Resource resource) {
+        updateColorTemperatureAbsoluteChannel(uid(null, channelID), resource);
+    }
+
+    /**
+     * Update the light properties.
+     *
+     * @param resource a Resource object containing the property data.
+     */
+    private synchronized void updateLightProperties(Resource resource) {
+        if (!disposing && !updateLightPropertiesDone && (ResourceType.LIGHT == resource.getType())) {
+            logger.debug("{} -> updateLightProperties()", resourceId);
+
+            Dimming dimming = resource.getDimming();
+            thing.setProperty(PROPERTY_DIMMING_RANGE, Objects.nonNull(dimming) ? dimming.toPropertyValue() : null);
+
+            MirekSchema mirekSchema = resource.getMirekSchema();
+            thing.setProperty(PROPERTY_COLOR_TEMP_RANGE,
+                    Objects.nonNull(mirekSchema) ? mirekSchema.toPropertyValue() : null);
+
+            ColorXy colorXy = resource.getColorXy();
+            Gamut2 gamut = Objects.nonNull(colorXy) ? colorXy.getGamut2() : null;
+            thing.setProperty(PROPERTY_COLOR_GAMUT, Objects.nonNull(gamut) ? gamut.toPropertyValue() : null);
+
+            updateLightPropertiesDone = true;
+        }
+    }
+
+    /**
+     * Initialize the lookup maps of resources that contribute to the thing state.
+     *
+     * @throws InterruptedException
+     * @throws AssetNotLoadedException
+     * @throws ApiException
+     */
+    private void updateLookups() throws ApiException, AssetNotLoadedException, InterruptedException {
+        if (!disposing) {
+            logger.debug("{} -> updateLookups()", resourceId);
+
+            // get supported services
+            List<ResourceReference> services = thisResource.getServiceReferences();
+            List<ResourceReference> lights = services.stream().filter(s -> ResourceType.LIGHT == s.getType()).toList();
+
+            String mainId = null;
+            Map<String, String> auxiliaryGroups = new LinkedHashMap<>();
+
+            if (lights.size() > 1) {
+                List<ResourceReference> auxiliaries = new ArrayList<>();
+                List<ResourceReference> unprocessed = new ArrayList<>(lights);
+
+                // first resolve by archetype (Twilight / Up-and-Down)
+                for (ResourceReference light : lights) {
+                    Archetype archetype = getLightArchetype(light);
+                    if (FRONT_ARCHETYPES.contains(archetype) && mainId == null) {
+                        mainId = light.getId();
+                        unprocessed.remove(light);
+                    } else if (BACK_ARCHETYPES.contains(archetype)) {
+                        auxiliaries.add(light);
+                        unprocessed.remove(light);
+                    }
+                }
+
+                // fallback: first unresolved light is the main light
+                if (mainId == null && !unprocessed.isEmpty()) {
+                    mainId = unprocessed.remove(0).getId();
+                }
+
+                // all other light services must also be auxiliary lights
+                auxiliaries.addAll(unprocessed);
+
+                int groupSuffix = 2;
+                for (ResourceReference auxiliary : auxiliaries) {
+                    if (groupSuffix > MAX_LIGHTS) {
+                        logger.debug("{} -> updateLookups() ignoring auxiliary light {}; max {} lights", resourceId,
+                                auxiliary.getId(), MAX_LIGHTS);
+                        break;
+                    }
+                    auxiliaryGroups.put(LIGHT_GROUP_FORMAT.formatted(groupSuffix++),
+                            Objects.requireNonNull(auxiliary.getId()));
+                }
+            }
+
+            // add supported services to contributorsCache
+            serviceContributorsCache.clear();
+            serviceContributorsCache.putAll(services.stream()
+                    .collect(Collectors.toMap(ResourceReference::getId, r -> new Resource(r.getType()))));
+
+            // add supported services to commandResourceIds
+            commandResourceIds.clear();
+            commandResourceIds.putAll(services.stream() // use a 'mergeFunction' to prevent duplicates
+                    .collect(Collectors.toMap(ResourceReference::getType, ResourceReference::getId, (r1, r2) -> r1)));
+
+            // explicitly force main light in commandResourceIds if it exists and there are other auxiliary lights
+            if (mainId != null && !auxiliaryGroups.isEmpty()) {
+                commandResourceIds.put(ResourceType.LIGHT, mainId);
+            }
+
+            auxiliaryLightGroups.clear();
+            auxiliaryLightGroups.putAll(auxiliaryGroups);
+
+            auxiliaryGroups.keySet().forEach(g -> {
+                dynamicsDurations.put(uid(g, CHANNEL_2_DYNAMICS), Duration.ZERO);
+                dynamicsExpireTimes.put(uid(g, CHANNEL_2_DYNAMICS), Instant.MIN);
+            });
+
+            logger.debug("{} -> updateLookups() main light {}, groups {}", resourceId, mainId, auxiliaryGroups);
+        }
+    }
+
+    /**
+     * Get the metadata archetype of the light resource referenced by the given service.
+     *
+     * @return the archetype, or {@link Archetype#UNKNOWN_ARCHETYPE} if the light has no metadata.
+     * @throws ApiException if a communication error occurred.
+     * @throws AssetNotLoadedException if one of the assets is not loaded.
+     * @throws InterruptedException
+     */
+    private Archetype getLightArchetype(ResourceReference lightService)
+            throws ApiException, AssetNotLoadedException, InterruptedException {
+        for (Resource light : getBridgeHandler().getResources(lightService).getResources()) {
+            ProductData productData = light.getProductData();
+            if (productData != null) {
+                Archetype archetype = productData.getProductArchetype();
+                logger.debug("{} -> getLightArchetype() light {} productdata {}", resourceId, light.getId(), archetype);
+                if (FRONT_ARCHETYPES.contains(archetype) || BACK_ARCHETYPES.contains(archetype)) {
+                    return archetype;
+                }
+            }
+            MetaData metaData = light.getMetaData();
+            if (metaData != null) {
+                Archetype archetype = metaData.getArchetype();
+                logger.debug("{} -> getLightArchetype() light {} metadata {}", resourceId, light.getId(), archetype);
+                if (FRONT_ARCHETYPES.contains(archetype) || BACK_ARCHETYPES.contains(archetype)) {
+                    return archetype;
+                }
+            }
+        }
+        return Archetype.UNKNOWN_ARCHETYPE;
+    }
+
+    /**
+     * Update the primary device properties.
+     *
+     * @param resource a Resource object containing the property data.
+     */
+    private synchronized void updateProperties(Resource resource) {
+        if (!disposing && !updatePropertiesDone) {
+            logger.debug("{} -> updateProperties()", resourceId);
+            Map<String, String> props = new HashMap<>(thing.getProperties());
+
+            // resource data
+            Setters.putIfExists(props, PROPERTY_RESOURCE_ID, resourceId);
+            Setters.putIfExists(props, PROPERTY_RESOURCE_TYPE, thisResource.getTypeAsString());
+            Setters.putIfExists(props, PROPERTY_RESOURCE_NAME, thisResource.getName());
+
+            // owner information
+            ResourceReference owner = thisResource.getOwner();
+            if (Objects.nonNull(owner)) {
+                Setters.putIfExists(props, PROPERTY_OWNER, owner.getId());
+                Setters.putIfExists(props, PROPERTY_OWNER_TYPE, owner.getTypeAsString());
+            }
+
+            // metadata
+            MetaData metaData = thisResource.getMetaData();
+            if (Objects.nonNull(metaData)) {
+                Setters.putIfExists(props, PROPERTY_RESOURCE_ARCHETYPE, metaData.getArchetypeAsString());
+            }
+
+            // product data
+            ProductData prodData = thisResource.getProductData();
+            if (Objects.nonNull(prodData)) {
+                String modelId = prodData.getModelId();
+
+                // standard properties
+                Setters.putIfExists(props, Thing.PROPERTY_MODEL_ID, modelId);
+                Setters.putIfExists(props, Thing.PROPERTY_VENDOR, prodData.getManufacturerName());
+                Setters.putIfExists(props, Thing.PROPERTY_FIRMWARE_VERSION, prodData.getSoftwareVersion());
+                Setters.putIfExists(props, Thing.PROPERTY_HARDWARE_VERSION, prodData.getHardwarePlatformType());
+
+                // hue specific properties
+                Setters.putIfExists(props, PROPERTY_PRODUCT_NAME, prodData.getProductName());
+                Setters.putIfExists(props, PROPERTY_PRODUCT_ARCHETYPE, prodData.getProductArchetypeAsString());
+                Setters.putIfExists(props, PROPERTY_PRODUCT_CERTIFIED, prodData.getCertifiedAsString());
+
+                if (OPERATING_MODE_WORK_AROUND_PATTERN.matcher(modelId).matches()) {
+                    legacyLightState = new LegacyLightState();
+                    logger.debug("{} -> enabled operating mode work-around for {}", resourceId, modelId);
+                }
+            }
+
+            thing.setProperties(props);
+            updatePropertiesDone = true;
+        }
+    }
+
+    /**
+     * Execute an HTTP GET command to fetch the resources data for the referenced resource.
+     *
+     * @param reference to the required resource.
+     * @throws ApiException if a communication error occurred.
+     * @throws AssetNotLoadedException if one of the assets is not loaded.
+     * @throws InterruptedException
+     */
+    private void updateResource(ResourceReference reference)
+            throws ApiException, AssetNotLoadedException, InterruptedException {
+        if (!disposing) {
+            logger.debug("{} -> updateResource() from resource {}", resourceId, reference);
+            getBridgeHandler().getResources(reference).getResources().stream()
+                    .forEach(resource -> onResource(resource));
+        }
+    }
+
+    /**
+     * Update the scene channel state description selection options
+     */
+    private void updateSceneChannelStateDescription() {
+        stateDescriptionProvider.setStateOptions(new ChannelUID(thing.getUID(), CHANNEL_2_SCENE),
+                sceneResourceEntries.keySet().stream().map(n -> new StateOption(n, n)).toList());
+    }
+
+    /**
+     * Fetch the full list of normal resp. smart scenes from the bridge, and call
+     * {@code updateSceneContributors(List<Resource> allScenes)}
+     *
+     * @throws ApiException if a communication error occurred.
+     * @throws AssetNotLoadedException if one of the assets is not loaded.
+     * @throws InterruptedException
+     */
+    public boolean updateSceneContributors() throws ApiException, AssetNotLoadedException, InterruptedException {
+        if (!disposing && !updateSceneContributorsDone) {
+            List<Resource> allScenes = new ArrayList<>();
+            for (ResourceType type : SUPPORTED_SCENE_TYPES) {
+                allScenes.addAll(getBridgeHandler().getResources(new ResourceReference().setType(type)).getResources());
+            }
+            updateSceneContributors(allScenes);
+        }
+        return updateSceneContributorsDone;
+    }
+
+    /**
+     * Process the incoming list of normal resp. smart scene resources to find those which contribute to this thing. And
+     * if there are any, include a scene channel in the supported channel list, and populate its respective state
+     * options.
+     *
+     * @param allScenes the full list of normal resp. smart scene resources.
+     */
+    public synchronized boolean updateSceneContributors(List<Resource> allScenes) {
+        if (!disposing && !updateSceneContributorsDone) {
+            sceneContributorsCache.clear();
+            sceneResourceEntries.clear();
+
+            ResourceReference thisReference = getResourceReference();
+            Set<Resource> scenes = allScenes.stream().filter(s -> thisReference.equals(s.getGroup()))
+                    .collect(Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Resource::getName))));
+
+            if (!scenes.isEmpty()) {
+                sceneContributorsCache.putAll(scenes.stream().collect(Collectors.toMap(s -> s.getId(), s -> s)));
+                sceneResourceEntries.putAll(scenes.stream().collect(Collectors.toMap(s -> s.getName(), s -> s)));
+
+                State state = Objects.requireNonNull(
+                        scenes.stream().filter(s -> Objects.requireNonNullElse(s.getSceneActive(), false))
+                                .map(s -> s.getSceneState()).findAny().orElse(UnDefType.UNDEF));
+
+                // create scene channel if it is missing
+                if (getThing().getChannel(CHANNEL_2_SCENE) == null) {
+                    updateThing(editThing()
+                            .withChannel(ChannelBuilder.create(new ChannelUID(getThing().getUID(), CHANNEL_2_SCENE))
+                                    .withType(new ChannelTypeUID(BINDING_ID, CHANNEL_TYPE_2_SCENE)).build())
+                            .build());
+                }
+
+                updateState(CHANNEL_2_SCENE, state, true);
+                updateSceneChannelStateDescription();
+
+                logger.debug("{} -> updateSceneContributors() found {} normal resp. smart scenes", resourceId,
+                        scenes.size());
+            }
+            updateSceneContributorsDone = true;
+        }
+        return updateSceneContributorsDone;
+    }
+
+    /**
+     * Execute a series of HTTP GET commands to fetch the resource data for all service resources that contribute to the
+     * thing state.
+     *
+     * @throws ApiException if a communication error occurred.
+     * @throws AssetNotLoadedException if one of the assets is not loaded.
+     * @throws InterruptedException
+     */
+    private void updateServiceContributors() throws ApiException, AssetNotLoadedException, InterruptedException {
+        if (!disposing) {
+            logger.debug("{} -> updateServiceContributors() called for {} contributors", resourceId,
+                    serviceContributorsCache.size());
+            ResourceReference reference = new ResourceReference();
+            for (var entry : serviceContributorsCache.entrySet()) {
+                updateResource(reference.setId(entry.getKey()).setType(entry.getValue().getType()));
+            }
+        }
+    }
+
+    /**
+     * Process the incoming Resource to initialize the state options of sound channels. Determines the available sound
+     * values for each chime type and stores them as respective state options for that channel.
+     *
+     * @param resource a Resource possibly with Alarm, Alert, or Chime elements.
+     */
+    private void updateSoundChannelOptions(Resource resource) {
+        for (ChimeType chimeType : ChimeType.values()) {
+            if (resource.getSound(chimeType) instanceof Sound sound
+                    && sound.getSoundValues() instanceof List<SoundValue> soundValues && !soundValues.isEmpty()) {
+                String channelID = switch (chimeType) {
+                    case ALARM -> CHANNEL_2_ALARM_SOUND;
+                    case ALERT -> CHANNEL_2_ALERT_SOUND;
+                    case CHIME -> CHANNEL_2_CHIME_SOUND;
+                };
+                stateDescriptionProvider.setStateOptions(new ChannelUID(thing.getUID(), channelID),
+                        soundValues.stream().map(v -> new StateOption(v.name(), v.name())).toList());
+            }
+        }
+    }
+
+    /**
+     * Update the channel state, and if appropriate add the channel ID to the set of supportedChannelIds. Calls either
+     * OH core updateState() or triggerChannel() methods depending on the channel kind.
+     *
+     * Note: the particular 'UnDefType.UNDEF' value of the state argument is used to specially indicate the undefined
+     * state, but yet that its channel shall nevertheless continue to be present in the thing.
+     *
+     * @param channelUID the UID of the channel.
+     * @param state the new state of the channel.
+     * @param fullUpdate if true always update the channel, otherwise only update if state is not 'UNDEF'.
+     */
+    private void updateState(ChannelUID channelUID, State state, boolean fullUpdate) {
+        boolean isDefined = state != UnDefType.NULL;
+        Channel channel = thing.getChannel(channelUID);
+
+        if ((fullUpdate || isDefined) && Objects.nonNull(channel)) {
+            logger.debug("{} -> updateState() '{}' update with '{}' (fullUpdate:{}, isDefined:{})", resourceId,
+                    channelUID, state, fullUpdate, isDefined);
+
+            switch (channel.getKind()) {
+                case STATE:
+                    updateState(channelUID, state);
+                    break;
+
+                case TRIGGER:
+                    if (state instanceof DecimalType decimalState) {
+                        triggerChannel(channelUID, String.valueOf(decimalState.intValue()));
+                    }
+            }
+        }
+        if (fullUpdate && isDefined) {
+            addSupportedChannel(channelUID);
+        }
+    }
+
+    private void updateState(String channelID, State state, boolean fullUpdate) {
+        updateState(uid(null, channelID), state, fullUpdate);
+    }
+
+    /**
+     * Check if a PROPERTY_LEGACY_THING_UID value was set by the discovery process, and if so, clone the legacy thing's
+     * settings into this thing.
+     */
+    private void updateThingFromLegacy() {
+        if (isInitialized()) {
+            logger.warn("Cannot update thing '{}' from legacy thing since handler already initialized.",
+                    thing.getUID());
+            return;
+        }
+        Map<String, String> properties = thing.getProperties();
+        String legacyThingUID = properties.get(PROPERTY_LEGACY_THING_UID);
+        if (Objects.nonNull(legacyThingUID)) {
+            Thing legacyThing = thingRegistry.get(new ThingUID(legacyThingUID));
+            if (Objects.nonNull(legacyThing)) {
+                ThingBuilder editBuilder = editThing();
+
+                String location = legacyThing.getLocation();
+                if (Objects.nonNull(location) && !location.isBlank()) {
+                    editBuilder = editBuilder.withLocation(location);
+                }
+
+                // save list of legacyLinkedChannelUIDs for use after channel list is initialised
+                legacyLinkedChannelUIDs.clear();
+                legacyLinkedChannelUIDs.addAll(legacyThing.getChannels().stream().map(Channel::getUID)
+                        .filter(uid -> REPLICATE_CHANNEL_ID_MAP.containsKey(uid.getId())
+                                && itemChannelLinkRegistry.isLinked(uid))
+                        .toList());
+
+                Map<String, String> newProperties = new HashMap<>(properties);
+                newProperties.remove(PROPERTY_LEGACY_THING_UID);
+
+                updateThing(editBuilder.withProperties(newProperties).build());
+            }
+        }
+    }
+
+    /**
+     * Update the thing's semantic equipment tag. The main determinant for the equipment type is the supported channels.
+     * For lights use the product archetype to split between light bulbs and strip lights. Rooms and Zones are
+     * considered to be zones.
+     */
+    private void updateEquipmentTag() {
+        if (!disposing) {
+            int sensorCount = 0;
+            SemanticTag equipmentTag = null;
+
+            if (thing.getChannel(CHANNEL_2_CHIME_SOUND) != null) {
+                equipmentTag = Equipment.SPEAKER;
+            }
+            if (Set.of(ResourceType.ROOM, ResourceType.ZONE).contains(thisResource.getType())) {
+                equipmentTag = Equipment.ZONE;
+            }
+            if ((thing.getChannel(CHANNEL_2_COLOR) != null) || (thing.getChannel(CHANNEL_2_BRIGHTNESS) != null)
+                    || (thing.getChannel(CHANNEL_2_SWITCH) != null)) {
+                equipmentTag = (thisResource.getProductData() instanceof ProductData productData)
+                        && STRIPLIGHT_ARCHETYPES.contains(productData.getProductArchetype()) ? Equipment.LIGHT_STRIP
+                                : Equipment.LIGHTBULB;
+            }
+            if (thing.getChannel(CHANNEL_2_BUTTON_LAST_EVENT) != null) {
+                equipmentTag = Equipment.BUTTON;
+            }
+            if (thing.getChannel(CHANNEL_2_ROTARY_STEPS) != null) {
+                equipmentTag = Equipment.DIAL;
+            }
+            if (thing.getChannel(CHANNEL_2_SECURITY_CONTACT) != null) {
+                equipmentTag = Equipment.CONTACT_SENSOR;
+            }
+            if (thing.getChannel(CHANNEL_2_MOTION) != null) {
+                sensorCount++;
+                equipmentTag = Equipment.MOTION_DETECTOR;
+            }
+            if (thing.getChannel(CHANNEL_2_LIGHT_LEVEL) != null) {
+                sensorCount++;
+                equipmentTag = Equipment.ILLUMINANCE_SENSOR;
+            }
+            if (thing.getChannel(CHANNEL_2_TEMPERATURE) != null) {
+                sensorCount++;
+                equipmentTag = Equipment.TEMPERATURE_SENSOR;
+            }
+            if (sensorCount > 1) {
+                equipmentTag = Equipment.SENSOR;
+            }
+            if (thing.getChannel(CHANNEL_2_SECURITY_MOTION) != null) {
+                equipmentTag = Equipment.MOTION_DETECTOR;
+            }
+            if (equipmentTag != null) {
+                logger.debug("{} -> updateEquipmentTag({})", resourceId, equipmentTag.getName());
+                updateThing(editThing().withSemanticEquipmentTag(equipmentTag).build());
+            }
+        }
+    }
+
+    /**
+     * Read the update status of the thing from the given resource and update its property and status accordingly.
+     */
+    private void refreshSoftwareStatusUI(Resource resource) {
+        UpdateStatusV2 status = resource.getUpdateStatus();
+        if (status != null) {
+            thing.setProperty(PROPERTY_FIRMWARE_UPDATE_STATE, status.toString());
+            if (hasConnectivityIssue) {
+                return;
+            }
+            if (status == UpdateStatusV2.INSTALLING) {
+                updateStatus(ThingStatusDetail.FIRMWARE_UPDATING);
+            } else {
+                // the updateStatus() override below takes care of setting the status detail and description
+                updateStatus(ThingStatus.ONLINE);
+            }
+        }
+    }
+
+    /**
+     * Preserve the firmware update state when the resource is otherwise reported ONLINE. Other statuses pass through
+     * unchanged.
+     */
+    @Override
+    protected void updateStatus(ThingStatus thingStatus) {
+        if (thingStatus != ThingStatus.ONLINE || !updateFirmwareStatus()) {
+            super.updateStatus(thingStatus);
+        }
+    }
+
+    /**
+     * Use the firmware update state's translatable description for ONLINE updates instead of the caller's description.
+     * Other statuses and descriptions pass through unchanged.
+     */
+    @Override
+    protected void updateStatus(ThingStatus thingStatus, @Nullable String description) {
+        if (thingStatus != ThingStatus.ONLINE || !updateFirmwareStatus()) {
+            super.updateStatus(thingStatus, description);
+        }
+    }
+
+    /**
+     * Use the firmware update state's translatable description for FIRMWARE_UPDATING requests. Other details and
+     * descriptions pass through unchanged.
+     */
+    @Override
+    protected void updateStatus(ThingStatusDetail detail, @Nullable String description) {
+        if (detail != ThingStatusDetail.FIRMWARE_UPDATING || !updateFirmwareStatus()) {
+            super.updateStatus(detail, description);
+        }
+    }
+
+    /**
+     * Apply the firmware state stored in the Thing property. INSTALLING sets OFFLINE with FIRMWARE_UPDATING;
+     * READY_TO_INSTALL keeps the Thing ONLINE. Both use the update state's translatable description.
+     *
+     * @return true if the firmware state replaced the requested status
+     */
+    private boolean updateFirmwareStatus() {
+        String firmware = thing.getProperties().get(PROPERTY_FIRMWARE_UPDATE_STATE);
+        UpdateStatusV2 status = UpdateStatusV2.reverseLookup(firmware);
+        if (status == UpdateStatusV2.INSTALLING) {
+            super.updateStatus(ThingStatusDetail.FIRMWARE_UPDATING, status.i18nKey());
+            return true;
+        } else if (status == UpdateStatusV2.READY_TO_INSTALL) {
+            super.updateStatus(ThingStatus.ONLINE, status.i18nKey());
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Ensure that the light service resource in the serviceContributorsCache has a complete DTO for it to
+     * yield valid channel state values. Check if the given (cached) light service has a {@link MirekSchema}
+     * field, and a {@link Gamut} field. If any is missing, use the binding default values. This ensures that
+     * the light's channels always have a valid color temperature range, and gamut, to use.
+     */
+    private synchronized void updateLightCacheRequiredFields(Resource resource) {
+        ResourceType type = resource.getType();
+        if (!disposing && !updateLightCacheRequiredFieldsDone && LIGHT_TYPES.contains(type)) {
+            logger.debug("{} -> updateLightCacheRequiredFields()", resourceId);
+
+            if (resource.getColorTemperature() instanceof ColorTemperature ct) {
+                MirekSchema mirekSchema = ct.getMirekSchema();
+                if (mirekSchema == null) {
+                    ct.setMirekSchema(MirekSchema.DEFAULT_SCHEMA);
+                } else if (mirekSchema.invalid()) {
+                    logger.warn("{} -> light MirekSchema {} invalid -> using default", resourceId,
+                            mirekSchema.toPropertyValue());
+                    ct.setMirekSchema(MirekSchema.DEFAULT_SCHEMA);
+                }
+            }
+
+            if (resource.getColorXy() instanceof ColorXy xy) {
+                Gamut gamut = xy.getGamut();
+                if (gamut == null) {
+                    xy.setGamut(ColorUtil.DEFAULT_GAMUT);
+                }
+            }
+
+            Resource cacheEntry = getCachedResource(type);
+            if (cacheEntry != null) {
+                Setters.setResource(cacheEntry, resource);
+            } else {
+                // should never happen, but just in case
+                logger.warn("{} -> updateLightCacheRequiredFields() -> missing cache light resource", resourceId);
+            }
+            updateLightCacheRequiredFieldsDone = true;
+        }
+    }
+
+    /**
+     * Helper for {@link IncreaseDecreaseType} command processing.
+     * Adjusts brightness based on the given Increase/Decrease command and returns an adjunct {@link OnOffType}
+     * to be appended to the payload. It converts the relative command into an absolute brightness value since
+     * live testing has shown that it leads to more predictable / reliable outcomes.
+     *
+     * @param command the {@link IncreaseDecreaseType} command.
+     * @param putResource the resource to be sent to the bridge.
+     * @param cache the cached resource with the current state, may be null.
+     * @return an adjunct {@link OnOffType.ON}, or null if the action failed.
+     */
+    private @Nullable OnOffType handleIncreaseDecreaseBrightnessCommand(IncreaseDecreaseType command,
+            Resource putResource, @Nullable Resource cache) {
+        if (cache != null) {
+            Resource actual = getResource(cache.getType(), cache.getId());
+            if (actual != null) {
+                double brightnessActual = (actual.getDimming() instanceof Dimming dim
+                        && dim.getBrightness() instanceof Double bri) ? bri : -1;
+                if (brightnessActual >= 0.0) {
+                    boolean inc = IncreaseDecreaseType.INCREASE == command;
+                    if (inc || (actual.getOnState() instanceof OnState on && Boolean.TRUE.equals(on.getOn()))) {
+                        double brightnessTarget = inc //
+                                ? Math.min(100.0, brightnessActual + INCREASE_DECREASE_PERCENT)
+                                : Math.max(0.0, brightnessActual - INCREASE_DECREASE_PERCENT);
+                        putResource.setBrightness(new PercentType(BigDecimal.valueOf(brightnessTarget)));
+                        return OnOffType.from(brightnessTarget > 0.0);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Fetch the current resource from the bridge for the given type and id. Returns null if the resource
+     * cannot be fetched.
+     *
+     * @param type the resource type.
+     * @param id the resource id.
+     * @return the respective resource or null if it cannot be fetched.
+     */
+    private @Nullable Resource getResource(ResourceType type, String id) {
+        try {
+            Resources resources = getBridgeHandler().getResources(new ResourceReference().setType(type).setId(id));
+            return resources.getResources().get(0);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            logger.debug("Failed to fetch resource type:{}, id:{}", type, id, e);
+        }
+        return null;
+    }
+
+    /**
+     * Ensure that the light service resource for the group light in the serviceContributorsCache has a
+     * complete DTO for it to yield valid channel state values. Check if the given (cached) light service
+     * has a {@link MirekSchema} field, and a {@link Gamut} field. If any is missing, use the binding
+     * default values. This ensures that the auxiliary light's channels always have a valid color
+     * temperature range and gamut.
+     */
+    private void updateAuxiliaryLightCacheRequiredFields(Resource resource) {
+        if (resource.getColorTemperature() instanceof ColorTemperature ct) {
+            MirekSchema mirekSchema = ct.getMirekSchema();
+            if (mirekSchema == null || mirekSchema.invalid()) {
+                ct.setMirekSchema(MirekSchema.DEFAULT_SCHEMA);
+            }
+        }
+        if (resource.getColorXy() instanceof ColorXy xy && xy.getGamut() == null) {
+            xy.setGamut(ColorUtil.DEFAULT_GAMUT);
+        }
+        Resource cacheEntry = serviceContributorsCache.get(resource.getId());
+        if (cacheEntry != null) {
+            Setters.setResource(cacheEntry, resource);
+        }
+    }
+
+    /**
+     * Update the gradient channel states based on the given resource's gradient points.
+     * - Channels beyond the light's point capability are set to 'NULL' (=> removed from the thing).
+     * - Channels within capability but with no current point (solid color mode) are set to 'UNDEF' so that
+     * they are registered as supported and are kept in the thing.
+     *
+     * @param groupId the group ID of the light, or null for the main light.
+     * @param resource the resource containing the gradient points.
+     * @param fullUpdate if true always update the channel, otherwise only update if state is not 'NULL'.
+     * @throws CriticalFieldMissingException if a critical field is missing in the resource.
+     */
+    private void updateGradientStates(@Nullable String groupId, Resource resource, boolean fullUpdate)
+            throws CriticalFieldMissingException {
+        Gradient gradient = resource.getGradient();
+        int pointsCurrent = gradient == null ? 0 : Math.min(gradient.getXyPoints().size(), Gradient.MAX_POINTS);
+        int pointsCapable = gradient == null ? 0
+                : Math.min(Math.max(gradient.getPointsCapable(), pointsCurrent), Gradient.MAX_POINTS);
+        if (fullUpdate) {
+            // unsupported channels => NULL
+            for (int i = pointsCapable; i < Gradient.MAX_POINTS; i++) {
+                updateState(gradientUID(groupId, i), UnDefType.NULL, true);
+            }
+            // supported, but no point currently reported (solid color mode) => UNDEF
+            for (int i = pointsCurrent; i < pointsCapable; i++) {
+                updateState(gradientUID(groupId, i), UnDefType.UNDEF, true);
+            }
+        }
+        for (int i = 0; i < pointsCurrent; i++) {
+            updateState(gradientUID(groupId, i), resource.getGradientState(i), fullUpdate);
+        }
+    }
+}

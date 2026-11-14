@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,7 +17,6 @@ import static org.openhab.binding.digitalstrom.internal.DigitalSTROMBindingConst
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -95,7 +94,7 @@ public class BridgeHandler extends BaseBridgeHandler
     /**
      * Contains all supported thing types of this handler
      */
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Collections.singleton(THING_TYPE_DSS_BRIDGE);
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_DSS_BRIDGE);
 
     private static final long RECONNECT_TRACKER_INTERVAL = 15;
 
@@ -223,7 +222,7 @@ public class BridgeHandler extends BaseBridgeHandler
     @Override
     public void initialize() {
         logger.debug("Initializing digitalSTROM-BridgeHandler");
-        updateStatus(ThingStatus.ONLINE, ThingStatusDetail.CONFIGURATION_PENDING, "Checking configuration...");
+        updateStatus(ThingStatus.UNKNOWN);
         // Start an extra thread to readout the configuration and check the connection, because it takes sometimes more
         // than 5000 milliseconds and the handler will suspend (ThingStatus.UNINITIALIZED).
         Config config = loadAndCheckConfig();
@@ -297,7 +296,7 @@ public class BridgeHandler extends BaseBridgeHandler
                     excText = excText + " and ";
                 }
             }
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, excText + " have to be a number.");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, excText + " have to be a number.");
             return null;
         }
         String servertCert = getThing().getProperties().get(DigitalSTROMBindingConstants.SERVER_CERT);
@@ -316,7 +315,7 @@ public class BridgeHandler extends BaseBridgeHandler
         if (host != null && !host.isBlank()) {
             config.setHost(host);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     "The connection to the digitalSTROM-Server can't established, because the host address is missing. Please set the host address.");
             return null;
         }
@@ -542,7 +541,7 @@ public class BridgeHandler extends BaseBridgeHandler
     public void onConnectionStateChange(String newConnectionState) {
         switch (newConnectionState) {
             case CONNECTION_LOST:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         "The connection to the digitalSTROM-Server cannot be established.");
                 startReconnectTracker();
                 return;
@@ -630,53 +629,54 @@ public class BridgeHandler extends BaseBridgeHandler
         if (newConnectionState.equals(NOT_AUTHENTICATED) || newConnectionState.equals(CONNECTION_LOST)) {
             switch (reason) {
                 case WRONG_APP_TOKEN:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                            "User defined Application-Token is wrong. "
-                                    + "Please set user name and password to generate an Application-Token or set an valid Application-Token.");
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
+                            """
+                                    User defined Application-Token is wrong. \
+                                    Please set user name and password to generate an Application-Token or set a valid Application-Token.\
+                                    """);
                     stopServices();
                     return;
                 case WRONG_USER_OR_PASSWORD:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                            "The set username or password is wrong.");
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "The set username or password is wrong.");
                     stopServices();
                     return;
                 case NO_USER_PASSWORD:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                             "No username or password is set to generate Application-Token. Please set user name and password or Application-Token.");
                     stopServices();
                     return;
                 case CONNECTON_TIMEOUT:
                     // ignore the first connection timeout
                     if (connectionTimeoutCounter++ > ignoredTimeouts) {
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                                 "Connection lost because connection timeout to Server.");
                         break;
                     } else {
                         return;
                     }
                 case HOST_NOT_FOUND:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "Server not found! Please check these points:\n" + " - Is digitalSTROM-Server turned on?\n"
-                                    + " - Is the host address correct?\n"
-                                    + " - Is the ethernet cable connection established?");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, """
+                            Server not found! Please check these points:
+                             - Is digitalSTROM-Server turned on?
+                             - Is the host address correct?
+                             - Is the ethernet cable connection established?\
+                            """);
                     break;
                 case UNKNOWN_HOST:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                             "Unknown host name, please check the set host name!");
                     break;
                 case INVALID_URL:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Invalid URL is set.");
+                    updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Invalid URL is set.");
                     break;
                 case CONNECTION_LOST:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "IOException / Connection lost.");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "IOException / Connection lost.");
                     break;
                 case SSL_HANDSHAKE_ERROR:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "SSL Handshake error / Connection lost.");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "SSL Handshake error / Connection lost.");
                     break;
                 default:
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, reason);
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, reason);
             }
             // reset connection timeout counter
             connectionTimeoutCounter = 0;
@@ -766,7 +766,7 @@ public class BridgeHandler extends BaseBridgeHandler
                     if (!getThing().getStatusInfo().getStatusDetail().equals(ThingStatusDetail.COMMUNICATION_ERROR)
                             && !getThing().getStatusInfo().getStatusDetail()
                                     .equals(ThingStatusDetail.CONFIGURATION_ERROR)) {
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "DeviceStatusManager is stopped.");
+                        updateStatus(ThingStatus.OFFLINE, "DeviceStatusManager is stopped.");
                         devStatMan.start();
                     }
                     break;

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,14 +12,20 @@
  */
 package org.openhab.binding.ipcamera.internal;
 
-import java.io.UnsupportedEncodingException;
+import java.io.ByteArrayInputStream;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.w3c.dom.Document;
 
 /**
  * The {@link Helper} class has static functions that help the IpCamera binding not need as many external libs.
@@ -96,7 +102,28 @@ public class Helper {
         if (sectionHeaderBeginning > 0) {
             result = result.substring(0, sectionHeaderBeginning);
         }
+        if (!key.endsWith(">")) {
+            startIndex = result.indexOf(">");
+            if (startIndex != -1) {
+                return result.substring(startIndex + 1);
+            }
+        }
         return result;
+    }
+
+    public static Document loadXMLFromString(String xml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+        return builder.parse(inputStream);
     }
 
     /**
@@ -105,12 +132,7 @@ public class Helper {
      * @author Matthew Skinner - Initial contribution
      */
     public static String encodeSpecialChars(String text) {
-        String processed = text;
-        try {
-            processed = URLEncoder.encode(text, "UTF-8").replace("+", "%20");
-        } catch (UnsupportedEncodingException e) {
-        }
-        return processed;
+        return URLEncoder.encode(text, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     public static String getLocalIpAddress() {
@@ -122,9 +144,9 @@ public class Helper {
                 for (Enumeration<InetAddress> enumIpAddr = networkInterface.getInetAddresses(); enumIpAddr
                         .hasMoreElements();) {
                     InetAddress inetAddress = enumIpAddr.nextElement();
-                    if (!inetAddress.isLoopbackAddress() && inetAddress.getHostAddress().toString().length() < 18
+                    if (!inetAddress.isLoopbackAddress() && inetAddress.getHostAddress().length() < 18
                             && inetAddress.isSiteLocalAddress()) {
-                        ipAddress = inetAddress.getHostAddress().toString();
+                        ipAddress = inetAddress.getHostAddress();
                     }
                 }
             }

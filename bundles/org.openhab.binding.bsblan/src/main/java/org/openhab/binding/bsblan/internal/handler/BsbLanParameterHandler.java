@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -98,8 +98,7 @@ public class BsbLanParameterHandler extends BsbLanBaseThingHandler {
         if (data == null) {
             logger.debug("no data available while updating channel '{}' of parameter {}", channelId,
                     parameterConfig.id);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.BRIDGE_OFFLINE,
-                    "No data received from BSB-LAN device");
+            updateStatus(ThingStatusDetail.OFFLINE.BRIDGE_OFFLINE, "No data received from BSB-LAN device");
             return;
         }
 
@@ -107,7 +106,7 @@ public class BsbLanParameterHandler extends BsbLanBaseThingHandler {
         if (parameter == null) {
             logger.debug("parameter {} is not part of response data while updating channel '{}' ", parameterConfig.id,
                     channelId);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     String.format("No data received for parameter %s", parameterConfig.id));
             return;
         }

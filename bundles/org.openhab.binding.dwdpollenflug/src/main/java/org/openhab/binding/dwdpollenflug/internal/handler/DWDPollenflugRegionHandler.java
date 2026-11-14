@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -48,17 +48,21 @@ public class DWDPollenflugRegionHandler extends BaseThingHandler {
     @Override
     public void initialize() {
         logger.debug("Initializing DWD Pollenflug region handler");
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
+            return;
+        }
         thingConfig = getConfigAs(DWDPollenflugRegionConfiguration.class);
 
         if (thingConfig.isValid()) {
-            DWDPollenflugBridgeHandler handler = getBridgeHandler();
-            if (handler == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Bridge handler missing");
+            if (!(bridge.getHandler() instanceof DWDPollenflugBridgeHandler)) {
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Bridge handler missing");
             } else {
                 updateStatus(ThingStatus.ONLINE);
             }
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "No valid region id given.");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "No valid region id given.");
         }
     }
 
@@ -66,8 +70,7 @@ public class DWDPollenflugRegionHandler extends BaseThingHandler {
         Bridge bridge = getBridge();
         if (bridge != null) {
             ThingHandler handler = bridge.getHandler();
-            if (handler instanceof DWDPollenflugBridgeHandler) {
-                DWDPollenflugBridgeHandler bridgeHandler = (DWDPollenflugBridgeHandler) handler;
+            if (handler instanceof DWDPollenflugBridgeHandler bridgeHandler) {
                 return bridgeHandler;
             }
         }
@@ -100,7 +103,7 @@ public class DWDPollenflugRegionHandler extends BaseThingHandler {
     public void notifyOnUpdate(DWDPollenflug pollenflug) {
         DWDRegion region = pollenflug.getRegion(thingConfig.regionID);
         if (region == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Region not found");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Region not found");
             return;
         }
 

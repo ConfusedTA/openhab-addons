@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,13 +19,17 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.enocean.internal.discovery.EnOceanDeviceDiscoveryService;
 import org.openhab.binding.enocean.internal.handler.EnOceanBaseActuatorHandler;
 import org.openhab.binding.enocean.internal.handler.EnOceanBaseSensorHandler;
 import org.openhab.binding.enocean.internal.handler.EnOceanBridgeHandler;
 import org.openhab.binding.enocean.internal.handler.EnOceanClassicDeviceHandler;
+import org.openhab.binding.enocean.internal.handler.EnOceanDatagramInjectorHandler;
 import org.openhab.core.config.discovery.DiscoveryService;
 import org.openhab.core.io.transport.serial.SerialPortManager;
+import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingManager;
@@ -36,6 +40,7 @@ import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
 import org.openhab.core.thing.link.ItemChannelLinkRegistry;
 import org.osgi.framework.ServiceRegistration;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -45,6 +50,7 @@ import org.osgi.service.component.annotations.Reference;
  *
  * @author Daniel Weber - Initial contribution
  */
+@NonNullByDefault
 @Component(service = ThingHandlerFactory.class, configurationPid = "binding.enocean")
 public class EnOceanHandlerFactory extends BaseThingHandlerFactory {
 
@@ -55,14 +61,22 @@ public class EnOceanHandlerFactory extends BaseThingHandlerFactory {
 
     private Map<ThingUID, ServiceRegistration<?>> discoveryServiceRegs = new HashMap<>();
 
-    @Reference
-    SerialPortManager serialPortManager;
+    private final SerialPortManager serialPortManager;
+    private final ThingManager thingManager;
+    private final ItemChannelLinkRegistry itemChannelLinkRegistry;
+    private final StorageService storageService;
 
-    @Reference
-    ItemChannelLinkRegistry itemChannelLinkRegistry;
-
-    @Reference
-    ThingManager thingManager;
+    @Activate
+    public EnOceanHandlerFactory(final @Reference SerialPortManager serialPortManager,
+            final @Reference ThingManager thingManager,
+            final @Reference ItemChannelLinkRegistry itemChannelLinkRegistry,
+            final @Reference StorageService storageService) {
+        // Obtain references to these services using an OSGi reference
+        this.serialPortManager = serialPortManager;
+        this.thingManager = thingManager;
+        this.itemChannelLinkRegistry = itemChannelLinkRegistry;
+        this.storageService = storageService;
+    }
 
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
@@ -70,19 +84,20 @@ public class EnOceanHandlerFactory extends BaseThingHandlerFactory {
     }
 
     @Override
-    protected ThingHandler createHandler(Thing thing) {
+    protected @Nullable ThingHandler createHandler(Thing thing) {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
-
         if (EnOceanBridgeHandler.SUPPORTED_THING_TYPES.contains(thingTypeUID)) {
             EnOceanBridgeHandler bridgeHandler = new EnOceanBridgeHandler((Bridge) thing, serialPortManager);
             registerDeviceDiscoveryService(bridgeHandler);
             return bridgeHandler;
         } else if (EnOceanBaseActuatorHandler.SUPPORTED_THING_TYPES.contains(thingTypeUID)) {
-            return new EnOceanBaseActuatorHandler(thing, itemChannelLinkRegistry);
+            return new EnOceanBaseActuatorHandler(thing, itemChannelLinkRegistry, storageService);
         } else if (EnOceanBaseSensorHandler.SUPPORTED_THING_TYPES.contains(thingTypeUID)) {
             return new EnOceanBaseSensorHandler(thing, itemChannelLinkRegistry);
         } else if (EnOceanClassicDeviceHandler.SUPPORTED_THING_TYPES.contains(thingTypeUID)) {
-            return new EnOceanClassicDeviceHandler(thing, itemChannelLinkRegistry);
+            return new EnOceanClassicDeviceHandler(thing, itemChannelLinkRegistry, storageService);
+        } else if (EnOceanDatagramInjectorHandler.SUPPORTED_THING_TYPES.contains(thingTypeUID)) {
+            return new EnOceanDatagramInjectorHandler(thing, itemChannelLinkRegistry);
         }
 
         return null;
@@ -90,12 +105,10 @@ public class EnOceanHandlerFactory extends BaseThingHandlerFactory {
 
     @Override
     protected void removeHandler(ThingHandler thingHandler) {
-        if (this.discoveryServiceRegs != null) {
-            ServiceRegistration<?> serviceReg = this.discoveryServiceRegs.get(thingHandler.getThing().getUID());
-            if (serviceReg != null) {
-                serviceReg.unregister();
-                discoveryServiceRegs.remove(thingHandler.getThing().getUID());
-            }
+        ServiceRegistration<?> serviceReg = this.discoveryServiceRegs.get(thingHandler.getThing().getUID());
+        if (serviceReg != null) {
+            serviceReg.unregister();
+            discoveryServiceRegs.remove(thingHandler.getThing().getUID());
         }
     }
 

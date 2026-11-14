@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -121,7 +121,7 @@ public final class ControllerHandler extends BaseBridgeHandler {
                 logger.trace("Temperature scale '{}' set to {}", scale, unit);
             } catch (final IOException ioe) {
                 logger.warn("Could not determine temperature scale", ioe);
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, ioe.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, ioe.getMessage());
             }
         }
     }
@@ -148,7 +148,7 @@ public final class ControllerHandler extends BaseBridgeHandler {
         try {
             checkConnection();
         } catch (final IOException ioe) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, ioe.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, ioe.getMessage());
             return;
         }
         for (Thing t : getThing().getThings()) {
@@ -160,7 +160,7 @@ public final class ControllerHandler extends BaseBridgeHandler {
         if (isConnected()) {
             updateStatus(ThingStatus.ONLINE);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR);
         }
     }
 
@@ -186,7 +186,7 @@ public final class ControllerHandler extends BaseBridgeHandler {
      * This method automatically acquires a connection.
      *
      * @return the server response to the command (never empty)
-     * @throws {@link IOException} if communications failed with the server
+     * @throws IOException if communications failed with the server
      */
     public String sendCommand(final String command) throws IOException {
         synchronized (socketLock) {

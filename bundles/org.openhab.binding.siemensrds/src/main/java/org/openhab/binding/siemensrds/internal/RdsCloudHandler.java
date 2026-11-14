@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,6 +15,8 @@ package org.openhab.binding.siemensrds.internal;
 import static org.openhab.binding.siemensrds.internal.RdsBindingConstants.*;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -59,12 +61,12 @@ public class RdsCloudHandler extends BaseBridgeHandler {
         RdsCloudConfiguration config = this.config = getConfigAs(RdsCloudConfiguration.class);
 
         if (config.userEmail.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "missing email address");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "missing email address");
             return;
         }
 
         if (config.userPassword.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "missing password");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "missing password");
             return;
         }
 
@@ -73,7 +75,7 @@ public class RdsCloudHandler extends BaseBridgeHandler {
         }
 
         if (config.pollingInterval < FAST_POLL_INTERVAL || config.pollingInterval > LAZY_POLL_INTERVAL) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                     String.format("polling interval out of range [%d..%d]", FAST_POLL_INTERVAL, LAZY_POLL_INTERVAL));
             return;
         }
@@ -111,7 +113,9 @@ public class RdsCloudHandler extends BaseBridgeHandler {
                 }
 
                 String url = URL_TOKEN;
-                String payload = String.format(TOKEN_REQUEST, config.userEmail, config.userPassword);
+                String payload = String.format(TOKEN_REQUEST,
+                        URLEncoder.encode(config.userEmail, StandardCharsets.UTF_8),
+                        URLEncoder.encode(config.userPassword, StandardCharsets.UTF_8));
 
                 logger.debug(LOG_HTTP_COMMAND, HTTP_POST, url.length());
                 logger.debug(LOG_PAYLOAD_FMT, LOG_SENDING_MARK, url);
@@ -138,12 +142,11 @@ public class RdsCloudHandler extends BaseBridgeHandler {
 
         if (accessToken != null) {
             if (getThing().getStatus() != ThingStatus.ONLINE) {
-                updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, "cloud server responded");
+                updateStatus(ThingStatus.ONLINE);
             }
         } else {
             if (getThing().getStatus() == ThingStatus.ONLINE) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "cloud server authentication error");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "cloud server authentication error");
             }
         }
     }

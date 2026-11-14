@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,6 +14,7 @@ package org.openhab.binding.homematic.internal.communicator.message;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -21,11 +22,14 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -36,14 +40,15 @@ import org.xml.sax.helpers.DefaultHandler;
  *
  * @author Gerhard Riegler - Initial contribution
  */
+@NonNullByDefault
 public class XmlRpcResponse implements RpcResponse {
-    private String methodName;
-    private Object[] responseData;
+    private @Nullable String methodName;
+    private Object @Nullable [] responseData;
 
     /**
      * Decodes a XML-RPC message from the given InputStream.
      */
-    public XmlRpcResponse(InputStream is, String encoding)
+    public XmlRpcResponse(InputStream is, Charset encoding)
             throws SAXException, ParserConfigurationException, IOException {
         SAXParserFactory factory = SAXParserFactory.newInstance();
         SAXParser saxParser = factory.newSAXParser();
@@ -51,17 +56,17 @@ public class XmlRpcResponse implements RpcResponse {
         saxParser.getXMLReader().setFeature("http://xml.org/sax/features/external-general-entities", false);
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         InputSource inputSource = new InputSource(is);
-        inputSource.setEncoding(encoding);
+        inputSource.setEncoding(encoding.name());
         saxParser.parse(inputSource, new XmlRpcHandler());
     }
 
     @Override
-    public Object[] getResponseData() {
+    public Object @Nullable [] getResponseData() {
         return responseData;
     }
 
     @Override
-    public String getMethodName() {
+    public @Nullable String getMethodName() {
         return methodName;
     }
 
@@ -78,7 +83,7 @@ public class XmlRpcResponse implements RpcResponse {
     private class XmlRpcHandler extends DefaultHandler {
         private List<Object> result = new ArrayList<>();
         private LinkedList<List<Object>> currentDataObject = new LinkedList<>();
-        private StringBuilder tagValue;
+        private StringBuilder tagValue = new StringBuilder();
         private boolean isValueTag;
 
         @Override
@@ -93,21 +98,22 @@ public class XmlRpcResponse implements RpcResponse {
         }
 
         @Override
-        public void startElement(String uri, String localName, String qName, Attributes attributes)
-                throws SAXException {
-            String tag = qName.toLowerCase();
-            if (tag.equals("array") || tag.equals("struct")) {
+        public void startElement(@Nullable String uri, @Nullable String localName, @Nullable String qName,
+                @Nullable Attributes attributes) throws SAXException {
+            String tag = qName == null ? null : qName.toLowerCase();
+            if ("array".equals(tag) || "struct".equals(tag)) {
                 currentDataObject.addLast(new ArrayList<>());
             }
-            isValueTag = tag.equals("value");
+            isValueTag = "value".equals(tag);
             tagValue = new StringBuilder();
         }
 
         @Override
-        public void endElement(String uri, String localName, String qName) throws SAXException {
-            String currentTag = qName.toLowerCase();
+        public void endElement(@Nullable String uri, @Nullable String localName, @Nullable String qName)
+                throws SAXException {
+            String currentTag = qName == null ? "" : qName.toLowerCase();
             String currentValue = tagValue.toString();
-            List<Object> data = currentDataObject.peekLast();
+            List<Object> data = Objects.requireNonNull(currentDataObject.peekLast());
 
             switch (currentTag) {
                 case "boolean":
@@ -132,7 +138,7 @@ public class XmlRpcResponse implements RpcResponse {
                     break;
                 case "array":
                     List<Object> arrayData = currentDataObject.removeLast();
-                    currentDataObject.peekLast().add(arrayData.toArray());
+                    Objects.requireNonNull(currentDataObject.peekLast()).add(arrayData.toArray());
                     break;
                 case "struct":
                     List<Object> mapData = currentDataObject.removeLast();
@@ -141,14 +147,14 @@ public class XmlRpcResponse implements RpcResponse {
                     for (int i = 0; i < mapData.size(); i += 2) {
                         resultMap.put(mapData.get(i), mapData.get(i + 1));
                     }
-                    currentDataObject.peekLast().add(resultMap);
+                    Objects.requireNonNull(currentDataObject.peekLast()).add(resultMap);
                     break;
                 case "base64":
                     data.add(Base64.getDecoder().decode(currentValue));
                     break;
                 case "datetime.iso8601":
                     try {
-                        data.add(XmlRpcRequest.xmlRpcDateFormat.parse(currentValue));
+                        data.add(XmlRpcRequest.XML_RPC_DATEFORMAT.parse(currentValue));
                     } catch (ParseException ex) {
                         throw new SAXException(ex.getMessage(), ex);
                     }
@@ -170,8 +176,11 @@ public class XmlRpcResponse implements RpcResponse {
         }
 
         @Override
-        public void characters(char[] ch, int start, int length) throws SAXException {
-            tagValue.append(new String(ch, start, length));
+        public void characters(char @Nullable [] ch, int start, int length) throws SAXException {
+            StringBuilder sb = tagValue;
+            if (ch != null) {
+                sb.append(ch, start, length);
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -198,12 +198,12 @@ public class ValloxMVHandler extends BaseThingHandler {
     }
 
     @Override
-    protected void updateStatus(ThingStatus ts, ThingStatusDetail statusDetail) {
-        super.updateStatus(ts, statusDetail);
+    protected void updateStatus(ThingStatus ts) {
+        super.updateStatus(ts);
     }
 
     @Override
-    protected void updateStatus(ThingStatus ts) {
-        super.updateStatus(ts);
+    protected void updateStatus(ThingStatusDetail detail) {
+        super.updateStatus(detail);
     }
 }

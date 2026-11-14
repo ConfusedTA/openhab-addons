@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -29,22 +29,28 @@ public class SonosZoneGroup {
 
     private final List<String> members;
     private List<String> memberZoneNames;
+    private final List<String> satellites;
     private final String coordinator;
     private final String id;
 
-    public SonosZoneGroup(String id, String coordinator, Collection<String> members,
-            Collection<String> memberZoneNames) {
+    public SonosZoneGroup(String id, String coordinator, Collection<String> members, Collection<String> memberZoneNames,
+            Collection<String> satellites) {
         this.members = new ArrayList<>(members);
         if (!this.members.contains(coordinator)) {
             this.members.add(coordinator);
         }
         this.memberZoneNames = new ArrayList<>(memberZoneNames);
+        this.satellites = new ArrayList<>(satellites);
         this.coordinator = coordinator;
         this.id = id;
     }
 
     public List<String> getMembers() {
         return members;
+    }
+
+    public List<String> getSatellites() {
+        return satellites;
     }
 
     public List<String> getMemberZoneNames() {

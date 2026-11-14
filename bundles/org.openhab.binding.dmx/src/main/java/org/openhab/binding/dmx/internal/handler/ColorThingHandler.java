@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,11 +15,11 @@ package org.openhab.binding.dmx.internal.handler;
 import static org.openhab.binding.dmx.internal.DmxBindingConstants.*;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.dmx.internal.DmxBindingConstants.ListenerType;
 import org.openhab.binding.dmx.internal.DmxBridgeHandler;
 import org.openhab.binding.dmx.internal.DmxThingHandler;
@@ -42,18 +42,19 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.util.ColorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link ColorThingHandler} is responsible for handling commands, which are
+ * The {@link DimmerThingHandler} is responsible for handling commands, which are
  * sent to the dimmer.
  *
  * @author Jan N. Klug - Initial contribution
  */
-
+@NonNullByDefault
 public class ColorThingHandler extends DmxThingHandler {
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Collections.singleton(THING_TYPE_COLOR);
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES = Set.of(THING_TYPE_COLOR);
 
     private final Logger logger = LoggerFactory.getLogger(ColorThingHandler.class);
 
@@ -117,9 +118,9 @@ public class ColorThingHandler extends DmxThingHandler {
                     return;
                 }
             case CHANNEL_COLOR: {
-                if (command instanceof OnOffType) {
+                if (command instanceof OnOffType onOffCommand) {
                     logger.trace("adding {} fade to channels in thing {}", command, this.thing.getUID());
-                    if (((OnOffType) command) == OnOffType.ON) {
+                    if (onOffCommand == OnOffType.ON) {
                         targetValueSet = turnOnValue;
                     } else {
                         if (dynamicTurnOnValue) {
@@ -131,21 +132,23 @@ public class ColorThingHandler extends DmxThingHandler {
                         }
                         targetValueSet = turnOffValue;
                     }
-                } else if (command instanceof HSBType) {
+                } else if (command instanceof HSBType hsbCommand) {
                     logger.trace("adding color fade to channels in thing {}", this.thing.getUID());
-                    targetValueSet.addValue(((HSBType) command).getRed());
-                    targetValueSet.addValue(((HSBType) command).getGreen());
-                    targetValueSet.addValue(((HSBType) command).getBlue());
+                    PercentType[] hsbRgb = ColorUtil.hsbToRgbPercent(hsbCommand);
+                    targetValueSet.addValue(hsbRgb[0]);
+                    targetValueSet.addValue(hsbRgb[1]);
+                    targetValueSet.addValue(hsbRgb[2]);
                 } else if ((command instanceof PercentType) || (command instanceof DecimalType)) {
                     logger.trace("adding brightness fade to channels in thing {}", this.thing.getUID());
-                    PercentType brightness = (command instanceof PercentType) ? (PercentType) command
+                    PercentType brightness = (command instanceof PercentType percentCommand) ? percentCommand
                             : Util.toPercentValue(((DecimalType) command).intValue());
                     HSBType targetColor = new HSBType(currentColor.getHue(), currentColor.getSaturation(), brightness);
-                    targetValueSet.addValue(targetColor.getRed());
-                    targetValueSet.addValue(targetColor.getGreen());
-                    targetValueSet.addValue(targetColor.getBlue());
-                } else if (command instanceof IncreaseDecreaseType) {
-                    if (isDimming && ((IncreaseDecreaseType) command).equals(IncreaseDecreaseType.INCREASE)) {
+                    PercentType[] targetRgb = ColorUtil.hsbToRgbPercent(targetColor);
+                    targetValueSet.addValue(targetRgb[0]);
+                    targetValueSet.addValue(targetRgb[1]);
+                    targetValueSet.addValue(targetRgb[2]);
+                } else if (command instanceof IncreaseDecreaseType increaseDecreaseCommand) {
+                    if (isDimming && increaseDecreaseCommand.equals(IncreaseDecreaseType.INCREASE)) {
                         logger.trace("stopping fade in thing {}", this.thing.getUID());
                         channels.forEach(DmxChannel::clearAction);
                         isDimming = false;
@@ -153,16 +156,17 @@ public class ColorThingHandler extends DmxThingHandler {
                     } else {
                         logger.trace("starting {} fade in thing {}", command, this.thing.getUID());
                         HSBType targetColor;
-                        if (((IncreaseDecreaseType) command).equals(IncreaseDecreaseType.INCREASE)) {
+                        if (increaseDecreaseCommand.equals(IncreaseDecreaseType.INCREASE)) {
                             targetColor = new HSBType(currentColor.getHue(), currentColor.getSaturation(),
                                     PercentType.HUNDRED);
                         } else {
                             targetColor = new HSBType(currentColor.getHue(), currentColor.getSaturation(),
                                     PercentType.ZERO);
                         }
-                        targetValueSet.addValue(targetColor.getRed());
-                        targetValueSet.addValue(targetColor.getGreen());
-                        targetValueSet.addValue(targetColor.getBlue());
+                        PercentType[] dimRgb = ColorUtil.hsbToRgbPercent(targetColor);
+                        targetValueSet.addValue(dimRgb[0]);
+                        targetValueSet.addValue(dimRgb[1]);
+                        targetValueSet.addValue(dimRgb[2]);
                         targetValueSet.setFadeTime(dimTime);
                         isDimming = true;
                     }
@@ -197,13 +201,12 @@ public class ColorThingHandler extends DmxThingHandler {
         Bridge bridge = getBridge();
         DmxBridgeHandler bridgeHandler;
         if (bridge == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "no bridge assigned");
-            dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
+            logger.debug("Bridge unavailable while initializing Thing: {}", thing.getUID());
             return;
         } else {
             bridgeHandler = (DmxBridgeHandler) bridge.getHandler();
             if (bridgeHandler == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "no bridge handler available");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "no bridge handler available");
                 dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
                 return;
             }
@@ -211,8 +214,7 @@ public class ColorThingHandler extends DmxThingHandler {
 
         ColorThingHandlerConfiguration configuration = getConfig().as(ColorThingHandlerConfiguration.class);
         if (configuration.dmxid.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "DMX channel configuration missing");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "DMX channel configuration missing");
             dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
             return;
         }
@@ -224,7 +226,7 @@ public class ColorThingHandler extends DmxThingHandler {
                 channels.add(bridgeHandler.getDmxChannel(channel, this.thing));
             }
         } catch (IllegalArgumentException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
             return;
         }
@@ -239,13 +241,13 @@ public class ColorThingHandler extends DmxThingHandler {
         dimTime = configuration.dimtime;
         logger.trace("setting dimTime to {} ms in {}", fadeTime, this.thing.getUID());
 
-        String turnOnValueString = String.valueOf(fadeTime) + ":" + configuration.turnonvalue + ":-1";
+        String turnOnValueString = fadeTime + ":" + configuration.turnonvalue + ":-1";
         ValueSet turnOnValue = ValueSet.fromString(turnOnValueString);
         if (turnOnValue.size() % 3 == 0) {
             this.turnOnValue = turnOnValue;
             logger.trace("set turnonvalue to {} in {}", turnOnValue, this.thing.getUID());
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "turn-on value malformed");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "turn-on value malformed");
             dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
             return;
         }
@@ -253,13 +255,13 @@ public class ColorThingHandler extends DmxThingHandler {
 
         dynamicTurnOnValue = configuration.dynamicturnonvalue;
 
-        String turnOffValueString = String.valueOf(fadeTime) + ":" + configuration.turnoffvalue + ":-1";
+        String turnOffValueString = fadeTime + ":" + configuration.turnoffvalue + ":-1";
         ValueSet turnOffValue = ValueSet.fromString(turnOffValueString);
         if (turnOffValue.size() % 3 == 0) {
             this.turnOffValue = turnOffValue;
             logger.trace("set turnoffvalue to {} in {}", turnOffValue, this.thing.getUID());
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "turn-off value malformed");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "turn-off value malformed");
             dmxHandlerStatus = ThingStatusDetail.CONFIGURATION_ERROR;
             return;
         }
@@ -278,7 +280,7 @@ public class ColorThingHandler extends DmxThingHandler {
             updateStatus(ThingStatus.ONLINE);
             dmxHandlerStatus = ThingStatusDetail.NONE;
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
+            updateStatus(ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
 

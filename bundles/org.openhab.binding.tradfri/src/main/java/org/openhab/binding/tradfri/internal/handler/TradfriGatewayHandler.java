@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,7 +18,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -31,8 +30,9 @@ import org.eclipse.californium.core.CoapResponse;
 import org.eclipse.californium.core.network.CoapEndpoint;
 import org.eclipse.californium.elements.exception.ConnectorException;
 import org.eclipse.californium.scandium.DTLSConnector;
+import org.eclipse.californium.scandium.config.DtlsConfig;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
-import org.eclipse.californium.scandium.dtls.pskstore.StaticPskStore;
+import org.eclipse.californium.scandium.dtls.pskstore.AdvancedSinglePskStore;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.tradfri.internal.CoapCallback;
@@ -71,7 +71,10 @@ import com.google.gson.JsonSyntaxException;
  */
 @NonNullByDefault
 public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCallback {
-
+    static {
+        // register configurations before Configuration.getStandard() is used
+        DtlsConfig.register();
+    }
     protected final Logger logger = LoggerFactory.getLogger(getClass());
 
     private static final TradfriVersion MIN_SUPPORTED_VERSION = new TradfriVersion("1.2.42");
@@ -100,14 +103,13 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
         TradfriGatewayConfig configuration = getConfigAs(TradfriGatewayConfig.class);
 
         if (isNullOrEmpty(configuration.host)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Host must be specified in the configuration!");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Host must be specified in the configuration!");
             return;
         }
 
         if (isNullOrEmpty(configuration.code)) {
             if (isNullOrEmpty(configuration.identity) || isNullOrEmpty(configuration.preSharedKey)) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                         "Either security code or identity and pre-shared key must be provided in the configuration!");
                 return;
             } else {
@@ -118,7 +120,7 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
             if (!isNullOrEmpty(currentFirmware) && MIN_SUPPORTED_VERSION
                     .compareTo(new TradfriVersion(Objects.requireNonNull(currentFirmware))) > 0) {
                 // older firmware not supported
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR,
                         String.format(
                                 "Gateway firmware version '%s' is too old! Minimum supported firmware version is '%s'.",
                                 currentFirmware, MIN_SUPPORTED_VERSION.toString()));
@@ -137,7 +139,7 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(TradfriDiscoveryService.class);
+        return Set.of(TradfriDiscoveryService.class);
     }
 
     private void establishConnection() {
@@ -151,14 +153,16 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
             deviceClient = new TradfriCoapClient(uri);
         } catch (URISyntaxException e) {
             logger.error("Illegal gateway URI '{}': {}", gatewayURI, e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
             return;
         }
 
-        DtlsConnectorConfig.Builder builder = new DtlsConnectorConfig.Builder();
-        builder.setPskStore(new StaticPskStore(configuration.identity, configuration.preSharedKey.getBytes()));
-        builder.setMaxConnections(100);
-        builder.setStaleConnectionThreshold(60);
+        DtlsConnectorConfig.Builder builder = new DtlsConnectorConfig.Builder(
+                org.eclipse.californium.elements.config.Configuration.getStandard()
+                        .set(DtlsConfig.DTLS_MAX_CONNECTIONS, 100)
+                        .set(DtlsConfig.DTLS_STALE_CONNECTION_THRESHOLD, 60, TimeUnit.SECONDS));
+        builder.setAdvancedPskStore(
+                new AdvancedSinglePskStore(configuration.identity, configuration.preSharedKey.getBytes()));
         dtlsConnector = new DTLSConnector(builder.build());
         endPoint = new CoapEndpoint.Builder().setConnector(dtlsConnector).build();
         deviceClient.setEndpoint(endPoint);
@@ -185,8 +189,9 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
         String authUrl = null;
         String responseText = null;
         try {
-            DtlsConnectorConfig.Builder builder = new DtlsConnectorConfig.Builder();
-            builder.setPskStore(new StaticPskStore("Client_identity", configuration.code.getBytes()));
+            DtlsConnectorConfig.Builder builder = new DtlsConnectorConfig.Builder(
+                    org.eclipse.californium.elements.config.Configuration.getStandard());
+            builder.setAdvancedPskStore(new AdvancedSinglePskStore("Client_identity", configuration.code.getBytes()));
 
             DTLSConnector dtlsConnector = new DTLSConnector(builder.build());
             CoapEndpoint.Builder authEndpointBuilder = new CoapEndpoint.Builder();
@@ -208,7 +213,7 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
 
             if (gatewayResponse == null) {
                 // seems we ran in a timeout, which potentially also happens
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                         "No response from gateway. Might be due to an invalid security code.");
                 return false;
             }
@@ -221,11 +226,10 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
                 if (isNullOrEmpty(preSharedKey)) {
                     logger.error("Received pre-shared key is empty for thing {} on gateway at {}", getThing().getUID(),
                             configuration.host);
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                            "Pre-shared key was not obtain successfully");
+                    updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "Pre-shared key was not obtain successfully");
                     return false;
                 } else {
-                    logger.info("Received pre-shared key for gateway '{}'", configuration.host);
+                    logger.debug("Received pre-shared key for gateway '{}'", configuration.host);
                     logger.debug("Using identity '{}' with pre-shared key '{}'.", identity, preSharedKey);
 
                     Configuration editedConfig = editConfiguration();
@@ -242,20 +246,19 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
                         identity, gatewayResponse.getCode(),
                         isNullOrEmpty(gatewayResponse.getResponseText()) ? "<empty>"
                                 : gatewayResponse.getResponseText());
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, String
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, String
                         .format("Failed obtaining pre-shared key with status code '%s'", gatewayResponse.getCode()));
             }
         } catch (URISyntaxException e) {
             logger.error("Illegal gateway URI '{}'", authUrl, e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, e.getMessage());
         } catch (JsonParseException e) {
             logger.warn("Invalid response received from gateway '{}'", responseText, e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR,
                     String.format("Invalid response received from gateway '%s'", responseText));
         } catch (ConnectorException | IOException e) {
             logger.debug("Error connecting to gateway ", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    String.format("Error connecting to gateway."));
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, String.format("Error connecting to gateway."));
         }
         return false;
     }
@@ -330,7 +333,7 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
             JsonObject json = JsonParser.parseString(data).getAsJsonObject();
             String firmwareVersion = json.get(VERSION).getAsString();
             getThing().setProperty(Thing.PROPERTY_FIRMWARE_VERSION, firmwareVersion);
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+            updateStatus(ThingStatus.ONLINE);
         });
         // restore root URI
         deviceClient.setURI(gatewayURI);
@@ -359,7 +362,11 @@ public class TradfriGatewayHandler extends BaseBridgeHandler implements CoapCall
 
         // are we still connected at all?
         if (endPoint != null) {
-            updateStatus(status, statusDetail);
+            if (statusDetail == ThingStatusDetail.NONE) {
+                updateStatus(status);
+            } else {
+                updateStatus(statusDetail);
+            }
         }
     }
 

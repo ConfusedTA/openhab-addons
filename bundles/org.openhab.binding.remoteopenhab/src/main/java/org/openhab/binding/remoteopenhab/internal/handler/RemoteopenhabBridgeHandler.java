@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,16 +13,18 @@
 package org.openhab.binding.remoteopenhab.internal.handler;
 
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.time.DateTimeException;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -75,7 +77,6 @@ import org.openhab.core.thing.type.ChannelTypeBuilder;
 import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.CommandOption;
-import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.StateDescriptionFragmentBuilder;
 import org.openhab.core.types.StateOption;
@@ -99,7 +100,7 @@ import com.google.gson.Gson;
 public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
         implements RemoteopenhabStreamingDataListener, RemoteopenhabItemsDataListener {
 
-    private static final String DATE_FORMAT_PATTERN = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+    private static final String DATE_FORMAT_PATTERN = "yyyy-MM-dd'T'HH:mm[:ss[.SSSSSSSSS][.SSSSSSSS][.SSSSSSS][.SSSSSS][.SSSSS][.SSSS][.SSS][.SS][.S]]Z";
     private static final DateTimeFormatter FORMATTER_DATE = DateTimeFormatter.ofPattern(DATE_FORMAT_PATTERN);
 
     private static final int MAX_STATE_SIZE_FOR_LOGGING = 50;
@@ -149,22 +150,19 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
 
         String host = config.host.trim();
         if (host.length() == 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.config-error-undefined-host");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.config-error-undefined-host");
             return;
         }
         String path = config.restPath.trim();
         if (path.length() == 0 || !path.startsWith("/")) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.config-error-invalid-rest-path");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.config-error-invalid-rest-path");
             return;
         }
         URL url;
         try {
-            url = new URL(config.useHttps ? "https" : "http", host, config.port, path);
-        } catch (MalformedURLException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "@text/offline.config-error-invalid-rest-url");
+            url = new URI(config.useHttps ? "https" : "http", null, host, config.port, path, null, null).toURL();
+        } catch (MalformedURLException | URISyntaxException e) {
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.config-error-invalid-rest-url");
             return;
         }
 
@@ -201,10 +199,7 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
         }
 
         try {
-            if (command instanceof RefreshType) {
-                String state = restClient.getRemoteItemState(channelUID.getId());
-                updateChannelState(channelUID.getId(), null, state, false);
-            } else if (isLinked(channelUID)) {
+            if (isLinked(channelUID)) {
                 restClient.sendCommandToRemoteItem(channelUID.getId(), command);
                 String commandStr = command.toFullString();
                 logger.debug("Sending command {} to remote item {} succeeded",
@@ -379,8 +374,7 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
         try {
             restClient.tryApi();
             if (restClient.getRestApiVersion() == null) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "@text/offline.config-error-unsupported-server");
+                updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "@text/offline.config-error-unsupported-server");
             } else if (getThing().getStatus() != ThingStatus.ONLINE) {
                 List<RemoteopenhabItem> items = restClient.getRemoteItems("name,type,groupType,state,stateDescription");
 
@@ -394,7 +388,7 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
 
                     restartStreamingUpdates();
                 } else {
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "@text/offline.error-channels-creation");
+                    updateStatus(ThingStatus.OFFLINE, "@text/offline.error-channels-creation");
                     stopStreamingUpdates();
                 }
             } else if (restartSse) {
@@ -404,7 +398,7 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
         } catch (RemoteopenhabException e) {
             logger.debug("checkConnection for thing {} failed: {}", getThing().getUID(),
                     e.getMessage(bundle, i18nProvider), e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getRawMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getRawMessage());
             stopStreamingUpdates();
         }
     }
@@ -478,15 +472,13 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
 
     @Override
     public void onDisconnected() {
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                "@text/offline.comm-error-disconnected");
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "@text/offline.comm-error-disconnected");
     }
 
     @Override
     public void onError(String message) {
         logger.debug("onError: {}", message);
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                "@text/offline.comm-error-receiving-events");
+        updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, "@text/offline.comm-error-receiving-events");
     }
 
     @Override
@@ -556,7 +548,7 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
             } else if (acceptedItemType.startsWith(CoreItemFactory.NUMBER + ":")) {
                 // Item type Number with dimension
                 if (stateType == null || "Quantity".equals(stateType)) {
-                    List<Class<? extends State>> stateTypes = Collections.singletonList(QuantityType.class);
+                    List<Class<? extends State>> stateTypes = List.of(QuantityType.class);
                     channelState = TypeParser.parseState(stateTypes, state);
                 } else if ("Decimal".equals(stateType)) {
                     channelState = new DecimalType(state);
@@ -577,7 +569,7 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
                         break;
                     case CoreItemFactory.SWITCH:
                         if (checkStateType(itemName, stateType, "OnOff")) {
-                            channelState = "ON".equals(state) ? OnOffType.ON : OnOffType.OFF;
+                            channelState = OnOffType.from("ON".equals(state));
                         }
                         break;
                     case CoreItemFactory.CONTACT:
@@ -665,6 +657,6 @@ public class RemoteopenhabBridgeHandler extends BaseBridgeHandler
 
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Collections.singleton(RemoteopenhabDiscoveryService.class);
+        return Set.of(RemoteopenhabDiscoveryService.class);
     }
 }

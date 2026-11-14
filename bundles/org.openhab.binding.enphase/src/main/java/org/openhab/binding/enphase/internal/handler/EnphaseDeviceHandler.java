@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2021 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -110,6 +110,7 @@ abstract class EnphaseDeviceHandler extends BaseThingHandler {
         refreshOperating(deviceDTO);
         refreshProperties(deviceDTO);
         refreshDeviceStatus(deviceDTO != null);
+        lastKnownDeviceState = deviceDTO;
     }
 
     public void refreshDeviceStatus(final boolean hasData) {
@@ -119,8 +120,7 @@ abstract class EnphaseDeviceHandler extends BaseThingHandler {
                     updateStatus(ThingStatus.ONLINE);
                 }
             } else {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        messageTranslator.translate(ERROR_NODATA));
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, messageTranslator.translate(ERROR_NODATA));
             }
         }
     }
@@ -138,7 +138,7 @@ abstract class EnphaseDeviceHandler extends BaseThingHandler {
     public void initialize() {
         serialNumber = (String) getConfig().get(EnphaseBindingConstants.CONFIG_SERIAL_NUMBER);
         if (!EnphaseBindingConstants.isValidSerial(serialNumber)) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Serial Number is not valid");
+            updateStatus(ThingStatusDetail.CONFIGURATION_ERROR, "Serial Number is not valid");
         } else {
             updateStatus(ThingStatus.UNKNOWN);
         }
